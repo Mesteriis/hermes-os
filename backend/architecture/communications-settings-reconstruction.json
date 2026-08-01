@@ -658,7 +658,7 @@
       "gate": "attachment_text_extraction_v1",
       "role": "workflow",
       "owner": "attachment_text_extraction",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
     },
     {

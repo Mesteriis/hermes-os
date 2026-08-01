@@ -4,11 +4,26 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged. Решение и exact owner boundaries приняты;
-Attachment Security реализует target-owned Text Extraction custody command,
-owner-local V7 inbox/job/outbox и exact Blob redelegation result через отдельные
-persistence/runtime responsibilities. production gate `attachment_text_extraction_v1` остаётся `planned` до полного managed job,
-negative/restart/privacy evidence и финальных gates.
+Состояние реализации: реализовано. Production gate
+`attachment_text_extraction_v1` закрыт exact eleven-unit topology:
+`hermes-attachment-text-extraction-api`, `-ingress`, `-core`,
+`-parser-contract`, `-plain`, `-pdf`, `-docx`, `-ocr`, `-persistence`,
+`-runtime` и `-assembly`. Workflow владеет versioned Start/Get/ReadText и
+realtime contracts, order-independent owner-local evidence join, exact
+message/hash inbox, durable custody outbox, fenced jobs и derived Blob receipt;
+PostgreSQL не хранит extracted plaintext. Attachment Security отдельно владеет
+target-owned custody command/result, current-custodian redelegation и своим
+owner-local replay/job/outbox, не становясь частью workflow.
+
+Managed production contour доказал реальный UTF-8, PDF, DOCX и local
+Tesseract `eng+rus` OCR; authenticated Gateway Start/Get/ReadText; replayable
+SSE; NATS outage; runtime restart; one-use Blob transfer; source receipt/hash,
+wrong-owner, collision, stale runtime/grant/parser revision и stale custody
+proof fences; malformed, unsupported, oversized, missing parser, Blob outage и
+Vault outage fail-closed behavior. Events, SSE, errors и diagnostics не несут
+private text или Blob authority. Architecture/SRP/Cargo/clippy, managed
+conformance и full pre-push gates пройдены перед переводом inventory в
+`implemented`.
 
 Зависит от:
 

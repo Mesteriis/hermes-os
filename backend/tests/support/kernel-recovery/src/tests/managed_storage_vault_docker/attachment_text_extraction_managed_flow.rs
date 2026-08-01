@@ -132,7 +132,7 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
         prepare_attachment_security_runtime(&supervisor, &store, admitted_security);
     configure_communications_jetstream(&store);
     start_communications_domain(&supervisor, &store, &root.join("runtime"));
-    let security = start_attachment_security_runtime(
+    let mut security = start_attachment_security_runtime(
         &supervisor,
         &store,
         &root.join("runtime"),
@@ -339,7 +339,7 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
             .expect("clear Attachment Text Extraction Gateway replay cache")
     );
     let previous_generation = text.runtime_generation;
-    let text = restart_attachment_text_extraction_runtime_v1(
+    let mut text = restart_attachment_text_extraction_runtime_v1(
         &supervisor,
         &store,
         &root.join("runtime"),
@@ -549,6 +549,113 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
     );
     assert_eq!(recovered_read, read);
 
+    let stale_proof_source =
+        b"Private source whose delegated custody proof must fail after source restart.";
+    let stale_proof_blob =
+        blob_source.write(&store, &supervisor, &data, [0xe7; 16], stale_proof_source);
+    let stale_proof_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "text-extraction-stale-custody-proof",
+        stale_proof_blob.declared_size,
+        stale_proof_blob.receipt_sha256,
+    );
+    assert_clean_attachment_security_verdict_flow(
+        &store,
+        &stale_proof_attachment,
+        &stale_proof_blob,
+        &clamav,
+        stale_proof_source,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            stale_proof_attachment.attachment_anchor_id,
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+    wait_for_attachment_text_evidence_v1(5);
+    supervisor
+        .stop(&security.registration_id)
+        .expect("stop Attachment Security before stale Text custody request");
+    let stale_proof_run = post_attachment_text_proto_v1::<_, StartAttachmentTextExtractionResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_TEXT_EXTRACTION_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentTextExtractionRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0xe8; 16],
+            attachment_anchor_id: stale_proof_attachment.attachment_anchor_id.to_vec(),
+        },
+    );
+    assert_eq!(stale_proof_run.error, unspecified_error_v1());
+    wait_for_attachment_text_custody_request_v1(5);
+    supervisor
+        .stop(&text.registration_id)
+        .expect("stop Text Extraction before stale custody result delivery");
+    security = restart_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        &security,
+        clamav.port(),
+    );
+    wait_for_attachment_text_security_delegation_result_v1(5);
+    let proof_source_grant_epoch = security.grant_epoch;
+    let security_capabilities = store
+        .module_grant_snapshot(&security.registration_id)
+        .expect("read Attachment Security grants before stale-proof fence")
+        .expect("Attachment Security grant snapshot")
+        .effective_grants()
+        .expect("approved Attachment Security grants")
+        .capability_ids()
+        .to_vec();
+    supervisor
+        .stop(&security.registration_id)
+        .expect("stop Attachment Security before stale-proof grant replacement");
+    store
+        .transition_module_registration(
+            &security.registration_id,
+            ModuleRegistrationState::Suspended,
+        )
+        .expect("suspend Attachment Security after custody proof issue");
+    let reapproved_security = store
+        .approve_module_registration(&security.registration_id, &security_capabilities)
+        .expect("reapprove Attachment Security with exact capabilities");
+    assert!(reapproved_security.grant_epoch() > proof_source_grant_epoch);
+    security = restart_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        &security,
+        clamav.port(),
+    );
+    assert_eq!(security.grant_epoch, reapproved_security.grant_epoch());
+    text = restart_attachment_text_extraction_runtime_v1(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        text,
+    );
+    wait_for_attachment_text_stale_proof_failure_v1(5, 4);
+    let stale_proof_status = get_attachment_text_extraction_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        &stale_proof_run.run_id,
+    );
+    assert_ne!(
+        text_state_v1(stale_proof_status.state),
+        AttachmentTextExtractionStateV1::Ready
+    );
+    assert_private_attachment_text_absent_v1(
+        &stale_proof_status.encode_to_vec(),
+        stale_proof_source,
+        &stale_proof_blob,
+    );
+
     let negative = ManagedAttachmentTextNegativeContourV1 {
         store: &store,
         supervisor: &supervisor,
@@ -560,7 +667,7 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
         cookie: &restarted_cookie,
     };
     negative.assert_terminal_failure_v1(ManagedAttachmentTextFailureScenarioV1 {
-        expected_count: 5,
+        expected_count: 6,
         scenario_id: "text-extraction-malformed-pdf",
         blob_id: [0xe1; 16],
         operation_id: [0xe2; 16],
@@ -569,7 +676,7 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
         expected_error: AttachmentTextExtractionErrorCodeV1::ParserFailed,
     });
     negative.assert_terminal_failure_v1(ManagedAttachmentTextFailureScenarioV1 {
-        expected_count: 6,
+        expected_count: 7,
         scenario_id: "text-extraction-unsupported",
         blob_id: [0xe3; 16],
         operation_id: [0xe4; 16],
@@ -582,7 +689,7 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
         text.runtime_generation,
     );
     negative.assert_terminal_failure_v1(ManagedAttachmentTextFailureScenarioV1 {
-        expected_count: 7,
+        expected_count: 8,
         scenario_id: "text-extraction-parser-unavailable",
         blob_id: [0xe5; 16],
         operation_id: [0xe6; 16],
@@ -638,20 +745,40 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
     assert_eq!(
         attachment_text_extraction_diagnostics_v1(),
         AttachmentTextExtractionDiagnosticsV1 {
-            candidates: 7,
-            safety_facts: 7,
-            custody_requests: 7,
+            candidates: 8,
+            safety_facts: 8,
+            custody_requests: 8,
             pending_custody_outbox: 0,
-            custody_results: 7,
-            jobs: 7,
-            attempts: 7,
+            custody_results: 8,
+            jobs: 8,
+            attempts: 8,
             artifacts: 4,
-            security_delegation_commands: 7,
-            security_delegation_attempts: 7,
-            security_delegation_results: 7,
+            security_delegation_commands: 8,
+            security_delegation_attempts: 8,
+            security_delegation_results: 8,
         },
         "each supported parser must execute once through the same event-only custody path"
     );
+
+    supervisor
+        .stop("vault")
+        .expect("stop Vault for Text Extraction private-content outage");
+    let vault_unavailable_read = post_attachment_text_proto_v1::<_, ReadAttachmentTextResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_TEXT_EXTRACTION_CONTENT_CONNECT_PATH_V1,
+        ReadAttachmentTextRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id.clone(),
+        },
+    );
+    assert_eq!(
+        text_error_v1(vault_unavailable_read.error),
+        AttachmentTextExtractionErrorCodeV1::Unavailable
+    );
+    assert!(vault_unavailable_read.text_utf8.is_empty());
+    assert_eq!(attachment_text_extraction_diagnostics_v1().artifacts, 4);
 
     assert_eq!(
         post_attachment_text_proto_status_v1(
@@ -819,6 +946,56 @@ fn wait_for_pending_attachment_text_custody_v1() {
         assert!(
             Instant::now() < deadline,
             "Attachment Text Extraction did not retain custody command during NATS outage: {diagnostics:?}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_attachment_text_custody_request_v1(expected_count: i64) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_text_extraction_diagnostics_v1();
+        if diagnostics.custody_requests == expected_count && diagnostics.pending_custody_outbox == 0
+        {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Attachment Text Extraction did not publish custody request {expected_count}: {diagnostics:?}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_attachment_text_security_delegation_result_v1(expected_count: i64) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_text_extraction_diagnostics_v1();
+        if diagnostics.security_delegation_results == expected_count {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Attachment Security did not publish Text custody result {expected_count}: {diagnostics:?}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn wait_for_attachment_text_stale_proof_failure_v1(expected_count: i64, expected_artifacts: i64) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_text_extraction_diagnostics_v1();
+        if diagnostics.custody_results == expected_count
+            && diagnostics.jobs == expected_count
+            && diagnostics.attempts == expected_count
+            && diagnostics.artifacts == expected_artifacts
+        {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "stale Text custody proof did not fail closed: {diagnostics:?}"
         );
         std::thread::sleep(Duration::from_millis(25));
     }

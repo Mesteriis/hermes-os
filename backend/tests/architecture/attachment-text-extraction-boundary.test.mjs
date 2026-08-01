@@ -5,7 +5,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
-test('text extraction is a staged workflow and not a Communications facade', async () => {
+test('text extraction is an implemented workflow and not a Communications facade', async () => {
   const [inventorySource, policySource, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -30,7 +30,7 @@ test('text extraction is a staged workflow and not a Communications facade', asy
     gate: 'attachment_text_extraction_v1',
     role: 'workflow',
     owner: 'attachment_text_extraction',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
   assert.equal(
@@ -40,7 +40,10 @@ test('text extraction is a staged workflow and not a Communications facade', asy
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',
   ));
-  assert.match(adr, /production gate `attachment_text_extraction_v1` остаётся `planned`/);
+  assert.match(adr, /Состояние реализации: реализовано/);
+  assert.match(adr, /managed production contour/i);
+  assert.match(adr, /stale custody proof/);
+  assert.match(adr, /Vault outage/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Get.*realtime.*не содержат text или\nBlob authority/s);
 });
@@ -496,7 +499,14 @@ test('managed conformance stages exact OCR resources through the workflow releas
   assert.match(flow, /text-extraction-parser-unavailable/);
   assert.match(flow, /replace_attachment_text_parser_identity_v1/);
   assert.match(flow, /stale_parser_identity/);
+  assert.match(flow, /text-extraction-stale-custody-proof/);
+  assert.match(flow, /wait_for_attachment_text_stale_proof_failure_v1/);
+  assert.match(flow, /proof_source_grant_epoch/);
+  assert.match(flow, /ModuleRegistrationState::Suspended/);
+  assert.match(flow, /approve_module_registration/);
   assert.match(flow, /stop\(blob_binding::BLOB_PROCESS_ID\)/);
+  assert.match(flow, /stop\("vault"\)/);
+  assert.match(flow, /vault_unavailable_read/);
   assert.match(flow, /AttachmentTextExtractionErrorCodeV1::Unavailable/);
   assert.match(flow, /remove_staged_attachment_text_extraction_ocr_runner_v1/);
   assert.match(
