@@ -211,7 +211,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     gate: 'communication_task_candidate_extraction_v1',
     role: 'workflow',
     owner: 'communication_task_candidate_extraction',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['communications_content_read_v1'],
   });
   assert.equal(policy.domains.registered.includes('tasks'), true);
@@ -236,7 +236,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     ),
     true,
   );
-  assert.match(adr, /Состояние реализации: planned/);
+  assert.match(adr, /Состояние реализации: implemented/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
   assert.match(adr, /Review владеет human decision/);

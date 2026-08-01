@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged pending final full pre-push and clean-room audit.
+Состояние реализации: implemented после final full pre-push и clean-room audit.
 Review-owned terminal promotion-result API,
 pure workflow correlation core, owner-local workflow persistence, managed
 event runtime, Review-owned terminal-result consumer и unsigned workflow
@@ -36,10 +36,10 @@ revision/state: exact retry после terminal promotion replay-ит сохра
 PostgreSQL дополнительно доказывает exact approval/result duplicate,
 conflicting envelope/outbox, unknown Tasks command и stale candidate
 correlation; duplicate terminal result теперь сверяет и inbox, и сохранённый
-Review-result outbox до replay. Promotion gate остаётся staged только до
-итогового clean-room аудита и повторного full pre-push. Отдельный live Tasks
-negative уже подтверждает terminal `BlobMismatch` для stale/expired custody
-receipt без Task materialization; transport `Unavailable` остаётся retryable.
+Review-result outbox до replay. Promotion gate закрыт итоговым clean-room
+аудитом и полным pre-push. Отдельный live Tasks negative подтверждает terminal
+`BlobMismatch` для stale/expired custody receipt без Task materialization;
+transport `Unavailable` остаётся retryable.
 
 Уточняет:
 
@@ -165,8 +165,8 @@ Periodic polling и handwritten REST не вводятся.
 10. architecture, Cargo, unit, persistence, managed runtime и full pre-push
     gates.
 
-До закрытия этого gate aggregate
-`communication_task_candidate_extraction_v1` остаётся planned.
+После закрытия этого gate aggregate
+`communication_task_candidate_extraction_v1` имеет состояние `implemented`.
 
 ## Последствия
 

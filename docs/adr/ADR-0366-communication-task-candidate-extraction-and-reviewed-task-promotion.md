@@ -4,7 +4,7 @@
 
 Дата: 2026-07-31
 
-Состояние реализации: planned. Staged slice уже реализует отдельные extraction
+Состояние реализации: implemented. Clean-room slice реализует отдельные extraction
 API/core/persistence/runtime units и Communications-owned task-source event
 contract с exact envelope builders. Managed runtime предоставляет typed
 Start/Get/replayable realtime, event outbox, owner-local recovery и
@@ -69,8 +69,8 @@ runtimes восстанавливаются те же cursors без source body
 presentation bytes. Live Tasks negative дополнительно доказывает, что
 просроченный или недействительный custody receipt классифицируется как terminal
 `BlobMismatch`, не превращается в retryable outage и не создаёт Task.
-Aggregate gate остаётся закрыт только до итогового clean-room аудита и
-повторного full pre-push.
+Aggregate gate закрыт после итогового clean-room аудита и полного pre-push на
+финальном дереве реализации.
 Отдельный live PostgreSQL conformance после остановки managed runtimes
 доказывает exact approval/result duplicate replay, conflicting envelope/outbox,
 unknown Tasks command и stale candidate correlation без публикации тестовых
