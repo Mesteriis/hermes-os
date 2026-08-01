@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_note_candidate_contract_core_v1",
+    "currentSlice": "communication_note_candidate_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1128,6 +1128,12 @@
         "role": "domain",
         "owner": "communications",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-communication-note-candidate-persistence",
+        "role": "workflow",
+        "owner": "communication_note_candidate_extraction",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3434,6 +3440,10 @@
       "hermes-communications-note-source-api": [
         { "name": "hermes-events-protocol", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-communication-note-candidate-persistence": [
+        { "name": "hermes-communication-note-candidate-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -3586,6 +3596,10 @@
         { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communication-note-candidate-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
       ],
       "hermes-events-protocol": [
         {
@@ -8744,6 +8758,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": true
       },
+      "hermes-communication-note-candidate-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -9126,6 +9144,7 @@
         "communication_explanation.source_rejected.v1",
         "communication_explanation.storage.v1",
         "communication_note_candidate_extraction.source.blob.v1",
+        "communication_note_candidate_extraction.storage.v1",
         "communication_recipient_suggestion.source.blob.v1",
         "communication_recipient_suggestion.source_prepare.v1",
         "communication_recipient_suggestion.source_prepared.v1",

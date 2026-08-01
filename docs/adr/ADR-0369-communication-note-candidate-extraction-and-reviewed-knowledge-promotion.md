@@ -5,9 +5,10 @@
 Дата: 2026-08-01
 
 Состояние реализации: staged. Приняты exact source, extraction и candidate
-contracts, pure deterministic extraction core и lifecycle. Persistence,
-managed runtimes, Review-owned decision, promotion workflow, Knowledge command
-consumer и aggregate managed conformance ещё не реализованы; поэтому
+contracts, pure deterministic extraction core/lifecycle и отдельный owner-local
+PostgreSQL persistence unit с run state, request replay, inbox, outbox и
+replayable realtime. Managed runtimes, Review-owned decision, promotion
+workflow, Knowledge command consumer и aggregate managed conformance ещё не реализованы; поэтому
 `communication_note_candidate_extraction_v1` остаётся `planned`.
 
 Уточняет:
@@ -50,7 +51,8 @@ Extraction принадлежит workflow owner
 
 - `hermes-communication-note-candidate-api`;
 - `hermes-communication-note-candidate-core`;
-- будущие отдельные persistence, runtime и assembly units.
+- `hermes-communication-note-candidate-persistence`;
+- будущие отдельные runtime и assembly units.
 
 Review получает отдельный note-candidate contract/core/persistence/runtime/
 assembly slice. Он не расширяет task-candidate payload generic union и не

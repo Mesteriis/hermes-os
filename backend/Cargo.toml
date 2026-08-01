@@ -103,6 +103,7 @@ members = [
   "src/communications-task-source-api",
   "src/communication-note-candidate-api",
   "src/communication-note-candidate-core",
+  "src/communication-note-candidate-persistence",
   "src/communications-note-source-api",
   "src/ai-contracts",
   "src/ai-inference-core",

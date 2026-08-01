@@ -17,6 +17,13 @@ test('note candidate agreement separates Communications workflow Review and Know
     core,
     extraction,
     lifecycle,
+    persistenceManifest,
+    persistence,
+    persistenceModel,
+    persistenceRepository,
+    persistenceOutbox,
+    persistenceSchema,
+    migration,
     sourceManifest,
     sourceApi,
     sourceProtocol,
@@ -44,6 +51,19 @@ test('note candidate agreement separates Communications workflow Review and Know
     readFile(new URL('src/communication-note-candidate-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-note-candidate-core/src/extraction.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communication-note-candidate-core/src/lifecycle.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-persistence/src/model.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-persistence/src/outbox.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/communication-note-candidate-persistence/migrations/0001_note_candidate.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
     readFile(new URL('src/communications-note-source-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/communications-note-source-api/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(
@@ -85,6 +105,7 @@ test('note candidate agreement separates Communications workflow Review and Know
   for (const unit of [
     'hermes-communication-note-candidate-api',
     'hermes-communication-note-candidate-core',
+    'hermes-communication-note-candidate-persistence',
     'hermes-communications-note-source-api',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
@@ -116,6 +137,26 @@ test('note candidate agreement separates Communications workflow Review and Know
   assert.doesNotMatch(
     `${core}\n${extraction}\n${lifecycle}`,
     /hermes_communications|hermes_review|hermes_knowledge|ollama|reqwest|sqlx|prompt/,
+  );
+
+  assert.match(persistenceManifest, /role = "workflow"/);
+  assert.match(persistenceManifest, /owner = "communication_note_candidate_extraction"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistence, /CommunicationNoteCandidatePersistenceV1/);
+  assert.match(persistenceModel, /candidate_codec_preserves_all_typed_fields_and_empty_result/);
+  assert.match(persistenceModel, /CommunicationNoteTopicHintV1/);
+  assert.match(persistenceSchema, /communication_note_candidate_extraction_storage_bundle_v1/);
+  assert.match(migration, /communication_note_candidate_extraction_runs/);
+  assert.match(migration, /communication_note_candidate_extraction_inbox/);
+  assert.match(migration, /communication_note_candidate_extraction_outbox/);
+  assert.match(migration, /communication_note_candidate_extraction_realtime/);
+  assert.match(persistenceRepository, /persist_extraction_transition/);
+  assert.match(persistenceRepository, /review_submissions/);
+  assert.match(persistenceOutbox, /unpublished_events/);
+  assert.match(persistenceOutbox, /mark_event_published/);
+  assert.doesNotMatch(
+    `${persistence}\n${persistenceModel}\n${persistenceRepository}\n${migration}`,
+    /hermes_communications|hermes_review|hermes_knowledge|ollama|prompt|provider_id/,
   );
 
   assert.match(sourceManifest, /role = "domain"/);
