@@ -76,6 +76,15 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(assembly, /materialize-dev-release\.sh/);
   assert.match(assembly, /development\/authenticated\/compose\.yaml/);
   assert.match(assembly, /run_compose up --detach --wait/);
+  assert.match(
+    assembly,
+    /run_compose exec --no-TTY pgbouncer[\s\\]+test -r \/etc\/hermes\/runtime\/databases\.ini -a -r \/etc\/hermes\/auth\/users\.txt/,
+  );
+  assert.match(
+    assembly,
+    /if ! run_compose exec[\s\S]*run_compose up --detach --no-deps --force-recreate --wait pgbouncer[\s\S]*fi/,
+  );
+  assert.doesNotMatch(assembly, /--force-recreate[^\n]*(?:postgres|nats|clamav)/);
   assert.match(assembly, /PostgreSQL, PgBouncer, NATS and ClamAV infrastructure/);
   assert.match(authenticatedCompose, /image: clamav\/clamav:1\.5\.3-debian13-slim/);
   assert.match(

@@ -220,6 +220,16 @@ require_absolute_directory_path "development runtime directory" "$runtime_dir"
 printf '%s\n' 'Starting authenticated PostgreSQL, PgBouncer, NATS and ClamAV infrastructure...'
 docker compose -f "$legacy_compose_file" down --remove-orphans >/dev/null 2>&1 || true
 run_compose up --detach --wait
+# PgBouncer is stateless and binds the OS-cache runtime directory. Docker
+# Desktop can retain a mount to a removed/recreated cache-directory inode while
+# keeping the long-lived data services alive. Recreate only a pooler whose
+# current mount cannot resolve the expected files; PostgreSQL, NATS and ClamAV
+# state stay untouched. A healthy current mount must remain running because its
+# boot script intentionally initializes the admin-only auth file.
+if ! run_compose exec --no-TTY pgbouncer \
+	test -r /etc/hermes/runtime/databases.ini -a -r /etc/hermes/auth/users.txt; then
+	run_compose up --detach --no-deps --force-recreate --wait pgbouncer
+fi
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/hermes-dev-assembly.XXXXXX")"
 chmod 700 "$temporary_dir"
