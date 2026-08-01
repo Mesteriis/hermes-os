@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "knowledge_verified_note_assembly_v1",
+    "currentSlice": "review_note_candidate_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1176,6 +1176,12 @@
         "role": "domain",
         "owner": "knowledge",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-review-note-candidate-persistence",
+        "role": "domain",
+        "owner": "review",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3517,6 +3523,10 @@
         { "name": "hermes-knowledge-runtime", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" },
         { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
+      "hermes-review-note-candidate-persistence": [
+        { "name": "hermes-review-note-candidate-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -3711,6 +3721,10 @@
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
         { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-review-note-candidate-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
       ],
       "hermes-events-protocol": [
         {
@@ -8899,6 +8913,10 @@
       },
       "hermes-knowledge-assembly": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-review-note-candidate-persistence": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       },
       "hermes-ai-contracts": {

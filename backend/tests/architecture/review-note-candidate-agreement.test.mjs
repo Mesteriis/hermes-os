@@ -18,6 +18,11 @@ test('Review note-candidate is a distinct domain capability without Task or Know
     core,
     model,
     lifecycle,
+    persistenceManifest,
+    persistence,
+    persistenceModel,
+    repository,
+    migration,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -42,13 +47,25 @@ test('Review note-candidate is a distinct domain capability without Task or Know
     readFile(new URL('src/review-note-candidate-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/review-note-candidate-core/src/model.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/review-note-candidate-core/src/lifecycle.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-persistence/src/model.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/review-note-candidate-persistence/migrations/0001_review_note_candidate.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'knowledge_verified_note_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_note_candidate_persistence_v1');
   for (const unit of [
     'hermes-review-note-candidate-api',
     'hermes-review-note-candidate-core',
+    'hermes-review-note-candidate-persistence',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -61,6 +78,9 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   assert.match(coreManifest, /role = "domain"/);
   assert.match(coreManifest, /owner = "review"/);
   assert.match(coreManifest, /surface = "implementation"/);
+  assert.match(persistenceManifest, /role = "domain"/);
+  assert.match(persistenceManifest, /owner = "review"/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
 
   assert.match(api, /review\.note-candidate\.submission\.v1/);
   assert.match(api, /review\.note-candidate\.promotion\.v1/);
@@ -97,5 +117,28 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   assert.doesNotMatch(
     `${core}\n${model}\n${lifecycle}`,
     /review_attention|hermes_communications|hermes_tasks|hermes_knowledge|ollama|sqlx|reqwest/,
+  );
+
+  assert.match(persistence, /ReviewNoteCandidatePersistenceV1/);
+  assert.match(persistenceModel, /PersistReviewNoteCandidatePromotionResultV1/);
+  assert.match(repository, /reserve_submission/);
+  assert.match(repository, /complete_submission/);
+  assert.match(repository, /pub async fn decide\(/);
+  assert.match(repository, /persist_promotion_result/);
+  for (const table of [
+    'review_note_candidate_submissions',
+    'review_note_candidate_state',
+    'review_note_candidate_operations',
+    'review_note_candidate_promotion_inbox',
+    'review_note_candidate_outbox',
+    'review_note_candidate_realtime',
+  ]) {
+    assert.match(migration, new RegExp(`hermes_data\\.${table}`));
+  }
+  assert.match(migration, /topic_hints SMALLINT\[\] NOT NULL/);
+  assert.match(migration, /confidence_basis_points INTEGER NOT NULL/);
+  assert.doesNotMatch(
+    `${persistence}\n${persistenceModel}\n${repository}\n${migration}`,
+    /hermes_(communications|tasks|knowledge)|hermes-(communications|tasks|knowledge)|provider_id|account_id|ollama/,
   );
 });

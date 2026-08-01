@@ -3672,6 +3672,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-review-note-candidate-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-review-note-candidate-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-review-task-candidate-api"
 version = "0.1.0"
 dependencies = [
