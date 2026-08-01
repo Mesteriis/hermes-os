@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_text_extraction_contract_core_v1",
+    "currentSlice": "attachment_text_extraction_parser_adapters_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1254,6 +1254,36 @@
         "role": "workflow",
         "owner": "attachment_text_extraction",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-parser-contract",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-plain",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-pdf",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-docx",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-ocr",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2342,6 +2372,31 @@
       "hermes-attachment-text-extraction-core": [
         {
           "name": "hermes-attachment-text-extraction-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-parser-contract": [],
+      "hermes-attachment-text-extraction-plain": [
+        {
+          "name": "hermes-attachment-text-extraction-parser-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-pdf": [
+        {
+          "name": "hermes-attachment-text-extraction-parser-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-docx": [
+        {
+          "name": "hermes-attachment-text-extraction-parser-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-ocr": [
+        {
+          "name": "hermes-attachment-text-extraction-parser-contract",
           "kind": "normal"
         }
       ],
@@ -6660,6 +6715,48 @@
           "features": []
         }
       ],
+      "hermes-attachment-text-extraction-parser-contract": [],
+      "hermes-attachment-text-extraction-plain": [],
+      "hermes-attachment-text-extraction-pdf": [
+        {
+          "name": "pdf-text-extract",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-attachment-text-extraction-docx": [
+        {
+          "name": "quick-xml",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.41.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "zip",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=6.0.0",
+          "defaultFeatures": false,
+          "features": [
+            "deflate-flate2-zlib-rs"
+          ]
+        }
+      ],
+      "hermes-attachment-text-extraction-ocr": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-attachment-archive-inspection-zip": [
         {
           "name": "zip",
@@ -8988,6 +9085,26 @@
         "customBuildAllowed": true
       },
       "hermes-attachment-text-extraction-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-text-extraction-parser-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-text-extraction-plain": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-text-extraction-pdf": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-text-extraction-docx": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-text-extraction-ocr": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

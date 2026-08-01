@@ -35,7 +35,7 @@ test('text extraction is a staged workflow and not a Communications facade', asy
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_contract_core_v1',
+    'attachment_text_extraction_parser_adapters_v1',
   );
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',
@@ -182,4 +182,60 @@ test('pure core owns join and lifecycle without transport storage or parsers', a
     `${source}\n${join}\n${lifecycle}\n${content}`,
     /TcpStream|File::|sqlx|postgres|nats|jetstream|hermes_communications|hermes_attachment_security/,
   );
+});
+
+test('parser contract and adapters are five isolated byte-only units', async () => {
+  const [contractManifest, contract, plainManifest, pdfManifest, docxManifest, ocrManifest, ocr] =
+    await Promise.all([
+      readFile(
+        new URL('src/attachment-text-extraction-parser-contract/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-text-extraction-parser-contract/src/lib.rs', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-text-extraction-plain/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-text-extraction-pdf/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-text-extraction-docx/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-text-extraction-ocr/Cargo.toml', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(
+        new URL('src/attachment-text-extraction-ocr/src/lib.rs', BACKEND_ROOT),
+        'utf8',
+      ),
+    ]);
+  const manifests = [contractManifest, plainManifest, pdfManifest, docxManifest, ocrManifest];
+
+  for (const manifest of manifests) {
+    assert.match(manifest, /role = "workflow"/);
+    assert.match(manifest, /owner = "attachment_text_extraction"/);
+    assert.doesNotMatch(
+      manifest,
+      /hermes-(?:communications|attachment-security|blob|events|runtime|storage|kernel|attachment-text-extraction-(?:api|core|persistence|runtime|assembly))/,
+    );
+  }
+  assert.match(contract, /detect_attachment_text_parser_v1/);
+  assert.match(contract, /source\.starts_with\(b"%PDF-"\)/);
+  assert.match(contract, /source\.starts_with\(b"PK\\x03\\x04"\)/);
+  assert.match(pdfManifest, /pdf-text-extract = \{ version = "=0\.2\.0"/);
+  assert.match(docxManifest, /quick-xml = \{ version = "=0\.41\.0"/);
+  assert.match(docxManifest, /zip = \{ version = "=6\.0\.0"/);
+  assert.match(ocr, /ATTACHMENT_TEXT_OCR_LANGUAGES_V1: &str = "eng\+rus"/);
+  assert.match(ocr, /executable_sha256/);
+  assert.match(ocr, /english_model_sha256/);
+  assert.match(ocr, /russian_model_sha256/);
+  assert.match(ocr, /\.env_clear\(\)/);
+  assert.doesNotMatch(ocr, /\b(?:sh|bash|zsh)\b|Command::new\("tesseract"\)/);
 });

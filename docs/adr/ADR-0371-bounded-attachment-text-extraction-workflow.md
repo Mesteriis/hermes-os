@@ -176,6 +176,9 @@ hermes-attachment-text-extraction-ingress
 hermes-attachment-text-extraction-core
   pure join, lifecycle, format/output bounds and terminal decisions
 
+hermes-attachment-text-extraction-parser-contract
+  byte-only parser request/result/error contract and exact format detection
+
 hermes-attachment-text-extraction-plain
 hermes-attachment-text-extraction-pdf
 hermes-attachment-text-extraction-docx
@@ -192,8 +195,9 @@ hermes-attachment-text-extraction-assembly
   descriptor/settings/Storage artifacts and unsigned release fragment only
 ```
 
-API/ingress/core/parser units не зависят от runtime или persistence. Persistence
-является единственным SQL owner. Runtime не материализует release artifacts.
+API/ingress/core/parser-contract/parser units не зависят от runtime или
+persistence. Persistence является единственным SQL owner. Runtime не
+материализует release artifacts.
 Assembly не запускает runtime и не подписывает manifest. Communications,
 integration и Attachment Security packages не получают parser dependency.
 

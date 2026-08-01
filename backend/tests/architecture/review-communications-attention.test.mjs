@@ -222,7 +222,7 @@ test('Review owner is admitted through signed Kernel Gateway and shared SSE conf
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_contract_core_v1',
+    'attachment_text_extraction_parser_adapters_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',
