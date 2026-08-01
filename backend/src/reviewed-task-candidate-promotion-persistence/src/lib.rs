@@ -1,10 +1,14 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "conformance-test-support")]
+mod conformance;
 mod model;
 mod outbox;
 mod repository;
 pub mod schema;
 
+#[cfg(feature = "conformance-test-support")]
+pub use conformance::ReviewedTaskCandidatePromotionPersistenceConformanceV1;
 pub use model::{
     PersistPromotionApprovalOutcomeV1, PersistPromotionApprovalV1, PersistPromotionResultOutcomeV1,
     PersistPromotionTerminalResultV1, PromotionCorrelationV1,

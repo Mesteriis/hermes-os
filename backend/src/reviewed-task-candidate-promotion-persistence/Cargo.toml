@@ -7,6 +7,10 @@ license = "MIT"
 [lib]
 path = "src/lib.rs"
 
+[features]
+default = []
+conformance-test-support = []
+
 [package.metadata.hermes]
 role = "workflow"
 owner = "reviewed_task_candidate_promotion"

@@ -202,6 +202,8 @@ mod task_candidate_gateway_flow;
 mod task_candidate_managed_flow;
 #[path = "managed_storage_vault_docker/task_candidate_managed_setup.rs"]
 mod task_candidate_managed_setup;
+#[path = "managed_storage_vault_docker/task_candidate_persistence_flow.rs"]
+mod task_candidate_persistence_flow;
 use ai_inference_blob_fixture::*;
 use ai_inference_managed_setup::*;
 use mail_attachment_flow::*;
@@ -215,6 +217,7 @@ use ollama_ai_managed_setup::*;
 use review_attention_managed_setup::*;
 use task_candidate_gateway_flow::*;
 use task_candidate_managed_setup::*;
+use task_candidate_persistence_flow::*;
 #[path = "managed_storage_vault_docker/call_evidence_managed_flow.rs"]
 mod call_evidence_managed_flow;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]

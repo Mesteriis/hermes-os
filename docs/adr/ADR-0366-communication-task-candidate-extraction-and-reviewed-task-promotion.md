@@ -67,8 +67,11 @@ Task после reject. Extraction и Review публикуют отдельны
 общий replayable SSE; после owner cache revoke и независимого restart обоих
 runtimes восстанавливаются те же cursors без source body или candidate
 presentation bytes. Aggregate gate остаётся закрыт до оставшихся обязательных
-duplicate-event, Blob expiry и workflow unknown-command/correlation negatives,
-итогового clean-room аудита и повторного full pre-push.
+Blob expiry negatives, итогового clean-room аудита и повторного full pre-push.
+Отдельный live PostgreSQL conformance после остановки managed runtimes
+доказывает exact approval/result duplicate replay, conflicting envelope/outbox,
+unknown Tasks command и stale candidate correlation без публикации тестовых
+outbox-записей в event flow.
 Наличие документа, legacy task scanner, frontend card или отдельного extraction
 result не открывает `communication_task_candidate_extraction_v1`.
 

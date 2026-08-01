@@ -67,6 +67,10 @@ const MAIL_CARGO_FEATURES = {
     default: [],
     'conformance-test-support': [],
   },
+  'hermes-reviewed-task-candidate-promotion-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
   'hermes-mail-api': {
     default: [],
     'conformance-test-support': [],

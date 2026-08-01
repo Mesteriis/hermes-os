@@ -173,6 +173,12 @@ impl ReviewedTaskCandidatePromotionPersistenceV1 {
                 return Err(ReviewedTaskCandidatePromotionPersistenceErrorV1::ResultConflict);
             }
             verify_result_inbox(&mut transaction, input).await?;
+            verify_exact_outbox(
+                &mut transaction,
+                &input.logical_owner_id,
+                &input.review_result_outbox,
+            )
+            .await?;
             transaction.commit().await.map_err(storage_error)?;
             return Ok(PersistPromotionResultOutcomeV1::Duplicate);
         }

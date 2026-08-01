@@ -455,6 +455,7 @@ fn managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_r
     assert_eq!(replayed.rejected.cursor, rejected_cursor);
 
     supervisor.shutdown().expect("stop managed processes");
+    assert_reviewed_task_candidate_persistence_negatives_v1(&gateway_runtime);
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
     }

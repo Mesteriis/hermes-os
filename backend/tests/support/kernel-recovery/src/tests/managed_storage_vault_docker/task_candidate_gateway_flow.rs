@@ -641,7 +641,7 @@ where
     panic!("Gateway SSE closed before Task candidate extraction terminal event");
 }
 
-async fn task_candidate_admin_pool_v1() -> sqlx::PgPool {
+pub(super) async fn task_candidate_admin_pool_v1() -> sqlx::PgPool {
     let password = Zeroizing::new(
         std::fs::read_to_string(required(
             "HERMES_STORAGE_AUTHENTICATED_POSTGRES_PASSWORD_FILE",

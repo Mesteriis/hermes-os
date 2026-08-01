@@ -32,9 +32,12 @@ client boundary теперь проверяет persisted operation до current
 revision/state: exact retry после terminal promotion replay-ит сохранённую
 операцию, а reuse operation ID с другим request hash/fingerprint fail closed
 как `operation_conflict` без повторного решения или Task. Live managed gate
-доказывает оба случая. Promotion gate остаётся staged только до итогового
-clean-room аудита оставшихся duplicate-event, Blob expiry и workflow
-unknown-command/correlation negative requirements и повторного full pre-push.
+доказывает оба случая. Feature-gated live persistence conformance на disposable
+PostgreSQL дополнительно доказывает exact approval/result duplicate,
+conflicting envelope/outbox, unknown Tasks command и stale candidate
+correlation; duplicate terminal result теперь сверяет и inbox, и сохранённый
+Review-result outbox до replay. Promotion gate остаётся staged только до
+итогового clean-room аудита Blob expiry negative и повторного full pre-push.
 
 Уточняет:
 

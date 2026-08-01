@@ -44,6 +44,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     communicationsTaskSource,
     managedSetup,
     managedFlow,
+    managedPersistenceFlow,
     authenticatedStorage,
     promotionApiManifest,
     promotionApi,
@@ -139,6 +140,13 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     readFile(
       new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/task_candidate_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/task_candidate_persistence_flow.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -371,6 +379,13 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(managedFlow, /replayed_extraction\.cursor, extraction_cursor/);
   assert.match(managedFlow, /replayed\.approved\.cursor, approved_cursor/);
   assert.match(managedFlow, /replayed\.rejected\.cursor, rejected_cursor/);
+  assert.match(managedFlow, /assert_reviewed_task_candidate_persistence_negatives_v1/);
+  assert.match(managedPersistenceFlow, /PersistPromotionApprovalOutcomeV1::Duplicate/);
+  assert.match(managedPersistenceFlow, /ApprovalConflict/);
+  assert.match(managedPersistenceFlow, /PersistPromotionResultOutcomeV1::Duplicate/);
+  assert.match(managedPersistenceFlow, /ReviewedTaskCandidatePromotionPersistenceErrorV1::NotFound/);
+  assert.match(managedPersistenceFlow, /ResultConflict/);
+  assert.match(managedPersistenceFlow, /OutboxConflict/);
   assert.match(
     authenticatedStorage,
     /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart/,
@@ -405,9 +420,14 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(promotionPersistenceManifest, /role = "workflow"/);
   assert.match(promotionPersistenceManifest, /owner = "reviewed_task_candidate_promotion"/);
   assert.match(promotionPersistenceManifest, /surface = "persistence"/);
+  assert.match(promotionPersistenceManifest, /conformance-test-support = \[\]/);
   assert.match(promotionPersistence, /ReviewedTaskCandidatePromotionPersistenceV1/);
   assert.match(promotionPersistenceRepository, /persist_approval_and_tasks_command/);
   assert.match(promotionPersistenceRepository, /persist_tasks_result_and_review_result/);
+  assert.match(
+    promotionPersistenceRepository,
+    /verify_result_inbox[\s\S]*verify_exact_outbox/,
+  );
   assert.match(promotionPersistenceRepository, /derive_reviewed_task_candidate_command_id_v1/);
   assert.match(promotionPersistenceRepository, /derive_reviewed_task_candidate_result_id_v1/);
   assert.match(promotionPersistenceOutbox, /unpublished_events/);

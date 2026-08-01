@@ -90,8 +90,9 @@ hermes-review-task-candidate-api = { path = "../../../src/review-task-candidate-
 hermes-review-task-candidate-core = { path = "../../../src/review-task-candidate-core" }
 hermes-review-task-candidate-persistence = { path = "../../../src/review-task-candidate-persistence" }
 hermes-review-task-candidate-runtime = { path = "../../../src/review-task-candidate-runtime" }
+hermes-review-task-candidate-promotion-api = { path = "../../../src/review-task-candidate-promotion-api" }
 hermes-reviewed-task-candidate-promotion-core = { path = "../../../src/reviewed-task-candidate-promotion-core" }
-hermes-reviewed-task-candidate-promotion-persistence = { path = "../../../src/reviewed-task-candidate-promotion-persistence" }
+hermes-reviewed-task-candidate-promotion-persistence = { path = "../../../src/reviewed-task-candidate-promotion-persistence", features = ["conformance-test-support"] }
 hermes-reviewed-task-candidate-promotion-runtime = { path = "../../../src/reviewed-task-candidate-promotion-runtime" }
 hermes-tasks-command-api = { path = "../../../src/tasks-command-api" }
 hermes-tasks-persistence = { path = "../../../src/tasks-persistence" }

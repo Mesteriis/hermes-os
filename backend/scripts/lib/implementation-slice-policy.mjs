@@ -4525,6 +4525,10 @@ const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
     default: [],
     'conformance-test-support': [],
   },
+  'hermes-reviewed-task-candidate-promotion-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
   'hermes-mail-api': {
     default: [],
     'conformance-test-support': [],
