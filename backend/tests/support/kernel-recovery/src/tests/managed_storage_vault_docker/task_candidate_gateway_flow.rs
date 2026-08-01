@@ -42,6 +42,8 @@ pub(super) struct TaskCandidateTerminalEventsV1 {
     pub rejected: ClientRealtimeEventV1,
 }
 
+type ObservedTaskCandidateFramesV1 = Arc<std::sync::Mutex<Vec<(Vec<u8>, i32, i32, u64)>>>;
+
 pub(super) fn task_candidate_gateway_v1(
     store: &Arc<SqliteControlStore>,
     supervisor: &ManagedRuntimeSupervisor,
@@ -373,7 +375,7 @@ where
 async fn find_terminal_events<B>(
     mut body: B,
     reviews: &SeededTaskCandidateReviewsV1,
-    observed: Arc<std::sync::Mutex<Vec<(Vec<u8>, i32, i32, u64)>>>,
+    observed: ObservedTaskCandidateFramesV1,
 ) -> TaskCandidateTerminalEventsV1
 where
     B: hyper::body::Body<Data = Bytes> + Unpin,
@@ -430,10 +432,10 @@ where
             {
                 rejected = Some(event);
             }
-            if approved.is_some() && rejected.is_some() {
+            if let (Some(approved), Some(rejected)) = (&approved, &rejected) {
                 return TaskCandidateTerminalEventsV1 {
-                    approved: approved.expect("approved terminal event"),
-                    rejected: rejected.expect("rejected terminal event"),
+                    approved: approved.clone(),
+                    rejected: rejected.clone(),
                 };
             }
         }
