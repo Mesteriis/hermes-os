@@ -5,7 +5,7 @@
 Дата: 2026-08-01
 
 Состояние реализации: staged. Этим решением Knowledge разблокирован только для
-exact verified-note contract/core slice. Persistence, managed runtime, assembly,
+exact verified-note contract/core/persistence slice. Managed runtime, assembly,
 Gateway surface, shared SSE и live conformance ещё не реализованы; Knowledge
 phase gate остаётся закрытым до атомарного evidence полного owner contour.
 
@@ -44,8 +44,10 @@ contour:
 
 - `hermes-knowledge-command-api` — exact durable command/result contract;
 - `hermes-knowledge-core` — pure verified-note aggregate and invariants;
-- будущие отдельные `hermes-knowledge-persistence`,
-  `hermes-knowledge-runtime` и `hermes-knowledge-assembly` units.
+- `hermes-knowledge-persistence` — owner-local inbox/state/outbox и Storage
+  bundle;
+- будущие отдельные `hermes-knowledge-runtime` и
+  `hermes-knowledge-assembly` units.
 
 Generic note CRUD, Knowledge Graph, Search, Timeline, Context, Memory,
 embeddings, arbitrary facts/claims и cross-domain materialized views этим ADR

@@ -3330,6 +3330,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-knowledge-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-knowledge-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-mail-api"
 version = "0.1.0"
 dependencies = [

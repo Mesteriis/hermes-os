@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "knowledge_verified_note_contract_core_v1",
+    "currentSlice": "knowledge_verified_note_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1158,6 +1158,12 @@
         "role": "domain",
         "owner": "knowledge",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-knowledge-persistence",
+        "role": "domain",
+        "owner": "knowledge",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3478,7 +3484,11 @@
         { "name": "hermes-events-protocol", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" }
       ],
-      "hermes-knowledge-core": []
+      "hermes-knowledge-core": [],
+      "hermes-knowledge-persistence": [
+        { "name": "hermes-knowledge-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-communication-summary-api": [
@@ -3656,6 +3666,10 @@
       ],
       "hermes-knowledge-core": [
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-knowledge-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
       ],
       "hermes-events-protocol": [
         {
@@ -8831,6 +8845,10 @@
         "customBuildAllowed": true
       },
       "hermes-knowledge-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-knowledge-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
