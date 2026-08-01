@@ -1730,6 +1730,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-preview-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-attachment-preview-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-api",
+]
+
+[[package]]
+name = "hermes-attachment-preview-ingress"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-attachment-preview-renderer-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-api",
+]
+
+[[package]]
 name = "hermes-attachment-security-assembly"
 version = "0.1.0"
 dependencies = [

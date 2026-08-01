@@ -110,9 +110,10 @@ test('Communications export is one exact workflow family with a public domain so
   const sourceSchema = sourceContract.replaceAll(/\/\/.*$/gm, '');
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_text_extraction_runtime_assembly_v1',
+    'attachment_preview_foundation_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
+    'attachment_preview',
     'attachment_text_extraction',
     'communication_cross_channel_forward',
     'communication_delivery_intent',

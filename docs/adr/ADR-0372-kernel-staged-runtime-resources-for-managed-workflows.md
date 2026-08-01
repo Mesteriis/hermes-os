@@ -4,18 +4,18 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: partially implemented. Owner-neutral protocol, exact
-use/kind validation, Kernel selector/staging, OCR runtime binding и unsigned
-release fragment реализованы. Pinned macOS arm64 runner build, license/model
-hash audit, system-fallback negative и изолированная двойная reproducibility
-проверка реализованы в отдельной native build unit. Development signed release
-компилирует exact runtime/model artifacts, а clean-room development assembly
-admit-ит и запускает Attachment Text Extraction как отдельный managed workflow.
-Отдельный Docker/live conformance запускает signed workflow через Kernel с
-private staging exact runner/`eng`/`rus` resources и проверяет readiness.
-Реальный `eng+rus` job через Event/Blob flow и полный negative/live gate ещё не
-доказаны.
-`attachment_text_extraction_v1` остаётся `planned`.
+Состояние реализации: реализовано для exact Attachment Text Extraction contour.
+Owner-neutral protocol, exact use/kind validation, Kernel selector/staging, OCR
+runtime binding и unsigned release fragment реализованы. Pinned macOS arm64
+runner build, license/model hash audit, system-fallback negative и изолированная
+двойная reproducibility проверка реализованы в отдельной native build unit.
+Development signed release компилирует exact runtime/model artifacts, а
+clean-room development assembly admit-ит и запускает Attachment Text Extraction
+как отдельный managed workflow. Managed conformance запускает signed workflow
+через Kernel с private staging exact runner/`eng`/`rus` resources и доказывает
+реальный `eng+rus` job через Event/Blob flow, restart, outage, stale identity и
+privacy-negative contours. Gate `attachment_text_extraction_v1` реализован;
+другие workflow/engine runtime resources требуют собственных exact phase gates.
 
 Зависит от:
 

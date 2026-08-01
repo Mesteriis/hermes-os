@@ -1,0 +1,300 @@
+# ADR-0373: Bounded attachment preview workflow
+
+Статус: Принято
+
+Дата: 2026-08-01
+
+Состояние реализации: staged foundation. Clean-room owner boundary,
+client/private-content boundary, event-only custody, renderer topology и phase
+gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
+и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
+client_blob contracts, target-owned custody envelopes, pure order-independent
+evidence join/lifecycle/output policy и byte-only magic detection. Renderer
+adapters, persistence, managed runtime, assembly и live evidence ещё не
+реализованы. Inventory gate `attachment_preview_v1` остаётся `planned`.
+
+Зависит от:
+
+- [ADR-0201](ADR-0201-core-module-communication-and-nats.md);
+- [ADR-0205](ADR-0205-core-gateway-and-client-transport.md);
+- [ADR-0212](ADR-0212-crate-topology-and-compile-isolation.md);
+- [ADR-0213](ADR-0213-code-ownership-and-module-autonomy.md);
+- [ADR-0220](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
+- [ADR-0230](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md);
+- [ADR-0273](ADR-0273-attachment-security-engine-and-event-only-verdict-authority.md);
+- [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
+- [ADR-0360](ADR-0360-current-custodian-target-bound-blob-redelegation.md).
+
+## Контекст
+
+Legacy attachment preview находился внутри Communications и одновременно:
+
+- читал Communications PostgreSQL rows и domain-owned filesystem paths;
+- доверял provider filename/MIME при выборе behavior;
+- возвращал text и base64 `data:` URL через один business query;
+- отдавал исходные image/audio/video bytes браузеру;
+- запускал PDF/DOCX renderer и сохранял derived Blob рядом с domain rows;
+- объединял safety state, source-hash validation, rendering и delivery.
+
+Такой перенос сделал бы Communications владельцем Blob data-plane, content
+renderers, private-content transport и derived artifacts. Attachment Security
+тоже не может владеть preview: malware verdict и пользовательское отображение
+имеют разные authority, failure semantics и release cadence.
+
+Clean-room Communications владеет только canonical attachment anchor и
+provider-neutral safety projection. Attachment Security владеет verdict и
+current source custody. Blob владеет bytes. Preview является отдельным
+use-case workflow и производит только derived presentation artifact; он не
+создаёт canonical Communications truth и не меняет safety verdict.
+
+## Решение
+
+Вводится отдельный managed workflow:
+
+```text
+owner_id  = attachment_preview
+module_id = hermes-attachment-preview-runtime
+kind      = workflow
+```
+
+Клиент передаёт Core Gateway только stable operation ID и canonical attachment
+anchor. Клиент не передаёт Blob reference, filename, MIME, provider/account
+identity, filesystem path, source digest, preview kind, renderer или bytes.
+
+Workflow owner-locally и независимо от порядка объединяет:
+
+1. authenticated Start request;
+2. exact provider-neutral Attachment Security scan candidate;
+3. canonical Communications transition `blob_admitted -> safe_for_delivery`.
+
+Join создаёт durable target-owned custody-delegation command. Attachment
+Security повторно проверяет completed clean verdict и current custody, получает
+current-custodian target-bound proof по ADR-0360 и публикует exact delegated или
+rejected result. Только exact command-linked delegated result создаёт fenced
+preview job.
+
+```text
+client -> Gateway -> attachment-preview request_rpc
+scan candidate event --------------------------\
+safe_for_delivery event ------------------------> owner-local durable join
+                                                   -> custody command outbox
+
+custody command -> Attachment Security inbox
+  -> clean verdict/current custody verification
+  -> Kernel current-custodian redelegation
+  -> delegated/rejected result event
+  -> Preview result inbox
+  -> target-bound one-use Blob read
+  -> magic-based exact renderer adapter
+  -> owner-local derived preview Blob
+  -> metadata-only status + replayable SSE
+```
+
+Workflow не вызывает Communications или Attachment Security RPC, не читает их
+storage и не импортирует implementation. Kernel, Gateway, Event Hub и Blob не
+выбирают renderer и не интерпретируют preview content.
+
+## Event-only custody contract
+
+Target-owned `hermes-attachment-preview-ingress` содержит три exact durable
+contracts:
+
+```text
+RequestAttachmentPreviewCustodyDelegationV1
+AttachmentPreviewCustodyDelegatedV1
+AttachmentPreviewCustodyDelegationRejectedV1
+```
+
+Request содержит только request/run/anchor, exact candidate message/hash,
+safety message/evidence и logical owner. Target triple является константой:
+
+```text
+owner      = attachment_preview
+module     = hermes-attachment-preview-runtime
+capability = attachment_preview.blob.v1
+```
+
+Delegated result несёт opaque source reference, declared size/digest и bounded
+target-bound proof только во внутренних event/runtime/persistence surfaces.
+Proof, reference, filename, MIME, bytes и provider identity отсутствуют в
+client API, SSE, logs, errors, health и telemetry.
+
+Attachment Security импортирует только target-owned ingress contract. Preview
+может импортировать public Attachment Security и Communications attachment
+contracts, но не engine/domain implementation. Это contract edge, не engine
+внутри workflow и не Communications facade.
+
+## Client и private-content boundary
+
+`hermes-attachment-preview-api` разделяет четыре причины вызова:
+
+- `Start` — idempotent command/request receipt;
+- `Get` — metadata-only status query;
+- `IssueRead` — отдельный authenticated one-use read-ticket request;
+- exact descriptor-declared `client_blob` route — bounded private bytes.
+
+`Get` и realtime содержат run ID, anchor, state/revision, exact preview kind,
+canonical output media kind, byte count, truncation и bounded error enum. Они
+не содержат preview bytes, text, Blob reference/proof/receipt или read ticket.
+
+`IssueRead` работает только для current `ready` revision и создаёт random
+32-byte one-use opaque ticket с TTL 30 seconds, привязанный к authenticated
+owner/device actor, run ID, revision, current runtime/grant generation и exact
+artifact receipt. Клиент передаёт ticket только в exact `client_blob` body.
+Gateway авторизует route, runtime обменивает ticket на internal Blob read и
+возвращает exact bytes с `Cache-Control: no-store`. Клиент никогда не получает
+internal Blob authority.
+
+`accepted` не означает completion. Terminal status приходит через exact Get и
+один общий replayable SSE stream; polling не вводится.
+
+## V1 preview policy
+
+Renderer выбирается только после bounded source read по verified magic и
+container structure. Provider MIME, filename, extension и клиентский hint не
+являются authority.
+
+V1 поддерживает:
+
+- valid UTF-8 plain/JSON/XML/YAML/CSV как normalized `text/plain`, visible
+  artifact hard-truncated до 64 KiB;
+- PNG/JPEG/GIF/WebP как decoded, bounded и заново encoded static `image/png`,
+  максимум 5 MiB output и 16 megapixels;
+- PDF как rendered first-page `image/png`, максимум 5 MiB output;
+- DOCX как fixed-font, no-external-resource first-page/card `image/png`,
+  максимум 5 MiB output;
+- bounded MP3 audio и MP4 video как magic/container-validated owner-local
+  presentation copy, максимум 24 MiB и 32 MiB соответственно.
+
+SVG, HTML, JavaScript, active PDF/Office content, remote fonts/resources,
+macros, embedded objects и browser rendering исходного PDF/DOCX запрещены.
+Image metadata, animation и embedded profiles удаляются. PDF/DOCX adapters не
+имеют network, shell, shared writable source mount или arbitrary filesystem
+access. Media adapter не транскодирует и допускает только exact MP3/MP4 V1
+container policy; неизвестный codec/container завершается `unsupported`.
+
+Empty, malformed, polyglot, decompression-bomb, oversized, timed-out или
+unavailable renderer input завершается bounded typed failure без partial
+artifact. Unsupported не считается empty successful preview.
+
+Legacy base64 `data:` URL не восстанавливается: он дублировал private bytes в
+JSON/heap/logging surfaces и обходил `client_blob` authorization.
+
+## Derived artifact и fencing
+
+Runtime читает source только one-use receipt-bound Blob operation, передаёт
+bytes exact adapter и записывает result через собственную Blob write
+capability. Только после successful Blob commit persistence атомарно переводит
+run в `ready`.
+
+Owner-local PostgreSQL хранит opaque source/derived receipts, source evidence
+и digest binding, renderer identity, status/revision, ticket hashes,
+inbox/outbox/job и realtime state. Source и preview bytes, text и ticket
+plaintext в PostgreSQL не хранятся.
+
+Source replacement, safety evidence mismatch, stale custody proof,
+runtime/grant generation mismatch, renderer revision mismatch, expired/used
+ticket или missing derived Blob делают старый preview unreadable. Старый
+artifact не становится fallback. Retry создаёт новый fenced run или продолжает
+exact non-terminal job; он не переиспользует caller-selected artifact.
+
+Text Extraction, archive inspection, CDR, translation, search indexing и AI
+egress остаются отдельными owners/gates и не запускаются как side effect
+preview.
+
+## Единицы сборки и SRP
+
+```text
+hermes-attachment-preview-api
+  generated Start/Get/IssueRead/client_blob/realtime contracts
+
+hermes-attachment-preview-ingress
+  target-owned custody command/result event contracts
+
+hermes-attachment-preview-core
+  pure join, lifecycle, format/output bounds and terminal decisions
+
+hermes-attachment-preview-renderer-contract
+  byte-only render request/result/error and exact format detection
+
+hermes-attachment-preview-text
+  bounded UTF-8 normalization and visible truncation
+
+hermes-attachment-preview-image
+  bounded image decode, metadata removal and PNG re-encode
+
+hermes-attachment-preview-pdf
+  isolated first-page PNG renderer
+
+hermes-attachment-preview-docx
+  isolated fixed-font card/page PNG renderer
+
+hermes-attachment-preview-media
+  bounded MP3/MP4 container validation and presentation copy
+
+hermes-attachment-preview-persistence
+  owner-local PostgreSQL inbox/outbox/run/job/artifact/ticket/realtime state
+
+hermes-attachment-preview-runtime
+  managed request/query/client_blob/Event/Blob/renderer orchestration only
+
+hermes-attachment-preview-assembly
+  descriptor/settings/Storage/runtime-resource artifacts and unsigned release fragment only
+```
+
+API/ingress/core/renderer-contract/adapters не зависят от runtime или
+persistence. Persistence является единственным SQL owner. Runtime не
+материализует release artifacts. Assembly не запускает renderer/runtime и не
+подписывает manifest. Communications, integrations и Attachment Security не
+получают renderer dependency. Build units разделены по функциональной причине
+изменения, а не по количеству строк.
+
+## Phase gate `attachment_preview_v1`
+
+Gate становится `implemented` атомарно только после:
+
+1. exact twelve-unit package inventory и compile isolation;
+2. versioned Start/Get/IssueRead/client_blob/realtime и custody contracts;
+3. owner-local request replay, exact message/hash inbox, outbox, ticket store и
+   fenced jobs;
+4. order-independent request/candidate/safety join;
+5. current-custodian target-bound delegation and one-use source Blob read;
+6. real bounded UTF-8, image re-encode, PDF, DOCX, MP3 and MP4 evidence;
+7. derived owner-local Blob write without PostgreSQL private content;
+8. wrong-owner, collision, stale revision/generation/grant/proof/renderer,
+   source-hash and ticket replay/expiry negative matrix;
+9. unavailable Blob/Vault/Event/renderer and malformed/polyglot/oversized input
+   fail closed;
+10. restart/NATS outage replay without duplicate custody, render or artifact;
+11. authenticated Gateway Start/Get/IssueRead/client_blob and exact SSE cursor
+   replay;
+12. privacy-negative event/SSE/log/error/health/telemetry evidence;
+13. architecture, SRP, Cargo, clippy, managed and full pre-push gates.
+
+До выполнения всех пунктов inventory state остаётся `planned`.
+
+## Отклонённые варианты
+
+### Вернуть GetAttachmentPreview в Communications
+
+Отклонено: domain снова получил бы Blob I/O, renderer lifecycle, derived
+artifact storage и private-content delivery.
+
+### Добавить preview в Attachment Security
+
+Отклонено: safety verdict не является presentation policy или renderer
+authority.
+
+### Отдать Blob reference или source bytes клиенту
+
+Отклонено: клиент не является custody authority; exact `client_blob` route
+сохраняет private bytes за authenticated one-use ticket.
+
+### Доверять provider MIME/filename
+
+Отклонено: metadata является untrusted observation и не выбирает executable
+behavior.
+
+### Объединить preview с Text Extraction, CDR или Translation
+
+Отклонено: это разные use cases, output contracts, owners и failure semantics.

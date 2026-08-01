@@ -644,11 +644,12 @@ redelegated proof durable result event без engine-to-engine RPC. Ingress code
 typed routes и bounded exact envelopes реализованы; owner-local handoff
 persistence на стороне Archive также реализует deterministic request outbox,
 exact result inbox и создаёт parser job только после fresh delegated proof.
-Attachment Security теперь также реализует отдельные durable
+Attachment Security также реализует отдельные durable
 command-consumer/result-publisher capabilities, exact replay inbox, проверку
 completed safe verdict/current custody только по owner-local state, fenced
-delegation jobs, managed-control redelegation и exact result outbox. Archive
-runtime/assembly и managed live gate остаются открыты.
+delegation jobs, managed-control redelegation и exact result outbox. Отдельные
+Archive runtime/assembly, authenticated Gateway/SSE и managed live contours
+реализованы; production gate закрыт.
 ADR-0360 вводит отдельную managed control operation для target-bound
 redelegation уже принятого Blob. Kernel проверяет predecessor proof, exact
 evidence lineage и current custodian runtime/grant, но не читает bytes или Blob
@@ -692,10 +693,17 @@ persistence/runtime/assembly и live evidence.
 ADR-0371 выделяет text extraction из Communications в отдельный bounded
 workflow: source authority приходит только через Communications и Attachment
 Security events, bytes переходят через target-bound Blob, parser adapters и
-derived text остаются отдельными build units. Production gate остаётся planned
-до полного managed OCR/live evidence.
+derived text остаются отдельными build units. Exact eleven-unit topology,
+managed UTF-8/PDF/DOCX/`eng+rus` OCR, restart/outage/stale/privacy contours и
+production gate реализованы.
 ADR-0372 обобщает Kernel-staged runtime artifacts на integration, workflow и
 engine без допуска domain: exact native executable и read-only model data
 приходят только из signed distribution через descriptor/grant intersection.
 Первый consumer — `eng+rus` OCR workflow; Settings, system Tesseract и
-machine-local path fallback запрещены.
+machine-local path fallback запрещены. Exact OCR resource contour реализован.
+ADR-0373 выделяет attachment preview из Communications в отдельный bounded
+workflow. Source custody приходит только через Attachment Security events,
+renderer выбирается по bytes/magic, private content выдаётся one-use ticket
+через exact `client_blob`, а text/image/PDF/DOCX/media adapters, persistence,
+runtime и assembly остаются отдельными build units. Gate остаётся `planned` до
+полного managed/live evidence.

@@ -1162,6 +1162,14 @@ const ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-text-extraction-assembly', role: 'workflow', owner: 'attachment_text_extraction', surface: 'assembly' },
 ];
 
+const ATTACHMENT_PREVIEW_FOUNDATION_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-preview-api', role: 'workflow', owner: 'attachment_preview', surface: 'contract' },
+  { name: 'hermes-attachment-preview-ingress', role: 'workflow', owner: 'attachment_preview', surface: 'contract' },
+  { name: 'hermes-attachment-preview-core', role: 'workflow', owner: 'attachment_preview', surface: 'implementation' },
+  { name: 'hermes-attachment-preview-renderer-contract', role: 'workflow', owner: 'attachment_preview', surface: 'contract' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3379,6 +3387,21 @@ const ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST
   ],
 };
 
+const ATTACHMENT_PREVIEW_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-preview-api': [],
+  'hermes-attachment-preview-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-attachment-preview-core': [
+    { name: 'hermes-attachment-preview-api', kind: 'normal' },
+  ],
+  'hermes-attachment-preview-renderer-contract': [
+    { name: 'hermes-attachment-preview-api', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4467,6 +4490,26 @@ const ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLI
   ],
 };
 
+const ATTACHMENT_PREVIEW_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-preview-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-preview-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-preview-core': [],
+  'hermes-attachment-preview-renderer-contract': [],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -5170,6 +5213,18 @@ const ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY = {
+  ...ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY,
+  workflows: [
+    ...ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY.workflows,
+    'attachment_preview',
+  ].sort(),
+  businessCapabilities: [
+    ...ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'attachment.preview.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -5395,6 +5450,8 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-attachment-archive-inspection-ingress',
       'hermes-attachment-text-extraction-api',
       'hermes-attachment-text-extraction-ingress',
+      'hermes-attachment-preview-api',
+      'hermes-attachment-preview-ingress',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-delivery-intent-ingress-api',
@@ -6826,6 +6883,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_TEXT_EXTRACTION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_preview_foundation_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_PREVIEW_FOUNDATION_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_PREVIEW_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_PREVIEW_FOUNDATION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
