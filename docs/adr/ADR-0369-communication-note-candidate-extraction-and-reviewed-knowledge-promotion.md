@@ -16,7 +16,12 @@ approval до side effect, принимает только workflow-targeted Blo
 явно декодирует и повторно кодирует bounded typed content в новый
 Knowledge-targeted Blob, атомарно сохраняет exact Knowledge command outbox и
 публикует terminal Knowledge result обратно в Review. Extraction
-runtime/assembly и aggregate managed conformance ещё не реализованы; поэтому
+runtime/assembly реализованы отдельными workflow units; Communications runtime
+производит source result через собственный public contract и target-bound Blob,
+а extraction runtime выполняет durable lifecycle, Review submission, owner-local
+recovery и replayable realtime. Assembly материализует только unsigned runtime,
+descriptor, settings schema и storage bundle. Aggregate managed conformance
+всего multi-owner flow ещё не реализован; поэтому
 `communication_note_candidate_extraction_v1` остаётся `planned`.
 
 Уточняет:
@@ -60,7 +65,8 @@ Extraction принадлежит workflow owner
 - `hermes-communication-note-candidate-api`;
 - `hermes-communication-note-candidate-core`;
 - `hermes-communication-note-candidate-persistence`;
-- будущие отдельные runtime и assembly units.
+- `hermes-communication-note-candidate-runtime`;
+- `hermes-communication-note-candidate-assembly`.
 
 Review получает отдельный note-candidate slice:
 

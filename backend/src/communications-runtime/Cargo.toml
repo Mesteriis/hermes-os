@@ -32,6 +32,7 @@ hermes-communications-saved-query-api = { path = "../communications-saved-query-
 hermes-communications-sender-insights-api = { path = "../communications-sender-insights-api" }
 hermes-communications-domain = { path = "../communications-domain" }
 hermes-communications-ingress = { path = "../communications-ingress" }
+hermes-communications-note-source-api = { path = "../communications-note-source-api" }
 hermes-communications-persistence = { path = "../communications-persistence" }
 hermes-communications-recipient-source-api = { path = "../communications-recipient-source-api" }
 hermes-communications-task-source-api = { path = "../communications-task-source-api" }

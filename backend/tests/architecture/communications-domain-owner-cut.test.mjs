@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'reviewed_note_candidate_promotion_assembly_v1',
+    'communication_note_candidate_assembly_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'knowledge', 'review', 'tasks'],
@@ -128,6 +128,9 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'communication_explanation.source_rejected.v1',
       'communication_explanation.storage.v1',
       'communication_note_candidate_extraction.source.blob.v1',
+      'communication_note_candidate_extraction.source_prepare.v1',
+      'communication_note_candidate_extraction.source_prepared.v1',
+      'communication_note_candidate_extraction.source_rejected.v1',
       'communication_note_candidate_extraction.storage.v1',
       'communication_recipient_suggestion.source.blob.v1',
       'communication_recipient_suggestion.source_prepare.v1',
@@ -169,6 +172,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'communications.export-source.blob.v1',
       'communications.export-source.v1',
       'communications.export.v1',
+      'communications.note-source.blob.v1',
       'communications.note-source.v1',
       'communications.observe.v1',
       'communications.query.v1',

@@ -21,6 +21,7 @@ pub mod domain_outbox;
 pub mod event_runtime;
 pub mod evidence_export_source;
 mod explanation_source;
+mod note_source;
 pub mod query;
 pub mod query_client_port;
 pub mod query_module_port;

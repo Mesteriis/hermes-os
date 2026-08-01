@@ -220,7 +220,7 @@ test('bulk delivery managed runtime uses request RPC and safe replay without dom
   assert.match(adr, /Принятый ADR сам по себе gate не открывает/);
   assert.equal(
     policy.implementation.currentSlice,
-    'reviewed_note_candidate_promotion_assembly_v1',
+    'communication_note_candidate_assembly_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages

@@ -158,6 +158,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-communication-recipient-suggestion-assembly \
 	--package hermes-communication-task-candidate-runtime \
 	--package hermes-communication-task-candidate-assembly \
+	--package hermes-communication-note-candidate-runtime \
+	--package hermes-communication-note-candidate-assembly \
 	--package hermes-review-task-candidate-runtime \
 	--package hermes-review-task-candidate-assembly \
 	--package hermes-tasks-runtime \
@@ -231,6 +233,7 @@ communication_translation_assembly="$assembly_root/communication-translation"
 communication_explanation_assembly="$assembly_root/communication-explanation"
 communication_recipient_suggestion_assembly="$assembly_root/communication-recipient-suggestion"
 communication_task_candidate_assembly="$assembly_root/communication-task-candidate"
+communication_note_candidate_assembly="$assembly_root/communication-note-candidate"
 review_task_candidate_assembly="$assembly_root/review-task-candidate"
 tasks_assembly="$assembly_root/tasks"
 knowledge_assembly="$assembly_root/knowledge"
@@ -289,6 +292,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$communication_task_candidate_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-communication-task-candidate-runtime"
+"$cargo_target_dir/debug/hermes-communication-note-candidate-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$communication_note_candidate_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-communication-note-candidate-runtime"
 "$cargo_target_dir/debug/hermes-review-task-candidate-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$review_task_candidate_assembly" \
@@ -383,6 +390,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$communication_explanation_assembly/communication_explanation.release-artifacts.json" \
 	--artifact-fragment "$communication_recipient_suggestion_assembly/communication_recipient_suggestion.release-artifacts.json" \
 	--artifact-fragment "$communication_task_candidate_assembly/communication_task_candidate.release-artifacts.json" \
+	--artifact-fragment "$communication_note_candidate_assembly/communication_note_candidate.release-artifacts.json" \
 	--artifact-fragment "$review_task_candidate_assembly/review-task-candidate.release-artifacts.json" \
 	--artifact-fragment "$tasks_assembly/tasks.release-artifacts.json" \
 	--artifact-fragment "$knowledge_assembly/knowledge.release-artifacts.json" \

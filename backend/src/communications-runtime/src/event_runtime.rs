@@ -25,6 +25,7 @@ use hermes_communications_cross_channel_forward_source_api::cross_channel_forwar
 use hermes_communications_domain::COMMUNICATIONS_SEARCH_PROJECTION_REVISION_V1;
 use hermes_communications_evidence_export_source_api::evidence_export_prepare_contract_reference_v1;
 use hermes_communications_ingress::admission::communication_observed_contract_reference_v1;
+use hermes_communications_note_source_api::communication_note_source_prepare_contract_reference_v1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_communications_recipient_source_api::communication_recipient_source_prepare_contract_reference_v1;
 use hermes_communications_task_source_api::communication_task_source_prepare_contract_reference_v1;
@@ -87,6 +88,7 @@ use crate::{
     explanation_source::{
         CommunicationsExplanationSourceDeliveryErrorV1, consume_next_explanation_source_prepare_v1,
     },
+    note_source::{CommunicationsNoteSourceDeliveryErrorV1, consume_next_note_source_prepare_v1},
     query_module_port::handle_module_query_delivery_v1,
     recipient_source::{
         CommunicationsRecipientSourceDeliveryErrorV1, consume_next_recipient_source_prepare_v1,
@@ -146,6 +148,7 @@ struct CommunicationsSubscribePermitsV1 {
     summary_source_prepare: RuntimeSubscribePermitV1,
     translation_source_prepare: RuntimeSubscribePermitV1,
     explanation_source_prepare: RuntimeSubscribePermitV1,
+    note_source_prepare: RuntimeSubscribePermitV1,
     recipient_source_prepare: RuntimeSubscribePermitV1,
     task_source_prepare: RuntimeSubscribePermitV1,
 }
@@ -162,6 +165,7 @@ enum CommunicationsConsumerV1 {
     SummarySourcePrepare,
     TranslationSourcePrepare,
     ExplanationSourcePrepare,
+    NoteSourcePrepare,
     RecipientSourcePrepare,
     TaskSourcePrepare,
 }
@@ -178,7 +182,8 @@ impl CommunicationsConsumerV1 {
             Self::AiSourcePrepare => Self::SummarySourcePrepare,
             Self::SummarySourcePrepare => Self::TranslationSourcePrepare,
             Self::TranslationSourcePrepare => Self::ExplanationSourcePrepare,
-            Self::ExplanationSourcePrepare => Self::RecipientSourcePrepare,
+            Self::ExplanationSourcePrepare => Self::NoteSourcePrepare,
+            Self::NoteSourcePrepare => Self::RecipientSourcePrepare,
             Self::RecipientSourcePrepare => Self::TaskSourcePrepare,
             Self::TaskSourcePrepare => Self::Observation,
         }
@@ -204,6 +209,7 @@ impl CommunicationsSubscribePermitsV1 {
             communication_translation_source_prepare_contract_reference_v1();
         let explanation_source_prepare =
             communication_explanation_source_prepare_contract_reference_v1();
+        let note_source_prepare = communication_note_source_prepare_contract_reference_v1();
         let recipient_source_prepare =
             communication_recipient_source_prepare_contract_reference_v1();
         let task_source_prepare = communication_task_source_prepare_contract_reference_v1();
@@ -217,6 +223,7 @@ impl CommunicationsSubscribePermitsV1 {
         let mut summary_source_prepare_permit = None;
         let mut translation_source_prepare_permit = None;
         let mut explanation_source_prepare_permit = None;
+        let mut note_source_prepare_permit = None;
         let mut recipient_source_prepare_permit = None;
         let mut task_source_prepare_permit = None;
         for permit in permits {
@@ -243,6 +250,8 @@ impl CommunicationsSubscribePermitsV1 {
                 replace_once(&mut translation_source_prepare_permit, permit)?;
             } else if exact_contract(contract, &explanation_source_prepare) {
                 replace_once(&mut explanation_source_prepare_permit, permit)?;
+            } else if exact_contract(contract, &note_source_prepare) {
+                replace_once(&mut note_source_prepare_permit, permit)?;
             } else if exact_contract(contract, &recipient_source_prepare) {
                 replace_once(&mut recipient_source_prepare_permit, permit)?;
             } else if exact_contract(contract, &task_source_prepare) {
@@ -270,6 +279,8 @@ impl CommunicationsSubscribePermitsV1 {
             translation_source_prepare: translation_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             explanation_source_prepare: explanation_source_prepare_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            note_source_prepare: note_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             recipient_source_prepare: recipient_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
@@ -952,6 +963,37 @@ impl CommunicationsEventRuntimeV1 {
                     .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
                 result
             }
+            CommunicationsConsumerV1::NoteSourcePrepare => {
+                let mut nested_search_access = self.search_access.clone();
+                let mut dispatcher = CommunicationsNestedRequestDispatcher {
+                    persistence: &self.persistence,
+                    call_evidence_persistence: &self.call_evidence_persistence,
+                    logical_owner_id: &self.logical_owner_id,
+                    search_access: &mut nested_search_access,
+                    content_tickets: &self.content_tickets,
+                };
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(false)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                let result = consume_next_note_source_prepare_v1(
+                    &self.persistence,
+                    &self.connection,
+                    &self.permits.note_source_prepare,
+                    &mut self.control_channel,
+                    &mut dispatcher,
+                    &self.logical_human_owner_id,
+                    &canonical_event_context,
+                )
+                .await
+                .map(|_| ())
+                .map_err(note_source_delivery_error);
+                self.control_channel
+                    .inner_mut()
+                    .set_nonblocking(true)
+                    .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
+                result
+            }
             CommunicationsConsumerV1::RecipientSourcePrepare => {
                 let mut nested_search_access = self.search_access.clone();
                 let mut dispatcher = CommunicationsNestedRequestDispatcher {
@@ -1336,6 +1378,29 @@ fn recipient_source_delivery_error(
     }
 }
 
+fn note_source_delivery_error(
+    error: CommunicationsNoteSourceDeliveryErrorV1,
+) -> CommunicationsDeliveryErrorV1 {
+    match error {
+        CommunicationsNoteSourceDeliveryErrorV1::Unavailable => {
+            CommunicationsDeliveryErrorV1::Unavailable
+        }
+        CommunicationsNoteSourceDeliveryErrorV1::InvalidEnvelope => {
+            CommunicationsDeliveryErrorV1::InvalidEnvelope
+        }
+        CommunicationsNoteSourceDeliveryErrorV1::InvalidPayload => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::InvalidPayload,
+            )
+        }
+        CommunicationsNoteSourceDeliveryErrorV1::Persistence => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::PersistenceRejected,
+            )
+        }
+    }
+}
+
 fn task_source_delivery_error(
     error: CommunicationsTaskSourceDeliveryErrorV1,
 ) -> CommunicationsDeliveryErrorV1 {
@@ -1544,6 +1609,7 @@ mod tests {
         let tenth = ninth.successor();
         let eleventh = tenth.successor();
         let twelfth = eleventh.successor();
+        let thirteenth = twelfth.successor();
 
         assert_eq!(
             [
@@ -1559,7 +1625,8 @@ mod tests {
                 tenth,
                 eleventh,
                 twelfth,
-                twelfth.successor()
+                thirteenth,
+                thirteenth.successor()
             ],
             [
                 CommunicationsConsumerV1::Observation,
@@ -1572,6 +1639,7 @@ mod tests {
                 CommunicationsConsumerV1::SummarySourcePrepare,
                 CommunicationsConsumerV1::TranslationSourcePrepare,
                 CommunicationsConsumerV1::ExplanationSourcePrepare,
+                CommunicationsConsumerV1::NoteSourcePrepare,
                 CommunicationsConsumerV1::RecipientSourcePrepare,
                 CommunicationsConsumerV1::TaskSourcePrepare,
                 CommunicationsConsumerV1::Observation,

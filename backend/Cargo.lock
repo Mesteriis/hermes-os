@@ -2311,6 +2311,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communication-note-candidate-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-communication-note-candidate-persistence",
+ "hermes-communication-note-candidate-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-communication-note-candidate-core"
 version = "0.1.0"
 dependencies = [
@@ -2325,6 +2338,28 @@ dependencies = [
  "hermes-storage-protocol",
  "sha2 0.11.0",
  "sqlx",
+]
+
+[[package]]
+name = "hermes-communication-note-candidate-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-communication-note-candidate-api",
+ "hermes-communication-note-candidate-core",
+ "hermes-communication-note-candidate-persistence",
+ "hermes-communications-note-source-api",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-review-note-candidate-api",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -2892,6 +2927,7 @@ dependencies = [
  "hermes-communications-domain",
  "hermes-communications-evidence-export-source-api",
  "hermes-communications-ingress",
+ "hermes-communications-note-source-api",
  "hermes-communications-persistence",
  "hermes-communications-recipient-source-api",
  "hermes-communications-saved-query-api",

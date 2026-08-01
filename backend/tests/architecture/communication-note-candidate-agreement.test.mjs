@@ -28,6 +28,19 @@ test('note candidate agreement separates Communications workflow Review and Know
     sourceApi,
     sourceProtocol,
     sourceEnvelope,
+    runtimeManifest,
+    runtime,
+    runtimeAdmission,
+    runtimeExtraction,
+    runtimeReviewSubmission,
+    runtimeSourceResults,
+    assemblyManifest,
+    assembly,
+    communicationsRuntimeManifest,
+    communicationsAdmission,
+    communicationsEventRuntime,
+    communicationsNoteSource,
+    policySource,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -74,8 +87,22 @@ test('note candidate agreement separates Communications workflow Review and Know
       'utf8',
     ),
     readFile(new URL('src/communications-note-source-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-runtime/src/extraction.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-runtime/src/review_submission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communication-note-candidate-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/event_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/communications-runtime/src/note_source.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
+  const policy = JSON.parse(policySource);
   const slice = inventory.slices.find(
     ({ gate }) => gate === 'communication_note_candidate_extraction_v1',
   );
@@ -87,6 +114,7 @@ test('note candidate agreement separates Communications workflow Review and Know
     state: 'planned',
     dependsOn: ['communications_content_read_v1'],
   });
+  assert.equal(policy.implementation.currentSlice, 'communication_note_candidate_assembly_v1');
   assert.match(adr, /Состояние реализации: staged/);
   assert.match(adr, /Communications остаётся canonical evidence\/source owner/);
   assert.match(adr, /Extraction остаётся workflow/);
@@ -106,6 +134,8 @@ test('note candidate agreement separates Communications workflow Review and Know
     'hermes-communication-note-candidate-api',
     'hermes-communication-note-candidate-core',
     'hermes-communication-note-candidate-persistence',
+    'hermes-communication-note-candidate-runtime',
+    'hermes-communication-note-candidate-assembly',
     'hermes-communications-note-source-api',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
@@ -173,4 +203,47 @@ test('note candidate agreement separates Communications workflow Review and Know
   assert.match(sourceEnvelope, /build_communication_note_source_prepared_outbox_record_v1/);
   assert.match(sourceEnvelope, /build_communication_note_source_rejected_outbox_record_v1/);
   assert.doesNotMatch(sourceEnvelope, /source_content\.subject_utf8|source_content\.body_utf8/);
+
+  assert.match(runtimeManifest, /role = "workflow"/);
+  assert.match(runtimeManifest, /owner = "communication_note_candidate_extraction"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(runtime, /CommunicationNoteCandidateManagedRuntimeV1/);
+  assert.match(runtimeAdmission, /communication_note_candidate_extraction\.source\.blob\.v1/);
+  assert.match(runtimeAdmission, /communication_note_candidate_extraction\.review_submission\.v1/);
+  assert.match(runtimeAdmission, /review_note_candidate_submit_publish_request_v1/);
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(runtimeExtraction, /extract_communication_note_candidates_v1/);
+  assert.match(runtimeExtraction, /CommunicationNoteSourceContentV1/);
+  assert.match(runtimeExtraction, /prepare_review_submissions_v1/);
+  assert.match(runtimeReviewSubmission, /build_submit_review_note_candidate_outbox_record_v1/);
+  assert.match(runtimeReviewSubmission, /write_review_candidate_v1/);
+  assert.match(runtimeReviewSubmission, /SubmitNoteCandidateForReviewCommandV1/);
+  assert.match(runtimeSourceResults, /materialize_note_source_v1/);
+  assert.match(runtimeManifest, /hermes-review-note-candidate-api/);
+  assert.doesNotMatch(runtimeManifest, /hermes-review-note-candidate-(core|persistence|runtime|assembly)/);
+  assert.doesNotMatch(
+    `${runtime}\n${runtimeAdmission}\n${runtimeExtraction}\n${runtimeReviewSubmission}\n${runtimeSourceResults}`,
+    /hermes_review_note_candidate_(core|persistence|runtime|assembly)|hermes_knowledge|ollama|reqwest|prompt|provider_id/,
+  );
+
+  assert.match(assemblyManifest, /role = "workflow"/);
+  assert.match(assemblyManifest, /owner = "communication_note_candidate_extraction"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /communication_note_candidate_extraction_storage_bundle_v1/);
+  assert.match(assembly, /communication_note_candidate_extraction\.runtime\.v1/);
+  assert.match(assembly, /communication_note_candidate_extraction\.storage\.v1/);
+  assert.doesNotMatch(assembly, /hermes_communications|hermes_review|hermes_knowledge|ollama|provider_id/);
+
+  assert.match(communicationsRuntimeManifest, /hermes-communications-note-source-api/);
+  assert.match(communicationsAdmission, /communications_note_source_capability_v1/);
+  assert.match(communicationsAdmission, /communications\.note-source\.blob\.v1/);
+  assert.match(communicationsEventRuntime, /consume_next_note_source_prepare_v1/);
+  assert.match(communicationsNoteSource, /CommunicationNoteSourceContentV1/);
+  assert.match(communicationsNoteSource, /subject_utf8: snapshot\.subject_utf8\.clone\(\)/);
+  assert.match(communicationsNoteSource, /write_target_bound_source/);
+  assert.match(communicationsNoteSource, /persist_source_result/);
+  assert.doesNotMatch(
+    communicationsNoteSource,
+    /provider_id|account_id|model_id|prompt|ollama|reqwest/,
+  );
 });
