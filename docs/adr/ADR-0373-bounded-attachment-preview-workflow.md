@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged document-adapter slice. Clean-room owner boundary,
+Состояние реализации: staged persistence slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -18,8 +18,13 @@ fail-closed active-content policy без native library или shell. Отдел
 `hermes-attachment-preview-docx` проверяет bounded OPC/ZIP structure, запрещает
 external relationships, macros, ActiveX/OLE и source-provided fonts, извлекает
 только bounded `word/document.xml` и строит fresh first-card PNG bundled
-DejaVu Sans с pinned digest и включённой лицензией. Persistence, managed runtime,
-assembly и live evidence ещё не реализованы. Inventory gate
+DejaVu Sans с pinned digest и включённой лицензией. Pure core теперь валидирует
+полный status/result lifecycle, exact safe transition и source custody facts.
+Отдельный `hermes-attachment-preview-persistence` реализует owner-local
+PostgreSQL request replay, exact inbox/outbox, order-independent evidence join,
+fenced jobs, derived artifact metadata, replayable realtime и hashed one-use
+actor-bound read tickets без private content или ticket plaintext. Managed
+runtime, assembly и live evidence ещё не реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

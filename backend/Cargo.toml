@@ -207,6 +207,7 @@ members = [
   "src/attachment-preview-media",
   "src/attachment-preview-pdf",
   "src/attachment-preview-docx",
+  "src/attachment-preview-persistence",
   "src/kernel/control_store/contract",
   "src/kernel/control_store/sqlite",
   "src/kernel",

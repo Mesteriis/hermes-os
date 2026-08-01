@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_docx_adapter_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_persistence_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged document-adapter slice/);
-  assert.match(adr, /Persistence, managed runtime/);
+  assert.match(adr, /Состояние реализации: staged persistence slice/);
+  assert.match(adr, /Managed\s+runtime, assembly/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -113,11 +113,76 @@ test('pure Preview core owns evidence join lifecycle and output policy only', as
     /\b(?:blob_reference_id|declared_size|receipt_sha256|custody_transfer_source_proof)\b/,
   );
   assert.match(lifecycle, /AttachmentPreviewStateV1/);
+  assert.match(lifecycle, /AttachmentPreviewStatusV1/);
+  assert.match(lifecycle, /transition_attachment_preview_status_v1/);
+  assert.match(join, /source_receipt_sha256/);
+  assert.match(join, /expected_state.*BlobAdmitted/s);
   assert.match(policy, /validate_preview_output_v1/);
   assert.doesNotMatch(
     `${source}\n${join}\n${lifecycle}\n${policy}`,
     /TcpStream|File::|sqlx|postgres|nats|jetstream|hermes_communications|hermes_attachment_security/,
   );
+});
+
+test('Preview persistence owns replay jobs artifacts tickets and realtime without private content', async () => {
+  const [manifest, source, model, evidence, custody, jobs, tickets, repository, schema, migration] = await Promise.all([
+    readFile(new URL('src/attachment-preview-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/model.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/evidence.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/custody.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/jobs.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/tickets.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/src/schema.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-persistence/migrations/0001_attachment_preview.sql', BACKEND_ROOT), 'utf8'),
+  ]);
+  const implementation = `${source}\n${model}\n${evidence}\n${custody}\n${jobs}\n${tickets}\n${repository}\n${schema}`;
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "attachment_preview"/);
+  assert.match(manifest, /surface = "persistence"/);
+  for (const dependency of [
+    'hermes-attachment-preview-api',
+    'hermes-attachment-preview-core',
+    'hermes-attachment-preview-ingress',
+    'hermes-storage-protocol',
+  ]) assert.match(manifest, new RegExp(dependency));
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications|attachment-security|blob|events|runtime|kernel|attachment-text-extraction|attachment-archive-inspection)/,
+  );
+  for (const table of [
+    'attachment_preview_runs',
+    'attachment_preview_event_inbox',
+    'attachment_preview_scan_candidates',
+    'attachment_preview_safety_facts',
+    'attachment_preview_custody_outbox',
+    'attachment_preview_custody_result_inbox',
+    'attachment_preview_jobs',
+    'attachment_preview_artifacts',
+    'attachment_preview_read_tickets',
+    'attachment_preview_realtime',
+  ]) assert.match(migration, new RegExp(`hermes_data\\.${table}`));
+  assert.match(evidence, /AttachmentPreviewEvidenceJoinV1/);
+  assert.match(custody, /exact_envelope_bytes/);
+  assert.match(jobs, /FOR UPDATE SKIP LOCKED/);
+  assert.match(jobs, /runtime_generation/);
+  assert.match(jobs, /grant_epoch/);
+  assert.match(jobs, /renderer_identity_sha256/);
+  assert.match(tickets, /ticket_sha256/);
+  assert.match(tickets, /device_actor_sha256/);
+  assert.match(tickets, /used_at_unix_seconds/);
+  assert.match(repository, /attachment_preview_realtime/);
+  assert.doesNotMatch(
+    `${migration}\n${source}\n${model}\n${evidence}\n${custody}\n${jobs}\n${tickets}\n${repository}`,
+    /ticket_plaintext|source_bytes|preview_bytes|text_utf8|provider_id|account_id|filename|mime_type|filesystem_path/,
+  );
+  assert.doesNotMatch(
+    implementation,
+    /TcpStream|Command::|hermes_communications|hermes_attachment_security|hermes_blob_/,
+  );
+  assert.doesNotMatch(evidence, /ticket_sha256|target_receipt_sha256/);
+  assert.doesNotMatch(tickets, /custody_transfer_source_proof|exact_envelope_bytes/);
 });
 
 test('target-owned Preview ingress carries event custody without caller authority', async () => {

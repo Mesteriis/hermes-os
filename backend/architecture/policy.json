@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_docx_adapter_v1",
+    "currentSlice": "attachment_preview_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1356,6 +1356,12 @@
         "role": "workflow",
         "owner": "attachment_preview",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-preview-persistence",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2526,6 +2532,24 @@
         },
         {
           "name": "hermes-attachment-preview-renderer-contract",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-preview-persistence": [
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -7213,6 +7237,28 @@
           ]
         }
       ],
+      "hermes-attachment-preview-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-attachment-text-extraction-plain": [],
       "hermes-attachment-text-extraction-pdf": [
         {
@@ -9644,6 +9690,10 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-preview-docx": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

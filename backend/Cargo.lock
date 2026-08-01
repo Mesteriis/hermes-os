@@ -2038,6 +2038,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-preview-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-api",
+ "hermes-attachment-preview-core",
+ "hermes-attachment-preview-ingress",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-attachment-preview-renderer-contract"
 version = "0.1.0"
 dependencies = [
