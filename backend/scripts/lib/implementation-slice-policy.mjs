@@ -1100,6 +1100,11 @@ const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_PRODUCTION_PACKAGES = [
   { name: 'hermes-knowledge-runtime', role: 'domain', owner: 'knowledge', surface: 'runtime' },
 ];
 
+const KNOWLEDGE_VERIFIED_NOTE_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
+  { name: 'hermes-knowledge-assembly', role: 'domain', owner: 'knowledge', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3143,6 +3148,16 @@ const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const KNOWLEDGE_VERIFIED_NOTE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-knowledge-assembly': [
+    { name: 'hermes-knowledge-persistence', kind: 'normal' },
+    { name: 'hermes-knowledge-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4083,6 +4098,15 @@ const KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const KNOWLEDGE_VERIFIED_NOTE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-knowledge-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -6275,6 +6299,17 @@ function expectedSlice(currentSlice) {
       packages: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_PRODUCTION_PACKAGES,
       workspaceDependencies: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'knowledge_verified_note_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: KNOWLEDGE_VERIFIED_NOTE_MANAGED_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: KNOWLEDGE_VERIFIED_NOTE_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: KNOWLEDGE_VERIFIED_NOTE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: KNOWLEDGE_VERIFIED_NOTE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

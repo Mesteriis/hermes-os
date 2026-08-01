@@ -5,7 +5,7 @@
 Дата: 2026-08-01
 
 Состояние реализации: staged. Этим решением Knowledge разблокирован только для
-exact verified-note contract/core/persistence/runtime slice. Assembly, Gateway
+exact verified-note contract/core/persistence/runtime/assembly slice. Gateway
 surface, shared SSE и live conformance ещё не реализованы; Knowledge
 phase gate остаётся закрытым до атомарного evidence полного owner contour.
 
@@ -48,7 +48,8 @@ contour:
   bundle;
 - `hermes-knowledge-runtime` — managed event consumer, Blob custody client и
   exact outbox relay;
-- будущая отдельная `hermes-knowledge-assembly` unit.
+- `hermes-knowledge-assembly` — unsigned descriptor/settings/storage/runtime
+  release fragment без signing authority.
 
 Generic note CRUD, Knowledge Graph, Search, Timeline, Context, Memory,
 embeddings, arbitrary facts/claims и cross-domain materialized views этим ADR

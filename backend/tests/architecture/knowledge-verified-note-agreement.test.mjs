@@ -31,6 +31,8 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
     command,
     managedRuntime,
     eventOutbox,
+    assemblyManifest,
+    assembly,
   ] = await Promise.all([
     readFile(
       new URL('docs/adr/ADR-0370-verified-knowledge-note-owner-admission.md', REPOSITORY_ROOT),
@@ -68,10 +70,12 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
     readFile(new URL('src/knowledge-runtime/src/command.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/knowledge-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/knowledge-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/knowledge-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'knowledge_verified_note_managed_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'knowledge_verified_note_assembly_v1');
   assert.equal(policy.domains.developmentAllowlist.includes('knowledge'), true);
   assert.equal(policy.domains.blocked.includes('knowledge'), false);
   assert.match(adr, /Состояние реализации: staged/);
@@ -84,6 +88,7 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
     'hermes-knowledge-core',
     'hermes-knowledge-persistence',
     'hermes-knowledge-runtime',
+    'hermes-knowledge-assembly',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -204,5 +209,17 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
   assert.doesNotMatch(
     `${runtime}\n${admission}\n${blob.split('#[cfg(test)]')[0]}\n${command.split('#[cfg(test)]')[0]}\n${managedRuntime}\n${eventOutbox}`,
     /hermes_(communications|review|tasks|documents)|provider_id|account_id|ollama|reqwest|client_polling/,
+  );
+
+  assert.match(assemblyManifest, /role = "domain"/);
+  assert.match(assemblyManifest, /owner = "knowledge"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /materialize_knowledge_release_assembly_v1/);
+  assert.match(assembly, /knowledge\.runtime\.v1/);
+  assert.match(assembly, /knowledge\.storage\.v1/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.doesNotMatch(
+    `${assemblyManifest}\n${assembly.split('#[cfg(test)]')[0]}`,
+    /hermes-(communications|review|tasks|documents|mail|telegram|whatsapp|zulip)|SigningKey|private_key|p256|ollama/,
   );
 });

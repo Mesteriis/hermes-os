@@ -3310,6 +3310,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-knowledge-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-knowledge-persistence",
+ "hermes-knowledge-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-knowledge-command-api"
 version = "0.1.0"
 dependencies = [

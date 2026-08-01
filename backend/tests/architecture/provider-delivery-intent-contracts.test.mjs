@@ -75,7 +75,7 @@ test('provider delivery intents are four separate integration-owned contract bui
 
   assert.equal(
     policy.implementation.currentSlice,
-    'knowledge_verified_note_managed_runtime_v1',
+    'knowledge_verified_note_assembly_v1',
   );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')
