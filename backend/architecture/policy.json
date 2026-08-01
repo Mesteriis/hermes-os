@@ -2275,6 +2275,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-attachment-text-extraction-ingress",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-attachment-security-core",
           "kind": "normal"
         },
@@ -2294,6 +2298,10 @@
       "hermes-attachment-security-runtime": [
         {
           "name": "hermes-attachment-archive-inspection-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-text-extraction-ingress",
           "kind": "normal"
         },
         {
@@ -9978,6 +9986,7 @@
         "attachment_security.candidate.observe.v1",
         "attachment_security.communications-state.observe.v1",
         "attachment_security.storage.v1",
+        "attachment_security.text-extraction-delegation-result.publish.v1",
         "attachment_security.text-extraction-delegation.v1",
         "attachment_security.verdict.publish.v1",
         "communication.cross_channel_forward.v1",
@@ -10559,6 +10568,9 @@
     ],
     "engineDomainContractPackages": [
       "hermes-communications-attachment-contract"
+    ],
+    "engineWorkflowContractPackages": [
+      "hermes-attachment-text-extraction-ingress"
     ],
     "integrationEngineContractPackages": [
       "hermes-ai-contracts",

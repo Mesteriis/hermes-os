@@ -14,6 +14,7 @@ surface = "persistence"
 
 [dependencies]
 hermes-attachment-archive-inspection-ingress = { path = "../attachment-archive-inspection-ingress" }
+hermes-attachment-text-extraction-ingress = { path = "../attachment-text-extraction-ingress" }
 hermes-attachment-security-core = { path = "../attachment-security-core" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
 hermes-events-protocol = { path = "../platform/events" }

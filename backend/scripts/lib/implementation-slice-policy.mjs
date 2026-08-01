@@ -1475,6 +1475,7 @@ const ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-attachment-security-persistence': [
     { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-ingress', kind: 'normal' },
     { name: 'hermes-attachment-security-core', kind: 'normal' },
     { name: 'hermes-communications-attachment-contract', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
@@ -1482,6 +1483,7 @@ const ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-attachment-security-runtime': [
     { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-text-extraction-ingress', kind: 'normal' },
     { name: 'hermes-attachment-security-clamav', kind: 'normal' },
     { name: 'hermes-attachment-security-contract', kind: 'normal' },
     { name: 'hermes-attachment-security-core', kind: 'normal' },
@@ -5163,6 +5165,7 @@ const ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY = {
   businessCapabilities: [
     ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_INVENTORY.businessCapabilities,
     'attachment.text_extraction.v1',
+    'attachment_security.text-extraction-delegation-result.publish.v1',
     'attachment_security.text-extraction-delegation.v1',
   ].sort(),
 };

@@ -7,6 +7,7 @@ mod outbox;
 pub mod runtime;
 mod scan;
 pub mod settings;
+mod text_delegation;
 
 pub use scan::AttachmentSecurityScanAdapterErrorV1;
 

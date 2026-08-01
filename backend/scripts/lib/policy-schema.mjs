@@ -785,6 +785,7 @@ export function validatePolicy(policy) {
   const packagePrefix = policy?.cargo?.packagePrefix;
   const engineEngineContracts = list(policy?.dependencies?.engineEngineContractPackages);
   const engineDomainContracts = list(policy?.dependencies?.engineDomainContractPackages);
+  const engineWorkflowContracts = list(policy?.dependencies?.engineWorkflowContractPackages);
   const integrationEngineContracts = list(
     policy?.dependencies?.integrationEngineContractPackages,
   );
@@ -795,6 +796,9 @@ export function validatePolicy(policy) {
     || !engineDomainContracts.length
     || engineDomainContracts.some((packageName) => typeof packagePrefix !== 'string'
       || !packageName.startsWith(packagePrefix))
+    || !engineWorkflowContracts.length
+    || engineWorkflowContracts.some((packageName) => typeof packagePrefix !== 'string'
+      || !packageName.startsWith(packagePrefix))
     || !integrationEngineContracts.length
     || integrationEngineContracts.some((packageName) => typeof packagePrefix !== 'string'
       || !packageName.startsWith(packagePrefix))
@@ -804,7 +808,7 @@ export function validatePolicy(policy) {
     violations.push(violation(
       'dependency_policy',
       'dependencies',
-      'engine-engine, engine-domain, integration-engine and integration-domain contracts must use explicit package allowlists',
+      'engine-engine, engine-domain, engine-workflow, integration-engine and integration-domain contracts must use explicit package allowlists',
     ));
   }
   const forbiddenAggregatePackages = list(policy?.compileIsolation?.forbiddenAggregatePackages);

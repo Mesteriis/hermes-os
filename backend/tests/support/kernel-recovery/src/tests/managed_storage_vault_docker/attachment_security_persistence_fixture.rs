@@ -11,6 +11,7 @@ pub(super) struct AttachmentSecurityPersistenceConformanceV1 {
     pool: PgPool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct AttachmentSecurityPersistenceDiagnosticsV1 {
     pub(super) candidates: i64,
     pub(super) canonical_states: i64,

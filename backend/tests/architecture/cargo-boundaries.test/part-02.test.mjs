@@ -423,6 +423,38 @@ test('forbids a domain from importing an engine contract', () => {
   );
 });
 
+test('allows an engine to serve only an explicitly admitted workflow ingress contract', () => {
+  const ingress = workspacePackage('hermes-attachment-text-extraction-ingress', {
+    role: 'workflow',
+    owner: 'attachment_text_extraction',
+    surface: 'contract',
+  });
+  const engine = workspacePackage(
+    'hermes-attachment-security-runtime',
+    { role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+    [dependency('hermes-attachment-text-extraction-ingress')],
+  );
+  assert.deepEqual(
+    validateCargoMetadata(canonicalPolicyForTests(), metadata([kernel(), ingress, engine])),
+    [],
+  );
+
+  const unadmitted = workspacePackage('hermes-unadmitted-workflow-api', {
+    role: 'workflow',
+    owner: 'unadmitted_workflow',
+    surface: 'contract',
+  });
+  const forbidden = workspacePackage(
+    'hermes-attachment-security-runtime',
+    { role: 'engine', owner: 'attachment_security', surface: 'runtime' },
+    [dependency('hermes-unadmitted-workflow-api')],
+  );
+  assert.ok(codes(validateCargoMetadata(
+    canonicalPolicyForTests(),
+    metadata([kernel(), unadmitted, forbidden]),
+  )).has('engine_workflow_contract_dependency'));
+});
+
 
 
 for (const packageName of [

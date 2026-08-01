@@ -98,6 +98,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'attachment_security.candidate.observe.v1',
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
+      'attachment_security.text-extraction-delegation-result.publish.v1',
       'attachment_security.text-extraction-delegation.v1',
       'attachment_security.verdict.publish.v1',
       'communication.cross_channel_forward.v1',

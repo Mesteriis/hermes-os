@@ -3,7 +3,7 @@
 use super::*;
 
 use hermes_attachment_security_persistence::{
-    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6, attachment_security_storage_bundle_v1,
+    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V7, attachment_security_storage_bundle_v1,
 };
 use hermes_attachment_security_runtime::{
     admission::{
@@ -80,7 +80,7 @@ pub(super) fn admit_attachment_security_runtime(
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 ATTACHMENT_SECURITY_OWNER_ID,
-                u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6),
+                u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V7),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -104,7 +104,7 @@ pub(super) fn prepare_attachment_security_runtime(
     let bundle = store
         .platform_storage_bundle(
             ATTACHMENT_SECURITY_OWNER_ID,
-            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6),
+            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V7),
         )
         .expect("read Attachment Security Storage bundle")
         .expect("Attachment Security Storage bundle");
@@ -117,7 +117,7 @@ pub(super) fn prepare_attachment_security_runtime(
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6),
+            u64::from(ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V7),
             *bundle.digest(),
         )
         .expect("Attachment Security Storage binding issue"),

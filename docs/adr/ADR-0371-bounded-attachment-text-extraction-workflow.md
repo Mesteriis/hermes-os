@@ -5,8 +5,10 @@
 Дата: 2026-08-01
 
 Состояние реализации: staged. Решение и exact owner boundaries приняты;
-production gate `attachment_text_extraction_v1` остаётся `planned` до полного
-contract/core/persistence/runtime/assembly, parser-adapter и managed evidence.
+Attachment Security реализует target-owned Text Extraction custody command,
+owner-local V7 inbox/job/outbox и exact Blob redelegation result через отдельные
+persistence/runtime responsibilities. production gate `attachment_text_extraction_v1` остаётся `planned` до полного managed job,
+negative/restart/privacy evidence и финальных gates.
 
 Зависит от:
 

@@ -1,5 +1,6 @@
 //! Live signed Attachment Text Extraction launch with exact staged OCR resources.
 
+use super::attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture;
 use super::*;
 
 use crate::identity::device::signer::DeviceSigner;
@@ -11,6 +12,7 @@ fn managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources() {
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
     );
+    let clamav = AttachmentSecurityClamAvFixture::start();
     let root = unique_target_root("hermes-managed-attachment-text-extraction");
     let data = private_directory(short_communications_kernel_data_directory());
     initialize_vault(
@@ -33,7 +35,7 @@ fn managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources() {
         .expect("claim Attachment Text Extraction logical owner");
 
     let admitted_text = admit_attachment_text_extraction_runtime_v1(&store);
-    let _admitted_security = admit_attachment_security_runtime(&store);
+    let admitted_security = admit_attachment_security_runtime(&store);
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     configure_route_handler(&supervisor, &store, &data);
@@ -62,7 +64,16 @@ fn managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources() {
     );
     let admitted_text =
         prepare_attachment_text_extraction_runtime_v1(&supervisor, &store, admitted_text);
+    let admitted_security =
+        prepare_attachment_security_runtime(&supervisor, &store, admitted_security);
     configure_communications_jetstream(&store);
+    let security = start_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        admitted_security,
+        clamav.port(),
+    );
     let started = start_attachment_text_extraction_runtime_v1(
         &supervisor,
         &store,
@@ -74,6 +85,11 @@ fn managed_attachment_text_extraction_starts_with_exact_staged_ocr_resources() {
         supervisor
             .is_active(&started.registration_id)
             .expect("read Attachment Text Extraction process state")
+    );
+    assert!(
+        supervisor
+            .is_active(&security.registration_id)
+            .expect("read Attachment Security process state")
     );
     assert_eq!(started.runtime_generation, 1);
     assert!(started.grant_epoch > 0);

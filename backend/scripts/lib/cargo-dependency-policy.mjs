@@ -64,7 +64,9 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
         || (target.role === 'engine'
           && policy.dependencies.engineEngineContractPackages.includes(targetPackageName))
         || (target.role === 'domain'
-          && policy.dependencies.engineDomainContractPackages.includes(targetPackageName));
+          && policy.dependencies.engineDomainContractPackages.includes(targetPackageName))
+        || (target.role === 'workflow'
+          && policy.dependencies.engineWorkflowContractPackages.includes(targetPackageName));
     case 'platform':
       return target.role === 'platform';
     case 'api':
@@ -406,6 +408,18 @@ export function validateDependencyEdges(policy, packages, descriptors) {
           'engine_domain_contract_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           'engines may consume or publish domain facts only through an explicitly allowed contract package',
+        ));
+        continue;
+      }
+
+      if (source.role === 'engine'
+        && target.role === 'workflow'
+        && target.surface === 'contract'
+        && !policy.dependencies.engineWorkflowContractPackages.includes(dependency.name)) {
+        violations.push(violation(
+          'engine_workflow_contract_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'engines may serve workflow custody only through an explicitly allowed target-owned contract package',
         ));
         continue;
       }

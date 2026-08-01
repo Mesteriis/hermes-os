@@ -690,9 +690,24 @@ pub(super) fn assert_attachment_security_scanner_failure_is_fail_closed(
                 clamav.outcome_count(scanner_outcome),
                 scanner_count_before + 1
             );
-            let after = attachment_security_persistence_diagnostics().await;
-            assert_eq!(after.candidates, before.candidates + 1);
-            assert_eq!(after.canonical_states, before.canonical_states + 1);
+            let expected_candidates = before.candidates + 1;
+            let expected_canonical_states = before.canonical_states + 1;
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let after = loop {
+                let diagnostics = attachment_security_persistence_diagnostics().await;
+                if diagnostics.candidates == expected_candidates
+                    && diagnostics.canonical_states == expected_canonical_states
+                {
+                    break diagnostics;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "Attachment Security did not durably consume both join facts: {diagnostics:?}"
+                );
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            };
+            assert_eq!(after.candidates, expected_candidates);
+            assert_eq!(after.canonical_states, expected_canonical_states);
             assert_eq!(after.jobs, before.jobs + 1);
             assert_eq!(after.target_blob_receipts, before.target_blob_receipts + 1);
             assert_eq!(after.outbox, before.outbox);

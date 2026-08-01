@@ -1778,6 +1778,7 @@ version = "0.1.0"
 dependencies = [
  "hermes-attachment-archive-inspection-ingress",
  "hermes-attachment-security-core",
+ "hermes-attachment-text-extraction-ingress",
  "hermes-communications-attachment-contract",
  "hermes-events-protocol",
  "hermes-storage-protocol",
@@ -1795,6 +1796,7 @@ dependencies = [
  "hermes-attachment-security-contract",
  "hermes-attachment-security-core",
  "hermes-attachment-security-persistence",
+ "hermes-attachment-text-extraction-ingress",
  "hermes-blob-client",
  "hermes-communications-attachment-contract",
  "hermes-events-jetstream",
