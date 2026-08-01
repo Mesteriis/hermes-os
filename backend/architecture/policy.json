@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_managed_admission_v1",
+    "currentSlice": "attachment_preview_gateway_blob_sse_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -2347,6 +2347,10 @@
           "kind": "normal"
         },
         {
+          "name": "hermes-attachment-preview-ingress",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-attachment-text-extraction-ingress",
           "kind": "normal"
         },
@@ -2370,6 +2374,10 @@
       "hermes-attachment-security-runtime": [
         {
           "name": "hermes-attachment-archive-inspection-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-ingress",
           "kind": "normal"
         },
         {
@@ -11009,6 +11017,7 @@
       "hermes-communications-attachment-contract"
     ],
     "engineWorkflowContractPackages": [
+      "hermes-attachment-preview-ingress",
       "hermes-attachment-text-extraction-ingress"
     ],
     "integrationEngineContractPackages": [

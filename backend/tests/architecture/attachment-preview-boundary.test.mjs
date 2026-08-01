@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_managed_admission_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_gateway_blob_sse_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: signed managed admission slice/);
-  assert.match(adr, /Полный custody\/render\/restart, Gateway и browser[\s\S]*ещё не реализован/);
+  assert.match(adr, /Состояние реализации: managed Gateway\/client Blob\/SSE slice/);
+  assert.match(adr, /Browser evidence, managed[\s\S]*ещё не[\s\S]*реализованы/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -451,10 +451,10 @@ test('Preview has an authenticated exact signed managed admission gate', async (
   assert.match(setup, /issue_managed/);
   assert.match(setup, /to_managed_runtime_configuration/);
   assert.match(setup, /start_reserved_workflow/);
-  assert.match(flow, /managed_attachment_preview_starts_from_exact_signed_release/);
-  assert.match(flow, /wait_until_ready|is_active/);
+  assert.match(flow, /managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart/);
+  assert.match(flow, /wait_for_ready_attachment_preview_v1/);
   assert.match(harness, /-p'[\s\S]*hermes-attachment-preview-runtime/);
   assert.match(harness, /HERMES_ATTACHMENT_PREVIEW_RUNTIME_BIN/);
-  assert.match(harness, /managed_attachment_preview_starts_from_exact_signed_release/);
+  assert.match(harness, /managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart/);
   assert.doesNotMatch(`${setup}\n${flow}`, /hermes_communications_(?:domain|persistence)|hermes_attachment_security_(?:core|persistence|runtime)/);
 });

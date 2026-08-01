@@ -2156,6 +2156,7 @@ name = "hermes-attachment-security-persistence"
 version = "0.1.0"
 dependencies = [
  "hermes-attachment-archive-inspection-ingress",
+ "hermes-attachment-preview-ingress",
  "hermes-attachment-security-core",
  "hermes-attachment-text-extraction-ingress",
  "hermes-communications-attachment-contract",
@@ -2171,6 +2172,7 @@ name = "hermes-attachment-security-runtime"
 version = "0.1.0"
 dependencies = [
  "hermes-attachment-archive-inspection-ingress",
+ "hermes-attachment-preview-ingress",
  "hermes-attachment-security-clamav",
  "hermes-attachment-security-contract",
  "hermes-attachment-security-core",

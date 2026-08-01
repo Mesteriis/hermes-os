@@ -1515,6 +1515,7 @@ const ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-attachment-security-persistence': [
     { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-preview-ingress', kind: 'normal' },
     { name: 'hermes-attachment-text-extraction-ingress', kind: 'normal' },
     { name: 'hermes-attachment-security-core', kind: 'normal' },
     { name: 'hermes-communications-attachment-contract', kind: 'normal' },
@@ -1523,6 +1524,7 @@ const ATTACHMENT_SECURITY_ENGINE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-attachment-security-runtime': [
     { name: 'hermes-attachment-archive-inspection-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-preview-ingress', kind: 'normal' },
     { name: 'hermes-attachment-text-extraction-ingress', kind: 'normal' },
     { name: 'hermes-attachment-security-clamav', kind: 'normal' },
     { name: 'hermes-attachment-security-contract', kind: 'normal' },
@@ -7120,6 +7122,7 @@ function expectedSlice(currentSlice) {
   if (
     currentSlice === 'attachment_preview_assembly_v1'
     || currentSlice === 'attachment_preview_managed_admission_v1'
+    || currentSlice === 'attachment_preview_gateway_blob_sse_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

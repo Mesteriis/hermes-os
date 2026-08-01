@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: signed managed admission slice. Clean-room owner boundary,
+Состояние реализации: managed Gateway/client Blob/SSE slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -37,9 +37,15 @@ unsigned runtime/storage release fragment; он не запускает runtime,
 не получает signing authority. Development release теперь собирает этот fragment
 отдельно и передаёт его release compiler для подписи. Authenticated managed
 conformance поднимает exact signed Preview binary как отдельный OS-процесс,
-применяет owner-local Storage bundle, выдаёт Vault credential lease и NATS grants
-и подтверждает readiness. Полный custody/render/restart, Gateway и browser
-evidence ещё не реализован. Inventory gate
+применяет owner-local Storage bundle, выдаёт Vault credential lease и NATS grants.
+Attachment Security теперь отдельно потребляет target-owned Preview custody
+command, проверяет собственное safe/current-custody evidence и публикует exact
+delegated/rejected result без RPC между owners. Authenticated managed gate
+доказывает полный UTF-8 flow через Start/Get/IssueRead, target-bound Blob
+redelegation, fresh derived Blob, one-use actor-bound `client_blob`, metadata-only
+SSE и exact restart replay без повторного render. Browser evidence, managed
+multi-format evidence и полная negative/privacy/outage матрица ещё не
+реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

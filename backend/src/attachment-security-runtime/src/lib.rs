@@ -4,6 +4,7 @@ pub mod admission;
 mod delegation;
 mod event_decode;
 mod outbox;
+mod preview_delegation;
 pub mod runtime;
 mod scan;
 pub mod settings;

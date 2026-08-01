@@ -1,15 +1,46 @@
-//! Live exact signed admission smoke gate for the Attachment Preview workflow.
+//! Full managed Preview custody, Gateway, client Blob, SSE and restart conformance.
 
 use super::*;
+use super::{
+    attachment_preview_gateway_fixture::{
+        attachment_preview_gateway_v1, get_attachment_preview_v1,
+        post_attachment_preview_proto_status_v1, post_attachment_preview_proto_v1,
+        read_attachment_preview_blob_v1, read_terminal_attachment_preview_sse_event_v1,
+        wait_for_ready_attachment_preview_v1,
+    },
+    attachment_security_blob_fixture::AttachmentSecurityBlobSourceFixture,
+    attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture,
+    attachment_security_event_flow::{
+        assert_clean_attachment_security_verdict_flow, prepare_communications_attachment_for_scan,
+    },
+    mail_attachment_flow::wait_for_attachment_state,
+};
+
 use crate::identity::device::signer::DeviceSigner;
+use hermes_attachment_preview_api::{
+    ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1, ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1,
+    wire::{
+        AttachmentPreviewContentTypeV1, AttachmentPreviewErrorCodeV1, AttachmentPreviewKindV1,
+        AttachmentPreviewStateV1, AttachmentPreviewStatusChangedV1,
+        IssueAttachmentPreviewReadRequestV1, IssueAttachmentPreviewReadResponseV1,
+        StartAttachmentPreviewRequestV1, StartAttachmentPreviewResponseV1,
+    },
+};
+use hyper::StatusCode;
+
+const PRIVATE_SOURCE: &[u8] =
+    b"Private clean-room preview payload.\r\nThe bytes must stay outside query and SSE.";
+const EXPECTED_PREVIEW: &[u8] =
+    b"Private clean-room preview payload.\nThe bytes must stay outside query and SSE.";
 
 #[test]
-#[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS and Attachment Preview binaries"]
-fn managed_attachment_preview_starts_from_exact_signed_release() {
+#[ignore = "requires disposable Docker plus real managed Vault, Storage, Blob, NATS, Communications, Attachment Security and Preview binaries"]
+fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart() {
     assert_eq!(
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
     );
+    let clamav = AttachmentSecurityClamAvFixture::start();
     let root = unique_target_root("hermes-managed-attachment-preview");
     let data = private_directory(short_communications_kernel_data_directory());
     initialize_vault(
@@ -30,36 +61,227 @@ fn managed_attachment_preview_starts_from_exact_signed_release() {
             owner_signer.public_key_sec1(),
         ))
         .expect("claim Attachment Preview logical owner");
+    super::super::browser_gateway_session::admit_browser_test_device(
+        &store,
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+    );
 
-    let admitted = admit_attachment_preview_runtime_v1(&store);
+    let admitted_preview = admit_attachment_preview_runtime_v1(&store);
+    let admitted_security = admit_attachment_security_runtime(&store);
+    let blob_source = AttachmentSecurityBlobSourceFixture::admit(&store);
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    let realtime =
+        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(64).expect("realtime source");
     configure_route_handler(&supervisor, &store, &data);
+    configure_attachment_preview_realtime_v1(&supervisor, &store, realtime.clone());
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
         )))
         .expect("configure Event credential handler");
     start_vault(&supervisor, &store, &data, release.kernel());
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("start signed Blob runtime"),
+        1
+    );
     start_storage(
         &supervisor,
         &store,
         release.kernel(),
         &storage_runtime_directory(),
     );
-    let admitted = prepare_attachment_preview_runtime_v1(&supervisor, &store, admitted);
+    issue_initial_communications_storage_binding(&store);
+    crate::platform::storage::provisioning::apply_reserved_binding(
+        &supervisor,
+        &store,
+        &communications_storage_binding(&store),
+    )
+    .expect("provision Communications Storage binding");
+    let admitted_security =
+        prepare_attachment_security_runtime(&supervisor, &store, admitted_security);
+    let admitted_preview =
+        prepare_attachment_preview_runtime_v1(&supervisor, &store, admitted_preview);
     configure_communications_jetstream(&store);
-    let preview =
-        start_attachment_preview_runtime_v1(&supervisor, &store, &root.join("runtime"), admitted);
+    start_communications_domain(&supervisor, &store, &root.join("runtime"));
+    let security = start_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        admitted_security,
+        clamav.port(),
+    );
+    let preview = start_attachment_preview_runtime_v1(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        admitted_preview,
+    );
+    assert_eq!(security.runtime_generation, 1);
+    assert_eq!(preview.runtime_generation, 1);
+
+    let blob = blob_source.write(&store, &supervisor, &data, [0xA1; 16], PRIVATE_SOURCE);
+    let attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "attachment-preview-text",
+        blob.declared_size,
+        blob.receipt_sha256,
+    );
+    assert_clean_attachment_security_verdict_flow(
+        &store,
+        &attachment,
+        &blob,
+        &clamav,
+        PRIVATE_SOURCE,
+    );
+    assert_eq!(
+        wait_for_attachment_state(&store, &supervisor, attachment.attachment_anchor_id),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+
+    let gateway_runtime = tokio::runtime::Runtime::new().expect("Gateway runtime");
+    let router = attachment_preview_gateway_v1(&store, &supervisor, &root, &data, realtime.clone());
+    let cookie = super::super::browser_gateway_session::authenticate_gateway_router(
+        &router,
+        &gateway_runtime,
+    );
+    let accepted = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentPreviewRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0xA2; 16],
+            attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
+        },
+    );
+    assert_eq!(
+        accepted.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    assert_eq!(accepted.run_id.len(), 16);
+
+    let ready =
+        wait_for_ready_attachment_preview_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    assert_eq!(ready.attachment_anchor_id, attachment.attachment_anchor_id);
+    assert_eq!(ready.state, AttachmentPreviewStateV1::Ready as i32);
+    assert_eq!(ready.preview_kind, AttachmentPreviewKindV1::Text as i32);
+    assert_eq!(
+        ready.content_type,
+        AttachmentPreviewContentTypeV1::TextUtf8 as i32
+    );
+    assert_eq!(ready.preview_size_bytes, EXPECTED_PREVIEW.len() as u64);
+    assert!(!ready.truncated);
+    assert!(
+        !ready
+            .encode_to_vec()
+            .windows(PRIVATE_SOURCE.len())
+            .any(|window| window == PRIVATE_SOURCE)
+    );
+
+    let first_event = read_terminal_attachment_preview_sse_event_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &accepted.run_id,
+    );
+    let first_payload = AttachmentPreviewStatusChangedV1::decode(first_event.payload.as_slice())
+        .expect("Attachment Preview realtime payload");
+    assert_eq!(first_payload.state, AttachmentPreviewStateV1::Ready as i32);
+    assert!(
+        !first_event
+            .encode_to_vec()
+            .windows(PRIVATE_SOURCE.len())
+            .any(|window| window == PRIVATE_SOURCE)
+    );
+    let first_cursor = first_event.cursor.clone();
+
+    let ticket = post_attachment_preview_proto_v1::<_, IssueAttachmentPreviewReadResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1,
+        IssueAttachmentPreviewReadRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id.clone(),
+        },
+    );
+    assert_eq!(
+        ticket.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    assert_eq!(ticket.opaque_read_ticket.len(), 32);
+    let (status, body) = read_attachment_preview_blob_v1(
+        &router,
+        &gateway_runtime,
+        Some(&cookie),
+        ticket.opaque_read_ticket.clone(),
+    );
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, EXPECTED_PREVIEW);
+    let (replay_status, _) = read_attachment_preview_blob_v1(
+        &router,
+        &gateway_runtime,
+        Some(&cookie),
+        ticket.opaque_read_ticket,
+    );
+    assert_eq!(replay_status, StatusCode::NOT_FOUND);
 
     assert!(
-        supervisor
-            .is_active(&preview.registration_id)
-            .expect("read Attachment Preview process state")
+        realtime
+            .revoke_owner(ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1)
+            .expect("clear Attachment Preview Gateway replay cache")
     );
-    assert_eq!(preview.runtime_generation, 1);
-    assert!(preview.grant_epoch > 0);
-    assert!(!preview.runtime_instance_id.is_empty());
+    let previous_generation = preview.runtime_generation;
+    let preview =
+        restart_attachment_preview_runtime_v1(&supervisor, &store, &root.join("runtime"), preview);
+    assert_eq!(preview.runtime_generation, previous_generation + 1);
+    let restarted_router =
+        attachment_preview_gateway_v1(&store, &supervisor, &root, &data, realtime.clone());
+    let restarted_cookie =
+        super::super::browser_gateway_session::authenticate_gateway_router_with_sign_count(
+            &restarted_router,
+            &gateway_runtime,
+            2,
+        );
+    assert_eq!(
+        get_attachment_preview_v1(
+            &restarted_router,
+            &gateway_runtime,
+            &restarted_cookie,
+            &accepted.run_id,
+        ),
+        ready
+    );
+    let replayed_event = read_terminal_attachment_preview_sse_event_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        &accepted.run_id,
+    );
+    assert_eq!(replayed_event.cursor, first_cursor);
+    assert_eq!(replayed_event.payload, first_event.payload);
+
+    let unauthenticated = post_attachment_preview_proto_status_v1(
+        &restarted_router,
+        &gateway_runtime,
+        None,
+        ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1,
+        IssueAttachmentPreviewReadRequestV1 {
+            protocol_major: 1,
+            run_id: accepted.run_id,
+        },
+    );
+    assert_eq!(unauthenticated, StatusCode::UNAUTHORIZED);
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {

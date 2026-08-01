@@ -3,6 +3,7 @@
 mod delegation;
 mod jobs;
 mod observation;
+mod preview_delegation;
 mod recovery;
 mod schema;
 mod text_delegation;
@@ -23,14 +24,20 @@ pub use jobs::{
     AttachmentSecurityTargetBlobReceiptV1, ClaimedAttachmentSecurityScanJobV1,
     RetryAttachmentSecurityScanJobOutcomeV1, attachment_security_scan_job_id_v1,
 };
+pub use preview_delegation::{
+    AttachmentSecurityPreviewDelegationWorkV1, ClaimedAttachmentSecurityPreviewDelegationV1,
+    PersistAttachmentSecurityPreviewDelegationOutcomeV1,
+    RetryAttachmentSecurityPreviewDelegationOutcomeV1,
+};
 pub use recovery::{
     ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V2, ATTACHMENT_SECURITY_RETRY_POLICY_REVISION_V3,
 };
 pub use schema::{
     ATTACHMENT_SECURITY_SCHEMA_V1, ATTACHMENT_SECURITY_SCHEMA_V2, ATTACHMENT_SECURITY_SCHEMA_V6,
-    ATTACHMENT_SECURITY_SCHEMA_V7, ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V1,
-    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2, ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6,
-    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V7, attachment_security_storage_bundle_v1,
+    ATTACHMENT_SECURITY_SCHEMA_V7, ATTACHMENT_SECURITY_SCHEMA_V8,
+    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V1, ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V2,
+    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V6, ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V7,
+    ATTACHMENT_SECURITY_STORAGE_BUNDLE_REVISION_V8, attachment_security_storage_bundle_v1,
 };
 pub use text_delegation::{
     AttachmentSecurityTextDelegationWorkV1, ClaimedAttachmentSecurityTextDelegationV1,
@@ -117,7 +124,7 @@ impl AttachmentSecurityPersistenceV1 {
 
     pub async fn verify_storage_ready(&self) -> Result<(), AttachmentSecurityPersistenceErrorV1> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.attachment_security_join_locks, hermes_data.attachment_security_event_inbox, hermes_data.attachment_security_scan_candidates, hermes_data.attachment_security_canonical_states, hermes_data.attachment_security_join_quarantines, hermes_data.attachment_security_verdict_outbox, hermes_data.attachment_security_scan_jobs, hermes_data.attachment_security_archive_delegation_inbox, hermes_data.attachment_security_archive_delegation_jobs, hermes_data.attachment_security_archive_delegation_outbox, hermes_data.attachment_security_text_extraction_delegation_inbox, hermes_data.attachment_security_text_extraction_delegation_jobs, hermes_data.attachment_security_text_extraction_delegation_outbox LIMIT 0",
+            "SELECT 1 FROM hermes_data.attachment_security_join_locks, hermes_data.attachment_security_event_inbox, hermes_data.attachment_security_scan_candidates, hermes_data.attachment_security_canonical_states, hermes_data.attachment_security_join_quarantines, hermes_data.attachment_security_verdict_outbox, hermes_data.attachment_security_scan_jobs, hermes_data.attachment_security_archive_delegation_inbox, hermes_data.attachment_security_archive_delegation_jobs, hermes_data.attachment_security_archive_delegation_outbox, hermes_data.attachment_security_text_extraction_delegation_inbox, hermes_data.attachment_security_text_extraction_delegation_jobs, hermes_data.attachment_security_text_extraction_delegation_outbox, hermes_data.attachment_security_preview_delegation_inbox, hermes_data.attachment_security_preview_delegation_jobs, hermes_data.attachment_security_preview_delegation_outbox LIMIT 0",
         )
         .execute(&self.pool)
         .await

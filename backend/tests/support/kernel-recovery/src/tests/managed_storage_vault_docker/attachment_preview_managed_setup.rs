@@ -2,6 +2,7 @@
 
 use super::*;
 
+use crate::platform::client_realtime::ClientRealtimePublishHandlerV1;
 use hermes_attachment_preview_api::{ATTACHMENT_PREVIEW_MODULE_ID_V1, ATTACHMENT_PREVIEW_OWNER_V1};
 use hermes_attachment_preview_persistence::{
     ATTACHMENT_PREVIEW_STORAGE_BUNDLE_REVISION_V1, attachment_preview_storage_bundle_v1,
@@ -10,6 +11,7 @@ use hermes_attachment_preview_runtime::{
     ATTACHMENT_PREVIEW_STORAGE_CAPABILITY_ID_V1, attachment_preview_module_descriptor_v1,
     attachment_preview_settings_schema_bytes_v1,
 };
+use hermes_gateway_runtime::InMemoryBrowserRealtimeSource;
 use hermes_runtime_protocol::v1::ManagedWorkflowRuntimeConfigurationV1;
 
 const ATTACHMENT_PREVIEW_RELEASE_ARTIFACT_ID_V1: &str = "attachment_preview.runtime.v1";
@@ -26,6 +28,7 @@ pub(super) struct StartedAttachmentPreviewRuntimeV1 {
     pub(super) runtime_instance_id: String,
     pub(super) runtime_generation: u64,
     pub(super) grant_epoch: u64,
+    capability_ids: Vec<String>,
 }
 
 pub(super) fn installed_attachment_preview_ensemble_release_v1(
@@ -126,6 +129,19 @@ pub(super) fn prepare_attachment_preview_runtime_v1(
     admitted
 }
 
+pub(super) fn configure_attachment_preview_realtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &Arc<SqliteControlStore>,
+    realtime: InMemoryBrowserRealtimeSource,
+) {
+    supervisor
+        .configure_client_realtime_handler(Arc::new(ClientRealtimePublishHandlerV1::new(
+            Arc::clone(store),
+            realtime,
+        )))
+        .expect("configure Attachment Preview client realtime");
+}
+
 pub(super) fn start_attachment_preview_runtime_v1(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,
@@ -134,6 +150,56 @@ pub(super) fn start_attachment_preview_runtime_v1(
 ) -> StartedAttachmentPreviewRuntimeV1 {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .expect("load Attachment Preview launch reservation");
+    start_reserved_attachment_preview_runtime_v1(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        admitted.capability_ids,
+    )
+}
+
+pub(super) fn restart_attachment_preview_runtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    predecessor: StartedAttachmentPreviewRuntimeV1,
+) -> StartedAttachmentPreviewRuntimeV1 {
+    let binding = store
+        .platform_storage_binding(
+            &predecessor.registration_id,
+            ATTACHMENT_PREVIEW_STORAGE_CAPABILITY_ID_V1,
+        )
+        .expect("read predecessor Attachment Preview Storage binding")
+        .expect("predecessor Attachment Preview Storage binding");
+    let issue = storage_successor::issue_after(&binding)
+        .expect("derive Attachment Preview Storage successor");
+    let (reservation, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        ATTACHMENT_PREVIEW_STORAGE_CAPABILITY_ID_V1,
+        issue,
+    )
+    .expect("reserve Attachment Preview successor");
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .expect("provision Attachment Preview successor Storage binding");
+    start_reserved_attachment_preview_runtime_v1(
+        supervisor,
+        store,
+        runtime_dir,
+        reservation,
+        predecessor.capability_ids,
+    )
+}
+
+fn start_reserved_attachment_preview_runtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    reservation: managed_launch::ManagedLaunchReservation,
+    capability_ids: Vec<String>,
+) -> StartedAttachmentPreviewRuntimeV1 {
     let registration_id = reservation.registration_id().to_owned();
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
@@ -177,7 +243,7 @@ pub(super) fn start_attachment_preview_runtime_v1(
             event_credential_revision: events.credential_revision(),
             runtime_artifacts: Vec::new(),
         },
-        &admitted.capability_ids,
+        &capability_ids,
     )
     .expect("start managed Attachment Preview workflow");
     supervisor
@@ -193,6 +259,7 @@ pub(super) fn start_attachment_preview_runtime_v1(
         runtime_instance_id,
         runtime_generation,
         grant_epoch,
+        capability_ids,
     }
 }
 

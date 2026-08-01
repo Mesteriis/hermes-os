@@ -151,6 +151,8 @@ mod ai_inference_managed_flow;
 mod ai_inference_managed_setup;
 #[path = "managed_storage_vault_docker/archive_inspection_managed_setup.rs"]
 mod archive_inspection_managed_setup;
+#[path = "managed_storage_vault_docker/attachment_preview_gateway_fixture.rs"]
+mod attachment_preview_gateway_fixture;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_flow.rs"]
 mod attachment_preview_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_setup.rs"]

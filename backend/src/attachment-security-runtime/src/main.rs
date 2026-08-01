@@ -198,6 +198,16 @@ where
             Ok(_) => {}
             Err(error) => developer_diagnostic("text-delegation", error),
         }
+        match executor.block_on(runtime.process_next_preview_delegation(seconds, nanos)) {
+            Ok(
+                hermes_attachment_security_runtime::runtime::AttachmentSecurityPreviewDelegationTickV1::RetryScheduled,
+            ) => developer_diagnostic(
+                "preview-delegation-retry",
+                hermes_attachment_security_runtime::runtime::AttachmentSecurityRuntimeErrorV1::Unavailable,
+            ),
+            Ok(_) => {}
+            Err(error) => developer_diagnostic("preview-delegation", error),
+        }
         if let Err(error) = executor.block_on(runtime.relay_verdict_outbox(seconds)) {
             developer_diagnostic("outbox", error);
         }
@@ -206,6 +216,9 @@ where
         }
         if let Err(error) = executor.block_on(runtime.relay_text_delegation_outbox(seconds)) {
             developer_diagnostic("text-delegation-outbox", error);
+        }
+        if let Err(error) = executor.block_on(runtime.relay_preview_delegation_outbox(seconds)) {
+            developer_diagnostic("preview-delegation-outbox", error);
         }
     }
 }

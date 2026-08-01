@@ -19,6 +19,7 @@ surface = "runtime"
 
 [dependencies]
 hermes-attachment-archive-inspection-ingress = { path = "../attachment-archive-inspection-ingress" }
+hermes-attachment-preview-ingress = { path = "../attachment-preview-ingress" }
 hermes-attachment-text-extraction-ingress = { path = "../attachment-text-extraction-ingress" }
 hermes-attachment-security-clamav = { path = "../attachment-security-clamav" }
 hermes-attachment-security-contract = { path = "../attachment-security-contract" }

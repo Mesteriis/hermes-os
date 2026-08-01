@@ -8,6 +8,14 @@ use hermes_attachment_archive_inspection_ingress::{
     archive_inspection_custody_delegation_rejected_publish_request_v1,
     archive_inspection_custody_delegation_requested_contract_reference_v1,
 };
+use hermes_attachment_preview_ingress::{
+    ATTACHMENT_SECURITY_PREVIEW_DELEGATION_CAPABILITY_ID_V1,
+    attachment_preview_custody_delegated_contract_reference_v1,
+    attachment_preview_custody_delegated_publish_request_v1,
+    attachment_preview_custody_delegation_rejected_contract_reference_v1,
+    attachment_preview_custody_delegation_rejected_publish_request_v1,
+    attachment_preview_custody_delegation_requested_contract_reference_v1,
+};
 use hermes_attachment_security_contract::admission::{
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID,
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_MODULE_ID,
@@ -56,6 +64,10 @@ pub const ATTACHMENT_SECURITY_TEXT_DELEGATION_CONSUME_CAPABILITY_ID: &str =
     ATTACHMENT_SECURITY_TEXT_EXTRACTION_DELEGATION_CAPABILITY_ID_V1;
 pub const ATTACHMENT_SECURITY_TEXT_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID: &str =
     "attachment_security.text-extraction-delegation-result.publish.v1";
+pub const ATTACHMENT_SECURITY_PREVIEW_DELEGATION_CONSUME_CAPABILITY_ID: &str =
+    ATTACHMENT_SECURITY_PREVIEW_DELEGATION_CAPABILITY_ID_V1;
+pub const ATTACHMENT_SECURITY_PREVIEW_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID: &str =
+    "attachment_security.preview-delegation-result.publish.v1";
 pub const ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID: &str =
     ATTACHMENT_SECURITY_BLOB_CUSTODY_TARGET_CAPABILITY_ID;
 pub const ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID: &str = "attachment_security.storage.v1";
@@ -90,6 +102,13 @@ pub fn attachment_security_admission_capabilities_v1() -> Vec<CapabilityDescript
             communication_attachment_safety_state_changed_contract_reference_v1(),
             DurableEnvelopeKindV1::Event,
             COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
+        ),
+        preview_delegation_result_publisher(),
+        durable_consumer(
+            ATTACHMENT_SECURITY_PREVIEW_DELEGATION_CONSUME_CAPABILITY_ID,
+            attachment_preview_custody_delegation_requested_contract_reference_v1(),
+            DurableEnvelopeKindV1::Command,
+            ATTACHMENT_SECURITY_MAX_IN_FLIGHT,
         ),
         storage(),
         text_delegation_result_publisher(),
@@ -243,6 +262,36 @@ fn text_delegation_result_publisher() -> CapabilityDescriptorV1 {
     }
 }
 
+fn preview_delegation_result_publisher() -> CapabilityDescriptorV1 {
+    let delegated = attachment_preview_custody_delegated_contract_reference_v1();
+    let rejected = attachment_preview_custody_delegation_rejected_contract_reference_v1();
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_SECURITY_PREVIEW_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID
+            .to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(delegated),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(rejected),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        requests: vec![
+            attachment_preview_custody_delegated_publish_request_v1(),
+            attachment_preview_custody_delegation_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
+}
+
 fn blob_custody() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID.to_owned(),
@@ -302,6 +351,8 @@ mod tests {
                 ATTACHMENT_SECURITY_BLOB_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_CANDIDATE_OBSERVE_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_COMMUNICATIONS_STATE_OBSERVE_CAPABILITY_ID,
+                ATTACHMENT_SECURITY_PREVIEW_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID,
+                ATTACHMENT_SECURITY_PREVIEW_DELEGATION_CONSUME_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_STORAGE_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_TEXT_DELEGATION_RESULT_PUBLISH_CAPABILITY_ID,
                 ATTACHMENT_SECURITY_TEXT_DELEGATION_CONSUME_CAPABILITY_ID,
