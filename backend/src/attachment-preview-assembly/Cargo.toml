@@ -1,0 +1,27 @@
+[package]
+name = "hermes-attachment-preview-assembly"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-attachment-preview-assembly"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "attachment_preview"
+surface = "assembly"
+
+[dependencies]
+hermes-attachment-preview-api = { path = "../attachment-preview-api" }
+hermes-attachment-preview-persistence = { path = "../attachment-preview-persistence" }
+hermes-attachment-preview-runtime = { path = "../attachment-preview-runtime" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+prost = "=0.14.4"
+serde = { version = "=1.0.228", default-features = false, features = ["derive", "std"] }
+serde_json = "=1.0.150"

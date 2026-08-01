@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged managed runtime slice. Clean-room owner boundary,
+Состояние реализации: staged release assembly slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -30,8 +30,12 @@ Storage, Vault и Blob grants, owner-locally обрабатывает request/qu
 client_blob, custody inbox/outbox, magic-only renderer dispatch, derived Blob
 commit и metadata-only replayable realtime. Runtime не импортирует
 Communications или Attachment Security implementation, не содержит SQL и не
-возвращает private bytes через query/SSE. Assembly и managed/live/browser
-evidence ещё не реализованы. Inventory gate
+возвращает private bytes через query/SSE. Отдельный
+`hermes-attachment-preview-assembly` fail-closed материализует canonical
+descriptor, empty typed settings schema, owner-local Storage bundle и sorted
+unsigned runtime/storage release fragment; он не запускает runtime, renderer и
+не получает signing authority. Managed/live/browser evidence ещё не
+реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

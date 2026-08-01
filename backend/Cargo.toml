@@ -199,6 +199,7 @@ members = [
   "src/attachment-text-extraction-runtime",
   "src/attachment-text-extraction-assembly",
   "src/attachment-preview-api",
+  "src/attachment-preview-assembly",
   "src/attachment-preview-ingress",
   "src/attachment-preview-core",
   "src/attachment-preview-renderer-contract",

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_runtime_v1",
+    "currentSlice": "attachment_preview_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1368,6 +1368,12 @@
         "role": "workflow",
         "owner": "attachment_preview",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-attachment-preview-assembly",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2578,6 +2584,13 @@
         { "name": "hermes-runtime-protocol", "kind": "normal" },
         { "name": "hermes-storage-protocol", "kind": "normal" },
         { "name": "hermes-storage-vault", "kind": "normal" }
+      ],
+      "hermes-attachment-preview-assembly": [
+        { "name": "hermes-attachment-preview-api", "kind": "normal" },
+        { "name": "hermes-attachment-preview-persistence", "kind": "normal" },
+        { "name": "hermes-attachment-preview-runtime", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
       ],
       "hermes-attachment-text-extraction-plain": [
         {
@@ -7293,6 +7306,11 @@
         { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
         { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
       ],
+      "hermes-attachment-preview-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+      ],
       "hermes-attachment-text-extraction-plain": [],
       "hermes-attachment-text-extraction-pdf": [
         {
@@ -9732,6 +9750,10 @@
         "customBuildAllowed": false
       },
       "hermes-attachment-preview-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       },

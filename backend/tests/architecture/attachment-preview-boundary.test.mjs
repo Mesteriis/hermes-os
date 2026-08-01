@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_assembly_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged managed runtime slice/);
-  assert.match(adr, /Assembly и managed\/live\/browser/);
+  assert.match(adr, /Состояние реализации: staged release assembly slice/);
+  assert.match(adr, /Managed\/live\/browser evidence ещё не/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -384,4 +384,23 @@ test('managed Preview runtime composes public contracts without owning assembly 
     source,
     /sqlx::|TcpListener|Command::|data_url|ticket_plaintext|provider_id|account_id|filename|content_type_hint/,
   );
+});
+
+test('Preview release assembly is a separate unsigned workflow build unit', async () => {
+  const [manifest, source, main] = await Promise.all([
+    readFile(new URL('src/attachment-preview-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "attachment_preview"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(source, /attachment_preview_module_descriptor_v1/);
+  assert.match(source, /attachment_preview_settings_schema_v1/);
+  assert.match(source, /attachment_preview_storage_bundle_v1/);
+  assert.match(source, /artifact_kind: "module_runtime"/);
+  assert.match(source, /artifact_kind: "storage_bundle"/);
+  assert.match(source, /create_new\(true\)/);
+  assert.match(main, /materialize_attachment_preview_release_assembly_v1/);
+  assert.doesNotMatch(source, /Command::new|private_key|renderer\.render|serve-inherited/);
 });
