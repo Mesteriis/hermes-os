@@ -3638,6 +3638,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-reviewed-task-candidate-promotion-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-review-task-candidate-api",
+ "hermes-review-task-candidate-promotion-api",
+ "hermes-reviewed-task-candidate-promotion-core",
+ "hermes-reviewed-task-candidate-promotion-persistence",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "hermes-tasks-command-api",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-runtime-protocol"
 version = "0.1.0"
 dependencies = [

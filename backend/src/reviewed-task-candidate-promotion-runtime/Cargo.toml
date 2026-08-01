@@ -1,0 +1,34 @@
+[package]
+name = "hermes-reviewed-task-candidate-promotion-runtime"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-reviewed-task-candidate-promotion-runtime"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "reviewed_task_candidate_promotion"
+surface = "runtime"
+
+[dependencies]
+hermes-events-jetstream = { path = "../platform/events/jetstream" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-review-task-candidate-api = { path = "../review-task-candidate-api" }
+hermes-review-task-candidate-promotion-api = { path = "../review-task-candidate-promotion-api" }
+hermes-reviewed-task-candidate-promotion-core = { path = "../reviewed-task-candidate-promotion-core" }
+hermes-reviewed-task-candidate-promotion-persistence = { path = "../reviewed-task-candidate-promotion-persistence" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+hermes-storage-vault = { path = "../platform/storage/vault" }
+hermes-tasks-command-api = { path = "../tasks-command-api" }
+libc = "=0.2.186"
+prost = "=0.14.4"
+sha2 = { version = "=0.11.0", default-features = false }
+tokio = { version = "=1.52.4", default-features = false, features = ["rt-multi-thread", "time"] }
+zeroize = "=1.9.0"

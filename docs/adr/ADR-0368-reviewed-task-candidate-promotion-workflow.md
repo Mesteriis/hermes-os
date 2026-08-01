@@ -5,13 +5,14 @@
 Дата: 2026-08-01
 
 Состояние реализации: staged. Review-owned terminal promotion-result API,
-pure workflow correlation core и owner-local workflow persistence реализованы
-как отдельные compile-isolated units. Persistence атомарно связывает approval
-inbox с Tasks command outbox и Tasks terminal-result inbox с Review result
-outbox, не сохраняя candidate content, Blob proof или provider identity.
-Workflow runtime, assembly, Review result consumer и managed E2E ещё не
-реализованы. Наличие отдельных контрактов, persistence или прежнего managed
-launch не открывает promotion gate.
+pure workflow correlation core, owner-local workflow persistence и managed
+event runtime реализованы как отдельные compile-isolated units. Persistence
+атомарно связывает approval inbox с Tasks command outbox и Tasks
+terminal-result inbox с Review result outbox, не сохраняя candidate content,
+Blob proof или provider identity. Runtime запрашивает только пять exact event
+routes и owner-local Storage, без client, realtime или Blob authority.
+Assembly, Review result consumer и managed E2E ещё не реализованы. Наличие
+отдельных units или прежнего managed launch не открывает promotion gate.
 
 Уточняет:
 

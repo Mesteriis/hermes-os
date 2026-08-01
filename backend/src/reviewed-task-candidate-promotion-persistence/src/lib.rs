@@ -7,8 +7,8 @@ pub mod schema;
 
 pub use model::{
     PersistPromotionApprovalOutcomeV1, PersistPromotionApprovalV1, PersistPromotionResultOutcomeV1,
-    PersistPromotionTerminalResultV1, ReviewedTaskCandidatePromotionOutcomeV1,
-    UnpublishedPromotionEventV1,
+    PersistPromotionTerminalResultV1, PromotionCorrelationV1,
+    ReviewedTaskCandidatePromotionOutcomeV1, UnpublishedPromotionEventV1,
 };
 pub use repository::ReviewedTaskCandidatePromotionPersistenceV1;
 

@@ -47,6 +47,14 @@ pub enum PersistPromotionResultOutcomeV1 {
     Duplicate,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PromotionCorrelationV1 {
+    pub review_id: [u8; 16],
+    pub candidate_id: [u8; 16],
+    pub decision_revision: u64,
+    pub completed: bool,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnpublishedPromotionEventV1 {
     pub message_id: [u8; 16],

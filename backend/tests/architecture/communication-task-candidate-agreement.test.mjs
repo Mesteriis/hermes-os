@@ -58,6 +58,14 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
     promotionPersistenceOutbox,
     promotionPersistenceSchema,
     promotionPersistenceMigration,
+    promotionRuntimeManifest,
+    promotionRuntime,
+    promotionRuntimeAdmission,
+    promotionRuntimeApproval,
+    promotionRuntimeResults,
+    promotionRuntimeOutbox,
+    promotionManagedRuntime,
+    promotionRuntimeMain,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -158,6 +166,14 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
       ),
       'utf8',
     ),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/approval.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/task_results.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/reviewed-task-candidate-promotion-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const inventory = JSON.parse(inventorySource);
   const policy = JSON.parse(policySource);
@@ -175,7 +191,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_runtime_v1');
   assert.equal(
     policy.implementation.ownerInventory.businessCapabilities.includes(
       'review.task-candidate.promotion-result.v1',
@@ -360,5 +376,29 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.doesNotMatch(
     `${promotionPersistence}\n${promotionPersistenceModel}\n${promotionPersistenceRepository}\n${promotionPersistenceOutbox}\n${promotionPersistenceMigration}`,
     /candidate_content|source_body|custody_proof|provider_id|account_id|title|due_text|assignee_label|hermes_review_task_candidate_(core|persistence|runtime)|hermes_tasks_(core|persistence|runtime)/,
+  );
+  assert.match(workspace, /"src\/reviewed-task-candidate-promotion-runtime"/);
+  assert.match(promotionRuntimeManifest, /role = "workflow"/);
+  assert.match(promotionRuntimeManifest, /owner = "reviewed_task_candidate_promotion"/);
+  assert.match(promotionRuntimeManifest, /surface = "runtime"/);
+  assert.match(promotionRuntime, /ReviewedTaskCandidatePromotionManagedRuntimeV1/);
+  assert.match(promotionRuntimeAdmission, /capabilities: vec!\[/);
+  assert.match(promotionRuntimeAdmission, /descriptor\.capabilities\.len\(\), 6/);
+  assert.match(promotionRuntimeAdmission, /ProvidedSurfaceKindV1::DurableConsumer/);
+  assert.match(promotionRuntimeAdmission, /ProvidedSurfaceKindV1::DurablePublisher/);
+  assert.doesNotMatch(promotionRuntimeAdmission, /BlobQuotaRequestV1|ClientRpc|ClientRealtime/);
+  assert.match(promotionRuntimeApproval, /consume_approval_once_v1/);
+  assert.match(promotionRuntimeApproval, /build_create_task_from_reviewed_candidate_outbox_record_v1/);
+  assert.match(promotionRuntimeApproval, /persist_approval_and_tasks_command/);
+  assert.match(promotionRuntimeResults, /consume_task_created_once_v1/);
+  assert.match(promotionRuntimeResults, /consume_task_rejected_once_v1/);
+  assert.match(promotionRuntimeResults, /build_review_task_candidate_promotion_result_outbox_record_v1/);
+  assert.match(promotionRuntimeResults, /persist_tasks_result_and_review_result/);
+  assert.match(promotionRuntimeOutbox, /publish_exact/);
+  assert.match(promotionManagedRuntime, /permits\.len\(\) != 3/);
+  assert.match(promotionRuntimeMain, /ManagedWorkflowRuntimeConfigurationV1/);
+  assert.doesNotMatch(
+    `${promotionRuntimeManifest}\n${promotionRuntime}\n${promotionRuntimeAdmission}\n${promotionRuntimeApproval}\n${promotionRuntimeResults}\n${promotionRuntimeOutbox}\n${promotionManagedRuntime}`,
+    /hermes-review-task-candidate-(core|persistence|runtime|assembly)|hermes-tasks-(core|persistence|runtime|assembly)|hermes-blob|ClientRpc|ClientRealtime|provider_id|account_id|ollama|reqwest/,
   );
 });

@@ -9,8 +9,8 @@ use sqlx::{
 
 use crate::{
     PersistPromotionApprovalOutcomeV1, PersistPromotionApprovalV1, PersistPromotionResultOutcomeV1,
-    PersistPromotionTerminalResultV1, ReviewedTaskCandidatePromotionOutcomeV1,
-    ReviewedTaskCandidatePromotionPersistenceErrorV1,
+    PersistPromotionTerminalResultV1, PromotionCorrelationV1,
+    ReviewedTaskCandidatePromotionOutcomeV1, ReviewedTaskCandidatePromotionPersistenceErrorV1,
     model::{nonzero, valid_outbox, valid_owner, valid_timestamp},
     outbox::{insert_exact_outbox, verify_exact_outbox},
 };
@@ -62,6 +62,33 @@ impl ReviewedTaskCandidatePromotionPersistenceV1 {
             .await
             .map(|_| ())
             .map_err(storage_error)
+    }
+
+    pub async fn load_correlation(
+        &self,
+        logical_owner_id: &str,
+        tasks_command_id: &[u8; 16],
+    ) -> Result<PromotionCorrelationV1, ReviewedTaskCandidatePromotionPersistenceErrorV1> {
+        if !valid_owner(logical_owner_id) || !nonzero(tasks_command_id) {
+            return Err(ReviewedTaskCandidatePromotionPersistenceErrorV1::InvalidInput);
+        }
+        let row = sqlx::query(
+            "SELECT review_id, candidate_id, decision_revision, tasks_result_message_id
+             FROM hermes_data.reviewed_task_candidate_promotion_requests
+             WHERE logical_owner_id = $1 AND tasks_command_id = $2",
+        )
+        .bind(logical_owner_id)
+        .bind(tasks_command_id.as_slice())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage_error)?
+        .ok_or(ReviewedTaskCandidatePromotionPersistenceErrorV1::NotFound)?;
+        Ok(PromotionCorrelationV1 {
+            review_id: fixed(row_value(&row, "review_id")?)?,
+            candidate_id: fixed(row_value(&row, "candidate_id")?)?,
+            decision_revision: unsigned_revision(row_value(&row, "decision_revision")?)?,
+            completed: row_value::<Option<Vec<u8>>>(&row, "tasks_result_message_id")?.is_some(),
+        })
     }
 
     pub async fn persist_approval_and_tasks_command(
@@ -146,12 +173,6 @@ impl ReviewedTaskCandidatePromotionPersistenceV1 {
                 return Err(ReviewedTaskCandidatePromotionPersistenceErrorV1::ResultConflict);
             }
             verify_result_inbox(&mut transaction, input).await?;
-            verify_exact_outbox(
-                &mut transaction,
-                &input.logical_owner_id,
-                &input.review_result_outbox,
-            )
-            .await?;
             transaction.commit().await.map_err(storage_error)?;
             return Ok(PersistPromotionResultOutcomeV1::Duplicate);
         }
