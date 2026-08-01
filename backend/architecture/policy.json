@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "communication_note_candidate_assembly_v1",
+    "currentSlice": "attachment_text_extraction_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1236,6 +1236,24 @@
         "role": "workflow",
         "owner": "communication_note_candidate_extraction",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-api",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-ingress",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-text-extraction-core",
+        "role": "workflow",
+        "owner": "attachment_text_extraction",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2307,6 +2325,23 @@
       "hermes-attachment-archive-inspection-core": [
         {
           "name": "hermes-attachment-archive-inspection-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-api": [],
+      "hermes-attachment-text-extraction-ingress": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-text-extraction-core": [
+        {
+          "name": "hermes-attachment-text-extraction-api",
           "kind": "normal"
         }
       ],
@@ -6531,6 +6566,100 @@
           "features": []
         }
       ],
+      "hermes-attachment-text-extraction-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-attachment-text-extraction-ingress": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-attachment-text-extraction-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-attachment-archive-inspection-zip": [
         {
           "name": "zip",
@@ -8850,6 +8979,18 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-attachment-text-extraction-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-attachment-text-extraction-ingress": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-attachment-text-extraction-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-attachment-archive-inspection-zip": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -9449,31 +9590,33 @@
       "integrations": [
         "mail"
       ],
-    "workflows": [
-      "communication_cross_channel_forward",
-      "communication_delivery_intent",
-      "communication_explanation",
-      "communication_note_candidate_extraction",
-      "communication_recipient_suggestion",
-      "communication_reply_suggestion",
-      "communication_summary",
+      "workflows": [
+        "attachment_text_extraction",
+        "communication_cross_channel_forward",
+        "communication_delivery_intent",
+        "communication_explanation",
+        "communication_note_candidate_extraction",
+        "communication_recipient_suggestion",
+        "communication_reply_suggestion",
+        "communication_summary",
         "communication_task_candidate_extraction",
         "communication_translation",
         "communications_export",
         "reviewed_note_candidate_promotion",
         "reviewed_task_candidate_promotion"
-    ],
-    "engines": [
-      "ai",
-      "attachment_archive_inspection",
-      "attachment_security"
-    ],
+      ],
+      "engines": [
+        "ai",
+        "attachment_archive_inspection",
+        "attachment_security"
+      ],
       "businessCapabilities": [
         "ai.explanation.request.v1",
         "ai.provider.explain.v1",
         "ai.provider.translate.v1",
         "ai.translation.request.v1",
         "attachment.archive_inspection.v1",
+        "attachment.text_extraction.v1",
         "attachment_archive_inspection.blob.v1",
         "attachment_archive_inspection.candidate.observe.v1",
         "attachment_archive_inspection.custody-request.publish.v1",
@@ -9486,6 +9629,7 @@
         "attachment_security.candidate.observe.v1",
         "attachment_security.communications-state.observe.v1",
         "attachment_security.storage.v1",
+        "attachment_security.text-extraction-delegation.v1",
         "attachment_security.verdict.publish.v1",
         "communication.cross_channel_forward.v1",
         "communication.explanation.v1",

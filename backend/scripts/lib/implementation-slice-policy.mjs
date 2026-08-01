@@ -1135,6 +1135,13 @@ const COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES = [
   { name: 'hermes-communication-note-candidate-assembly', role: 'workflow', owner: 'communication_note_candidate_extraction', surface: 'assembly' },
 ];
 
+const ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-text-extraction-api', role: 'workflow', owner: 'attachment_text_extraction', surface: 'contract' },
+  { name: 'hermes-attachment-text-extraction-ingress', role: 'workflow', owner: 'attachment_text_extraction', surface: 'contract' },
+  { name: 'hermes-attachment-text-extraction-core', role: 'workflow', owner: 'attachment_text_extraction', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3282,6 +3289,18 @@ const COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-text-extraction-api': [],
+  'hermes-attachment-text-extraction-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-attachment-text-extraction-core': [
+    { name: 'hermes-attachment-text-extraction-api', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4309,6 +4328,27 @@ const COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-text-extraction-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-text-extraction-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-text-extraction-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -4998,6 +5038,19 @@ const COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY = {
+  ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_INVENTORY,
+  workflows: [
+    ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_INVENTORY.workflows,
+    'attachment_text_extraction',
+  ].sort(),
+  businessCapabilities: [
+    ...COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_INVENTORY.businessCapabilities,
+    'attachment.text_extraction.v1',
+    'attachment_security.text-extraction-delegation.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -5221,6 +5274,8 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-ai-contracts',
       'hermes-attachment-archive-inspection-api',
       'hermes-attachment-archive-inspection-ingress',
+      'hermes-attachment-text-extraction-api',
+      'hermes-attachment-text-extraction-ingress',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-delivery-intent-ingress-api',
@@ -6608,6 +6663,17 @@ function expectedSlice(currentSlice) {
       packages: COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies: COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: COMMUNICATION_NOTE_CANDIDATE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_text_extraction_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TEXT_EXTRACTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

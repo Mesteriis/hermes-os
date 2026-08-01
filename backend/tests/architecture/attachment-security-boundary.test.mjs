@@ -662,7 +662,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_note_candidate_assembly_v1',
+    'attachment_text_extraction_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.engines, [
     'ai',
@@ -693,6 +693,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
       'attachment_security.candidate.observe.v1',
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
+      'attachment_security.text-extraction-delegation.v1',
       'attachment_security.verdict.publish.v1',
     ],
   );

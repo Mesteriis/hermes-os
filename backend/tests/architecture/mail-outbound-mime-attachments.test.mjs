@@ -107,11 +107,12 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_note_candidate_assembly_v1',
+    'attachment_text_extraction_contract_core_v1',
   );
   assert.deepEqual(inventory.domains, ['communications', 'knowledge', 'review', 'tasks']);
   assert.deepEqual(inventory.integrations, ['mail']);
   assert.deepEqual(inventory.workflows, [
+    'attachment_text_extraction',
     'communication_cross_channel_forward',
     'communication_delivery_intent',
     'communication_explanation',

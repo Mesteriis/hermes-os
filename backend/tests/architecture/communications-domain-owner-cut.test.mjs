@@ -58,12 +58,13 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'communication_note_candidate_assembly_v1',
+    'attachment_text_extraction_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'knowledge', 'review', 'tasks'],
     integrations: ['mail'],
     workflows: [
+      'attachment_text_extraction',
       'communication_cross_channel_forward',
       'communication_delivery_intent',
       'communication_explanation',
@@ -84,6 +85,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'ai.provider.translate.v1',
       'ai.translation.request.v1',
       'attachment.archive_inspection.v1',
+      'attachment.text_extraction.v1',
       'attachment_archive_inspection.blob.v1',
       'attachment_archive_inspection.candidate.observe.v1',
       'attachment_archive_inspection.custody-request.publish.v1',
@@ -96,6 +98,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'attachment_security.candidate.observe.v1',
       'attachment_security.communications-state.observe.v1',
       'attachment_security.storage.v1',
+      'attachment_security.text-extraction-delegation.v1',
       'attachment_security.verdict.publish.v1',
       'communication.cross_channel_forward.v1',
       'communication.explanation.v1',

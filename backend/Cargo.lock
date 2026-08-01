@@ -1811,6 +1811,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-text-extraction-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-attachment-text-extraction-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-text-extraction-api",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-attachment-text-extraction-ingress"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-blob-client"
 version = "0.1.0"
 dependencies = [
