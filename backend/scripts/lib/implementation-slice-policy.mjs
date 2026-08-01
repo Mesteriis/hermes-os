@@ -5969,7 +5969,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'reviewed_task_candidate_promotion_managed_admission_v1') {
+  if (currentSlice === 'reviewed_task_candidate_promotion_gateway_sse_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: REVIEW_TASK_CANDIDATE_PROMOTION_RESULT_CONSUMER_INVENTORY,

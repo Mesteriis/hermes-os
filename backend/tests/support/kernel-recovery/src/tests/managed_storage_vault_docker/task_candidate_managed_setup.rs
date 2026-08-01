@@ -288,6 +288,60 @@ fn start_task_candidate_unit_v1(
 ) -> StartedTaskCandidateRuntimeV1 {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .unwrap_or_else(|error| panic!("load {} launch reservation: {error}", admitted.unit.label));
+    start_reserved_task_candidate_unit_v1(supervisor, store, runtime_dir, admitted, reservation)
+}
+
+pub(super) fn restart_task_candidate_runtime_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    predecessor: StartedTaskCandidateRuntimeV1,
+) -> StartedTaskCandidateRuntimeV1 {
+    let previous_generation = predecessor.runtime_generation;
+    let previous_instance = predecessor.runtime_instance_id.clone();
+    let binding = active_task_candidate_storage_binding_v1(
+        store,
+        &AdmittedTaskCandidateRuntimeV1 {
+            unit: predecessor.unit.clone(),
+            registration_id: predecessor.registration_id.clone(),
+            capability_ids: predecessor.capability_ids.clone(),
+        },
+    );
+    let issue = storage_successor::issue_after(&binding)
+        .unwrap_or_else(|error| panic!("derive {} successor: {error}", predecessor.unit.label));
+    let (reservation, binding) = storage_successor::reserve(
+        supervisor,
+        store,
+        &predecessor.registration_id,
+        predecessor.unit.storage_capability_id,
+        issue,
+    )
+    .unwrap_or_else(|error| panic!("reserve {} successor: {error}", predecessor.unit.label));
+    crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
+        .unwrap_or_else(|error| panic!("provision {} successor: {error}", predecessor.unit.label));
+    let successor = start_reserved_task_candidate_unit_v1(
+        supervisor,
+        store,
+        runtime_dir,
+        AdmittedTaskCandidateRuntimeV1 {
+            unit: predecessor.unit,
+            registration_id: predecessor.registration_id,
+            capability_ids: predecessor.capability_ids,
+        },
+        reservation,
+    );
+    assert_eq!(successor.runtime_generation, previous_generation + 1);
+    assert_ne!(successor.runtime_instance_id, previous_instance);
+    successor
+}
+
+fn start_reserved_task_candidate_unit_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    admitted: AdmittedTaskCandidateRuntimeV1,
+    reservation: managed_launch::ManagedLaunchReservation,
+) -> StartedTaskCandidateRuntimeV1 {
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
     let grant_epoch = reservation.grant_epoch();

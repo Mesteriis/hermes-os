@@ -4,7 +4,8 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged. Review-owned terminal promotion-result API,
+Состояние реализации: staged pending final full pre-push and clean-room audit.
+Review-owned terminal promotion-result API,
 pure workflow correlation core, owner-local workflow persistence, managed
 event runtime, Review-owned terminal-result consumer и unsigned workflow
 assembly реализованы как отдельные compile-isolated units. Persistence
@@ -16,8 +17,13 @@ Review consumer принимает только exact Review-owned event, ато
 inbox и Review realtime transition и делает ack после commit. Workflow runtime
 и Storage bundle включены в signed distribution отдельными artifacts; Kernel
 managed admission доказан вместе с extraction, Review и Tasks через real
-Vault/Storage/NATS readiness. Approve/reject data-flow и Gateway SSE E2E ещё не
-доказаны, поэтому promotion gate остаётся staged.
+Vault/Storage/NATS readiness. Live managed E2E доказывает approve/reject через
+typed Gateway routes, exact event-only workflow, ровно один Task для approve,
+отсутствие Task для reject, Review `succeeded`, shared SSE terminal frames и
+replay тех же cursors после рестарта Review runtime. Tasks принимает
+target-bound candidate Blob только после собственного custody transfer по
+exact command evidence; прямое чтение Review reference запрещено. Promotion
+gate остаётся staged только до полного pre-push и итогового clean-room аудита.
 
 Уточняет:
 

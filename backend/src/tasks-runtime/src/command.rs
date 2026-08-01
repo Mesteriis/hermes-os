@@ -36,8 +36,8 @@ use hermes_tasks_persistence::{
 use prost::Message;
 
 use crate::blob::{
-    TasksBlobErrorV1, cleanup_from_receipt_v1, decode_candidate_content_v1, read_candidate_v1,
-    release_candidate_v1,
+    TasksBlobErrorV1, decode_candidate_content_v1, read_candidate_v1, release_candidate_v1,
+    transfer_candidate_v1,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -79,20 +79,7 @@ pub(crate) async fn consume_task_command_once_v1(
         | ReserveReviewedCandidateCommandOutcomeV1::Existing(value) => value,
     };
     if decoded.expired && !persisted.completed {
-        let cleanup = persisted
-            .materialization
-            .clone()
-            .unwrap_or_else(|| cleanup_from_receipt_v1(&persisted.candidate_content));
-        if persisted.materialization.is_none() {
-            persistence
-                .persist_materialization(&PersistReviewedCandidateMaterializationV1 {
-                    logical_owner_id: persisted.logical_owner_id.clone(),
-                    command_message_id: persisted.command_message_id,
-                    materialization: cleanup.clone(),
-                })
-                .await
-                .map_err(TasksCommandErrorV1::Persistence)?;
-        }
+        let cleanup = materialize_candidate(persistence, channel, dispatcher, &persisted).await?;
         reject_command(
             persistence,
             &persisted,
@@ -143,25 +130,12 @@ async fn process_persisted_command(
     command: &PersistedReviewedCandidateCommandV1,
     runtime: &TasksCommandRuntimeContextV1<'_>,
 ) -> Result<(), TasksCommandErrorV1> {
-    let cleanup = command
-        .materialization
-        .clone()
-        .unwrap_or_else(|| cleanup_from_receipt_v1(&command.candidate_content));
-    if command.materialization.is_none() {
-        persistence
-            .persist_materialization(&PersistReviewedCandidateMaterializationV1 {
-                logical_owner_id: command.logical_owner_id.clone(),
-                command_message_id: command.command_message_id,
-                materialization: cleanup.clone(),
-            })
-            .await
-            .map_err(TasksCommandErrorV1::Persistence)?;
-    }
+    let cleanup = materialize_candidate(persistence, channel, dispatcher, command).await?;
     if command.completed {
         cleanup_command(persistence, channel, dispatcher, command, &cleanup, runtime).await?;
         return Ok(());
     }
-    let bytes = match read_candidate_v1(channel, dispatcher, &command.candidate_content) {
+    let bytes = match read_candidate_v1(channel, dispatcher, &cleanup) {
         Ok(bytes) => bytes,
         Err(TasksBlobErrorV1::InvalidReceipt) => {
             reject_command(
@@ -259,6 +233,34 @@ async fn process_persisted_command(
         runtime.now_unix_millis,
     )
     .await
+}
+
+async fn materialize_candidate(
+    persistence: &TasksPersistenceV1,
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    command: &PersistedReviewedCandidateCommandV1,
+) -> Result<hermes_tasks_persistence::TasksBlobCleanupV1, TasksCommandErrorV1> {
+    if let Some(materialization) = command.materialization.clone() {
+        return Ok(materialization);
+    }
+    let materialization = transfer_candidate_v1(
+        channel,
+        dispatcher,
+        command.command_message_id,
+        command.command_envelope_sha256,
+        &command.candidate_content,
+    )
+    .map_err(TasksCommandErrorV1::Blob)?;
+    persistence
+        .persist_materialization(&PersistReviewedCandidateMaterializationV1 {
+            logical_owner_id: command.logical_owner_id.clone(),
+            command_message_id: command.command_message_id,
+            materialization: materialization.clone(),
+        })
+        .await
+        .map_err(TasksCommandErrorV1::Persistence)?;
+    Ok(materialization)
 }
 
 async fn reject_command(

@@ -3210,6 +3210,7 @@ dependencies = [
  "hermes-review-attention-persistence",
  "hermes-review-attention-runtime",
  "hermes-review-task-candidate-api",
+ "hermes-review-task-candidate-core",
  "hermes-review-task-candidate-persistence",
  "hermes-review-task-candidate-runtime",
  "hermes-reviewed-task-candidate-promotion-core",

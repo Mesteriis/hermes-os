@@ -1,8 +1,9 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobCustodyReleaseRequestV1, ManagedBlobSessionRequestV1,
-    request_managed_blob_custody_release_v2, request_managed_blob_session_v2,
+    BlobDataClient, ManagedBlobCustodyReleaseRequestV1, ManagedBlobCustodyTransferRequestV1,
+    ManagedBlobSessionRequestV1, request_managed_blob_custody_release_v2,
+    request_managed_blob_custody_transfer_v2, request_managed_blob_session_v2,
 };
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, ManagedControlRequestDispatcherV2},
@@ -23,12 +24,46 @@ pub(crate) enum TasksBlobErrorV1 {
     Unavailable,
 }
 
+pub(crate) fn transfer_candidate_v1(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    command_message_id: [u8; 16],
+    command_envelope_sha256: [u8; 32],
+    source: &TasksBlobReceiptV1,
+) -> Result<TasksBlobCleanupV1, TasksBlobErrorV1> {
+    validate_receipt(source)?;
+    let transfer = request_managed_blob_custody_transfer_v2(
+        channel,
+        dispatcher,
+        ManagedBlobCustodyTransferRequestV1 {
+            capability_id: TASKS_REVIEWED_CANDIDATE_BLOB_CAPABILITY_ID_V1,
+            source_reference_id: &source.reference_id,
+            declared_size: source.declared_bytes,
+            receipt_sha256: &source.sha256,
+            custody_source_proof: &source.custody_transfer_source_proof,
+            evidence_id: &command_message_id,
+            evidence_envelope_sha256: &command_envelope_sha256,
+        },
+    )
+    .map_err(|_| TasksBlobErrorV1::Unavailable)?;
+    let reference_id = id16(&transfer.grant.target_reference_id)?;
+    BlobDataClient::new(&transfer.data_socket_path)
+        .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
+        .map_err(|_| TasksBlobErrorV1::Unavailable)?;
+    Ok(TasksBlobCleanupV1 {
+        reference_id,
+        declared_bytes: source.declared_bytes,
+        sha256: source.sha256,
+        custody_proof: source.custody_transfer_source_proof.clone(),
+    })
+}
+
 pub(crate) fn read_candidate_v1(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    receipt: &TasksBlobReceiptV1,
+    receipt: &TasksBlobCleanupV1,
 ) -> Result<Zeroizing<Vec<u8>>, TasksBlobErrorV1> {
-    validate_receipt(receipt)?;
+    validate_cleanup(receipt)?;
     let session = request_managed_blob_session_v2(
         channel,
         dispatcher,
@@ -88,15 +123,6 @@ pub(crate) fn decode_candidate_content_v1(
     Ok(content)
 }
 
-pub(crate) fn cleanup_from_receipt_v1(receipt: &TasksBlobReceiptV1) -> TasksBlobCleanupV1 {
-    TasksBlobCleanupV1 {
-        reference_id: receipt.reference_id,
-        declared_bytes: receipt.declared_bytes,
-        sha256: receipt.sha256,
-        custody_proof: receipt.custody_transfer_source_proof.clone(),
-    }
-}
-
 pub(crate) fn release_candidate_v1(
     channel: &mut ManagedControlChannelV2<UnixStream>,
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
@@ -137,6 +163,27 @@ fn validate_receipt(receipt: &TasksBlobReceiptV1) -> Result<(), TasksBlobErrorV1
         return Err(TasksBlobErrorV1::InvalidReceipt);
     }
     Ok(())
+}
+
+fn validate_cleanup(receipt: &TasksBlobCleanupV1) -> Result<(), TasksBlobErrorV1> {
+    if receipt.reference_id.iter().all(|byte| *byte == 0)
+        || !(1..=TASKS_REVIEWED_CANDIDATE_MAX_BLOB_BYTES_V1).contains(&receipt.declared_bytes)
+        || receipt.sha256.iter().all(|byte| *byte == 0)
+        || receipt.custody_proof.is_empty()
+        || receipt.custody_proof.len()
+            > hermes_tasks_command_api::TASKS_REVIEWED_CANDIDATE_MAX_PROOF_BYTES_V1
+    {
+        return Err(TasksBlobErrorV1::InvalidReceipt);
+    }
+    Ok(())
+}
+
+fn id16(value: &[u8]) -> Result<[u8; 16], TasksBlobErrorV1> {
+    value
+        .try_into()
+        .ok()
+        .filter(|value: &[u8; 16]| value.iter().any(|byte| *byte != 0))
+        .ok_or(TasksBlobErrorV1::InvalidReceipt)
 }
 
 fn release_operation_id(command_id: [u8; 16]) -> [u8; 16] {

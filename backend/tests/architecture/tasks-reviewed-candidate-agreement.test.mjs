@@ -74,7 +74,7 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_managed_admission_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_gateway_sse_v1');
   for (const unit of [
     'hermes-tasks-command-api',
     'hermes-tasks-core',
@@ -138,8 +138,9 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   assert.match(runtimeMain, /recover_command_once/);
   assert.match(admission, /ModuleKindV1::Domain/);
   assert.match(admission, /BlobQuotaOperationV1::ReadRange/);
+  assert.match(admission, /BlobQuotaOperationV1::CustodyTransfer/);
   assert.match(admission, /BlobQuotaOperationV1::ReleaseCustody/);
-  assert.doesNotMatch(admission, /CustodyTransfer as i32|Write as i32/);
+  assert.doesNotMatch(admission, /BlobQuotaOperationV1::Write as i32/);
   assert.match(runtime, /request_managed_runtime_event_access_v2/);
   assert.match(runtime, /exact_subscription/);
   assert.match(command, /reserve_command/);
@@ -147,7 +148,10 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   assert.match(command, /complete_task/);
   assert.match(command, /reject_task/);
   assert.match(command, /delivery\.acknowledge\(\)/);
+  assert.match(blob, /request_managed_blob_custody_transfer_v2/);
   assert.match(blob, /request_managed_blob_custody_release_v2/);
+  assert.match(command, /command_envelope_sha256/);
+  assert.match(command, /persist_materialization/);
   assert.match(eventOutbox, /publish_exact/);
   assert.doesNotMatch(
     `${runtimeManifest}\n${runtime}\n${admission}\n${command}\n${blob}\n${eventOutbox}\n${runtimeMain}`,

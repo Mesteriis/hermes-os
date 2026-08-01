@@ -495,7 +495,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_attachment_security_engine_starts_with_exact_signed_contracts',
     'managed_archive_inspection_reaches_gateway_sse_and_replays_after_restart',
     'managed_review_attention_reaches_gateway_sse_and_replays_after_restart',
-    'managed_task_candidate_chain_starts_from_one_signed_release',
+    'managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart',
     'managed_communications_ai_source_is_event_only_and_revision_fenced',
     'managed_reply_suggestion_reaches_ai_and_replays_through_gateway_sse',
     'managed_communication_summary_reaches_ai_and_replays_through_gateway_sse',

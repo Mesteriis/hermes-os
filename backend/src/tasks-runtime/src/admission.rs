@@ -99,6 +99,7 @@ fn blob_capability() -> CapabilityDescriptorV1 {
                 custody_scope_id: TASKS_OWNER_ID_V1.to_owned(),
                 allowed_operations: vec![
                     BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
                     BlobQuotaOperationV1::ReleaseCustody as i32,
                 ],
             })),

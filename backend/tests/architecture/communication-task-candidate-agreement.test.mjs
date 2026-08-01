@@ -197,7 +197,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_managed_admission_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_gateway_sse_v1');
   assert.equal(
     policy.implementation.ownerInventory.businessCapabilities.includes(
       'review.task-candidate.promotion-result.v1',
@@ -341,14 +341,21 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.match(managedSetup, /tasks\.runtime\.v1/);
   assert.match(managedSetup, /ManagedWorkflowRuntimeConfigurationV1/);
   assert.match(managedSetup, /ManagedDomainRuntimeConfigurationV1/);
-  assert.match(managedFlow, /managed_task_candidate_chain_starts_from_one_signed_release/);
+  assert.match(
+    managedFlow,
+    /managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart/,
+  );
   assert.match(managedFlow, /configure_communications_jetstream/);
   assert.match(managedFlow, /start_communications_domain/);
   assert.match(managedFlow, /started\.len\(\), 4/);
   assert.match(managedFlow, /start_task_candidate_ensemble_v1/);
+  assert.match(managedFlow, /decide_task_candidate_v1/);
+  assert.match(managedFlow, /assert_exact_task_materialization_v1/);
+  assert.match(managedFlow, /revoke_owner/);
+  assert.match(managedFlow, /restart_task_candidate_runtime_v1/);
   assert.match(
     authenticatedStorage,
-    /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_chain_starts_from_one_signed_release/,
+    /HERMES_STORAGE_MANAGED_TEST_FILTER[\s\S]*managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart/,
   );
   assert.match(
     authenticatedStorage,

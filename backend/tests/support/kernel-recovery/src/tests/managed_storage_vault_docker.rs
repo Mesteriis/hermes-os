@@ -196,6 +196,8 @@ mod ollama_ai_managed_setup;
 mod review_attention_managed_flow;
 #[path = "managed_storage_vault_docker/review_attention_managed_setup.rs"]
 mod review_attention_managed_setup;
+#[path = "managed_storage_vault_docker/task_candidate_gateway_flow.rs"]
+mod task_candidate_gateway_flow;
 #[path = "managed_storage_vault_docker/task_candidate_managed_flow.rs"]
 mod task_candidate_managed_flow;
 #[path = "managed_storage_vault_docker/task_candidate_managed_setup.rs"]
@@ -211,6 +213,7 @@ use mail_imap_fixture::*;
 use mail_smtp_fixture::*;
 use ollama_ai_managed_setup::*;
 use review_attention_managed_setup::*;
+use task_candidate_gateway_flow::*;
 use task_candidate_managed_setup::*;
 #[path = "managed_storage_vault_docker/call_evidence_managed_flow.rs"]
 mod call_evidence_managed_flow;
