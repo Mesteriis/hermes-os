@@ -23,6 +23,16 @@ test('Review note-candidate is a distinct domain capability without Task or Know
     persistenceModel,
     repository,
     migration,
+    promotionManifest,
+    promotionProtocol,
+    promotionEnvelope,
+    runtimeManifest,
+    admission,
+    submission,
+    blobMaterialization,
+    promotionResult,
+    clientRealtime,
+    managedRuntime,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -58,14 +68,32 @@ test('Review note-candidate is a distinct domain capability without Task or Know
       ),
       'utf8',
     ),
+    readFile(new URL('src/review-note-candidate-promotion-api/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(
+      new URL(
+        'src/review-note-candidate-promotion-api/proto/hermes/review/note_candidate/promotion/v1/promotion.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('src/review-note-candidate-promotion-api/src/envelope.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/src/submission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/src/blob_materialization.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/src/promotion_result.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_note_candidate_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_note_candidate_managed_runtime_v1');
   for (const unit of [
     'hermes-review-note-candidate-api',
     'hermes-review-note-candidate-core',
     'hermes-review-note-candidate-persistence',
+    'hermes-review-note-candidate-promotion-api',
+    'hermes-review-note-candidate-runtime',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -81,6 +109,12 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   assert.match(persistenceManifest, /role = "domain"/);
   assert.match(persistenceManifest, /owner = "review"/);
   assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(promotionManifest, /role = "domain"/);
+  assert.match(promotionManifest, /owner = "review"/);
+  assert.match(promotionManifest, /surface = "contract"/);
+  assert.match(runtimeManifest, /role = "domain"/);
+  assert.match(runtimeManifest, /owner = "review"/);
+  assert.match(runtimeManifest, /surface = "runtime"/);
 
   assert.match(api, /review\.note-candidate\.submission\.v1/);
   assert.match(api, /review\.note-candidate\.promotion\.v1/);
@@ -140,5 +174,31 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   assert.doesNotMatch(
     `${persistence}\n${persistenceModel}\n${repository}\n${migration}`,
     /hermes_(communications|tasks|knowledge)|hermes-(communications|tasks|knowledge)|provider_id|account_id|ollama/,
+  );
+
+  assert.match(promotionProtocol, /ReviewNoteCandidatePromotionResultV1/);
+  assert.match(promotionProtocol, /optional bytes note_id/);
+  assert.doesNotMatch(
+    promotionProtocol,
+    /title|excerpt|topic_hints|source_body|provider_id|account_id|map</,
+  );
+  assert.match(promotionEnvelope, /DurableEnvelopeV1/);
+  assert.match(promotionEnvelope, /ActorKindV1::Module/);
+
+  assert.match(admission, /review_note_candidate_module_descriptor_v1/);
+  assert.match(admission, /ModuleKindV1::Domain/);
+  assert.match(admission, /review_note_candidate_promotion_result_consume_request_v1/);
+  assert.match(submission, /consume_review_note_candidate_submission_once_v1/);
+  assert.match(submission, /ReviewNoteSourceBasisV1/);
+  assert.match(submission, /ReviewNoteTopicHintV1/);
+  assert.match(blobMaterialization, /REVIEWED_NOTE_CANDIDATE_PROMOTION_BLOB_TARGET_OWNER_ID_V1/);
+  assert.match(blobMaterialization, /write_promotion_candidate_v1/);
+  assert.match(promotionResult, /consume_review_note_candidate_promotion_result_once_v1/);
+  assert.match(clientRealtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(clientRealtime, /review-note-candidate\/\{\}/);
+  assert.match(managedRuntime, /RuntimeSubscribePermitV1/);
+  assert.doesNotMatch(
+    `${runtimeManifest}\n${admission}\n${submission}\n${blobMaterialization}\n${promotionResult}\n${clientRealtime}\n${managedRuntime}`,
+    /hermes_(communications|tasks|knowledge)|hermes-(communications|tasks|knowledge)|ollama|provider_id|account_id/,
   );
 });

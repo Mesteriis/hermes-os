@@ -3682,6 +3682,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-review-note-candidate-promotion-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-review-note-candidate-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-review-note-candidate-api",
+ "hermes-review-note-candidate-core",
+ "hermes-review-note-candidate-persistence",
+ "hermes-review-note-candidate-promotion-api",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-review-task-candidate-api"
 version = "0.1.0"
 dependencies = [

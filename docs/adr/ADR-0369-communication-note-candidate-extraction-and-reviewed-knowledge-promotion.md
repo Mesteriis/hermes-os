@@ -8,9 +8,10 @@
 contracts, pure deterministic extraction core/lifecycle, отдельный owner-local
 PostgreSQL persistence unit с run state, request replay, inbox, outbox и
 replayable realtime, exact Review note-candidate API/core с immutable human
-decision и отдельным promotion lifecycle, owner-local Review persistence, а
-также Knowledge command/core/persistence/runtime/assembly. Extraction и Review
-managed runtimes/assemblies, promotion workflow и aggregate managed conformance ещё не реализованы; поэтому
+decision и отдельным promotion lifecycle, owner-local Review
+persistence/managed runtime с Review-owned promotion-result contract, а также
+Knowledge command/core/persistence/runtime/assembly. Extraction runtime,
+Review assembly, promotion workflow и aggregate managed conformance ещё не реализованы; поэтому
 `communication_note_candidate_extraction_v1` остаётся `planned`.
 
 Уточняет:
@@ -61,7 +62,9 @@ Review получает отдельный note-candidate slice:
 - `hermes-review-note-candidate-api`;
 - `hermes-review-note-candidate-core`;
 - `hermes-review-note-candidate-persistence`;
-- будущие runtime/assembly units.
+- `hermes-review-note-candidate-promotion-api`;
+- `hermes-review-note-candidate-runtime`;
+- будущий assembly unit.
 
 Он не расширяет task-candidate payload generic union и не хранит Knowledge
 truth. После approve Review переносит presentation bytes в Blob, bound к

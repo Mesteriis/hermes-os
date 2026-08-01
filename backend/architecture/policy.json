@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_note_candidate_persistence_v1",
+    "currentSlice": "review_note_candidate_managed_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1182,6 +1182,18 @@
         "role": "domain",
         "owner": "review",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-review-note-candidate-promotion-api",
+        "role": "domain",
+        "owner": "review",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-review-note-candidate-runtime",
+        "role": "domain",
+        "owner": "review",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3527,6 +3539,22 @@
       "hermes-review-note-candidate-persistence": [
         { "name": "hermes-review-note-candidate-core", "kind": "normal" },
         { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
+      "hermes-review-note-candidate-promotion-api": [
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-review-note-candidate-runtime": [
+        { "name": "hermes-blob-client", "kind": "normal" },
+        { "name": "hermes-events-jetstream", "kind": "normal" },
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-api", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-core", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-persistence", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-promotion-api", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "hermes-storage-vault", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -3725,6 +3753,21 @@
       "hermes-review-note-candidate-persistence": [
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-review-note-candidate-promotion-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-review-note-candidate-runtime": [
+        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
+        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
       ],
       "hermes-events-protocol": [
         {
@@ -8919,6 +8962,14 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-review-note-candidate-promotion-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-review-note-candidate-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -9387,7 +9438,10 @@
         "review.communication-attention.storage.v1",
         "review.note-candidate.blob.v1",
         "review.note-candidate.client.v1",
+        "review.note-candidate.promotion-result.consumer.v1",
+        "review.note-candidate.promotion-result.v1",
         "review.note-candidate.promotion.v1",
+        "review.note-candidate.storage.v1",
         "review.note-candidate.submission.v1",
         "review.task-candidate.blob.v1",
         "review.task-candidate.client.v1",
