@@ -123,6 +123,7 @@ pub struct PersistReviewTaskCandidatePromotionResultV1 {
     pub result_message_id: [u8; 16],
     pub result_envelope_sha256: [u8; 32],
     pub review_id: [u8; 16],
+    pub candidate_id: [u8; 16],
     pub expected_review_revision: u64,
     pub result: ReviewTaskCandidatePromotionResultV1,
     pub occurred_at: ReviewTaskCandidateTimestampV1,

@@ -458,6 +458,12 @@ impl ReviewTaskCandidatePersistenceV1 {
     ) -> Result<ReviewTaskCandidateInboxOutcomeV1, ReviewTaskCandidatePersistenceErrorV1> {
         validate_promotion_result(&input)?;
         let mut transaction = self.pool.begin().await.map_err(storage_error)?;
+        let current =
+            load_review_for_update(&mut transaction, &input.logical_owner_id, &input.review_id)
+                .await?;
+        if current.candidate_id != input.candidate_id {
+            return Err(ReviewTaskCandidatePersistenceErrorV1::InboxConflict);
+        }
         if let Some(row) = sqlx::query(
             "SELECT result_envelope_sha256, review_id
              FROM hermes_data.review_task_candidate_promotion_inbox
@@ -477,14 +483,8 @@ impl ReviewTaskCandidatePersistenceV1 {
                 return Err(ReviewTaskCandidatePersistenceErrorV1::InboxConflict);
             }
             transaction.commit().await.map_err(storage_error)?;
-            return self
-                .load_review(&input.logical_owner_id, &input.review_id)
-                .await
-                .map(ReviewTaskCandidateInboxOutcomeV1::Duplicate);
+            return Ok(ReviewTaskCandidateInboxOutcomeV1::Duplicate(current));
         }
-        let current =
-            load_review_for_update(&mut transaction, &input.logical_owner_id, &input.review_id)
-                .await?;
         let next = record_review_task_candidate_promotion_v1(
             &current,
             input.expected_review_revision,
@@ -771,6 +771,7 @@ fn validate_promotion_result(
         || !nonzero(&input.result_message_id)
         || !nonzero(&input.result_envelope_sha256)
         || !nonzero(&input.review_id)
+        || !nonzero(&input.candidate_id)
         || input.expected_review_revision == 0
         || timestamp_millis(input.occurred_at).is_err()
     {

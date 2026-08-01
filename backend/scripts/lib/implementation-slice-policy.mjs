@@ -3019,6 +3019,22 @@ const REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST =
   ],
 };
 
+const REVIEW_TASK_CANDIDATE_PROMOTION_RESULT_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-review-task-candidate-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-api', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-core', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-persistence', kind: 'normal' },
+    { name: 'hermes-review-task-candidate-promotion-api', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4464,6 +4480,14 @@ const REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_INVENTORY = {
   ].sort(),
 };
 
+const REVIEW_TASK_CANDIDATE_PROMOTION_RESULT_CONSUMER_INVENTORY = {
+  ...REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_INVENTORY,
+  businessCapabilities: [
+    ...REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_INVENTORY.businessCapabilities,
+    'review.task-candidate.promotion-result.consumer.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -5895,6 +5919,17 @@ function expectedSlice(currentSlice) {
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
       packages: REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_PRODUCTION_PACKAGES,
       workspaceDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'review_task_candidate_promotion_result_consumer_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: REVIEW_TASK_CANDIDATE_PROMOTION_RESULT_CONSUMER_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: REVIEW_TASK_CANDIDATE_PROMOTION_RESULT_CONSUMER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: REVIEWED_TASK_CANDIDATE_PROMOTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };

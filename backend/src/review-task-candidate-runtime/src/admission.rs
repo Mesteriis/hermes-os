@@ -12,6 +12,10 @@ use hermes_review_task_candidate_api::{
     review_task_candidate_submitted_contract_reference_v1,
     review_task_candidate_submitted_publish_request_v1,
 };
+use hermes_review_task_candidate_promotion_api::{
+    review_task_candidate_promotion_result_consume_request_v1,
+    review_task_candidate_promotion_result_contract_reference_v1,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
     CapabilityRequestV1, ClientRpcRouteV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1,
@@ -66,6 +70,12 @@ pub fn review_task_candidate_module_descriptor_v1(build_id: &str) -> ModuleDescr
             ),
             blob_capability(),
             client_capability(),
+            event_capability(
+                "review.task-candidate.promotion-result.consumer.v1",
+                ProvidedSurfaceKindV1::DurableConsumer,
+                review_task_candidate_promotion_result_contract_reference_v1(),
+                review_task_candidate_promotion_result_consume_request_v1(),
+            ),
             event_capability(
                 "review.task-candidate.rejected.publisher.v1",
                 ProvidedSurfaceKindV1::DurablePublisher,
@@ -209,7 +219,7 @@ mod tests {
         validate_descriptor_v1(&descriptor).expect("descriptor");
         validate_settings_schema_v1(&review_task_candidate_settings_schema_v1()).expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Domain as i32);
-        assert_eq!(descriptor.capabilities.len(), 7);
+        assert_eq!(descriptor.capabilities.len(), 8);
         assert!(
             descriptor
                 .capabilities

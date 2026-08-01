@@ -32,6 +32,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     clientPort,
     clientRealtime,
     eventOutbox,
+    promotionResult,
     runtimeMain,
     assemblyManifest,
     assembly,
@@ -81,6 +82,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
       readFile(new URL('src/review-task-candidate-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-runtime/src/event_outbox.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/review-task-candidate-runtime/src/promotion_result.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
       readFile(new URL('src/review-task-candidate-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
@@ -88,7 +90,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'reviewed_task_candidate_promotion_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_task_candidate_promotion_result_consumer_v1');
   for (const unit of [
     'hermes-review-task-candidate-api',
     'hermes-review-task-candidate-core',
@@ -153,6 +155,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(runtime, /review_task_candidate_module_descriptor_v1/);
   assert.match(admission, /ModuleKindV1::Domain/);
   assert.match(admission, /review_task_candidate_submit_consume_request_v1/);
+  assert.match(admission, /review_task_candidate_promotion_result_consume_request_v1/);
   assert.match(admission, /BlobQuotaOperationV1::Write/);
   assert.doesNotMatch(admission, /hermes_tasks|hermes_communications|ollama/);
   assert.match(managedRuntime, /request_managed_runtime_event_access_v2/);
@@ -167,6 +170,10 @@ test('Review task-candidate is an exact domain capability, not an attention faca
   assert.match(clientPort, /build_review_task_candidate_approved_outbox_record_v1/);
   assert.match(clientRealtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
   assert.match(eventOutbox, /publish_exact/);
+  assert.match(promotionResult, /persist_promotion_result/);
+  assert.match(promotionResult, /delivery\.acknowledge\(\)/);
+  assert.match(promotionResult, /ReviewTaskCandidatePromotionResultV1/);
+  assert.doesNotMatch(promotionResult, /hermes_tasks|reviewed_task_candidate_promotion_runtime/);
   assert.match(runtimeMain, /serve-inherited/);
   assert.match(assemblyManifest, /surface = "assembly"/);
   assert.match(assembly, /materialize_review_task_candidate_release_assembly_v1/);

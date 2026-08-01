@@ -7,6 +7,7 @@ mod client_realtime;
 mod contracts;
 mod event_outbox;
 mod managed_runtime;
+mod promotion_result;
 mod submission;
 
 pub use admission::{

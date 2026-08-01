@@ -3609,6 +3609,7 @@ dependencies = [
  "hermes-review-task-candidate-api",
  "hermes-review-task-candidate-core",
  "hermes-review-task-candidate-persistence",
+ "hermes-review-task-candidate-promotion-api",
  "hermes-runtime-protocol",
  "hermes-storage-protocol",
  "hermes-storage-vault",

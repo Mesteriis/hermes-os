@@ -11,6 +11,7 @@ use hermes_review_task_candidate_api::{
 use hermes_review_task_candidate_persistence::{
     ReviewTaskCandidatePersistenceErrorV1, ReviewTaskCandidatePersistenceV1,
 };
+use hermes_review_task_candidate_promotion_api::review_task_candidate_promotion_result_contract_reference_v1;
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
     v1::{
@@ -40,6 +41,10 @@ use crate::{
     contracts::{command_contract_v1, query_contract_v1},
     event_outbox::{
         ReviewTaskCandidateEventRelayErrorV1, relay_review_task_candidate_outbox_once_v1,
+    },
+    promotion_result::{
+        ReviewTaskCandidatePromotionResultErrorV1,
+        consume_review_task_candidate_promotion_result_once_v1,
     },
     submission::{
         ReviewTaskCandidateSubmissionErrorV1, ReviewTaskCandidateSubmissionRuntimeContextV1,
@@ -74,6 +79,7 @@ pub struct ReviewTaskCandidateManagedRuntimeV1 {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     submission_subscription: RuntimeSubscribePermitV1,
+    promotion_result_subscription: RuntimeSubscribePermitV1,
     client_realtime: ReviewTaskCandidateClientRealtimePublisherV1,
 }
 
@@ -157,17 +163,25 @@ impl ReviewTaskCandidateManagedRuntimeV1 {
                 admission.grant_epoch,
             )
             .map_err(|_| ReviewTaskCandidateManagedRuntimeErrorV1::Admission)?;
-        let submission_subscription = exact_subscription(
-            event_access
-                .subscribe_permits(
-                    &admission.registration_id,
-                    &admission.runtime_instance_id,
-                    admission.runtime_generation,
-                    admission.grant_epoch,
-                )
-                .map_err(|_| ReviewTaskCandidateManagedRuntimeErrorV1::Admission)?,
+        let permits = event_access
+            .subscribe_permits(
+                &admission.registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| ReviewTaskCandidateManagedRuntimeErrorV1::Admission)?;
+        let submission_subscription = exact_permit(
+            &permits,
             &review_task_candidate_submit_contract_reference_v1(),
         )?;
+        let promotion_result_subscription = exact_permit(
+            &permits,
+            &review_task_candidate_promotion_result_contract_reference_v1(),
+        )?;
+        if permits.len() != 2 {
+            return Err(ReviewTaskCandidateManagedRuntimeErrorV1::Admission);
+        }
         let event_connection = JetStreamClient::connect_runtime_with_jwt(
             event_hub_endpoint,
             event_identity,
@@ -198,6 +212,7 @@ impl ReviewTaskCandidateManagedRuntimeV1 {
             event_connection,
             event_publish_permit,
             submission_subscription,
+            promotion_result_subscription,
             client_realtime,
         })
     }
@@ -310,6 +325,19 @@ impl ReviewTaskCandidateManagedRuntimeV1 {
         .map_err(event_relay_error)
     }
 
+    pub async fn consume_promotion_result_once(
+        &self,
+    ) -> Result<bool, ReviewTaskCandidateManagedRuntimeErrorV1> {
+        consume_review_task_candidate_promotion_result_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.promotion_result_subscription,
+            &self.admission.logical_human_owner_id,
+        )
+        .await
+        .map_err(promotion_result_error)
+    }
+
     pub async fn pump_client_realtime_once(
         &mut self,
     ) -> Result<bool, ReviewTaskCandidateManagedRuntimeErrorV1> {
@@ -412,24 +440,24 @@ async fn dispatch_client(
     }
 }
 
-fn exact_subscription(
-    permits: Vec<RuntimeSubscribePermitV1>,
+fn exact_permit(
+    permits: &[RuntimeSubscribePermitV1],
     contract: &ContractReferenceV1,
 ) -> Result<RuntimeSubscribePermitV1, ReviewTaskCandidateManagedRuntimeErrorV1> {
-    if permits.len() != 1 {
-        return Err(ReviewTaskCandidateManagedRuntimeErrorV1::Admission);
-    }
-    let permit = permits
-        .into_iter()
+    let mut matching = permits.iter().filter(|permit| {
+        permit.contract().is_some_and(|actual| {
+            actual.owner == contract.owner
+                && actual.name == contract.name
+                && actual.major == contract.major
+                && actual.revision == contract.revision
+                && actual.schema_sha256 == contract.schema_sha256
+        })
+    });
+    let permit = matching
         .next()
+        .cloned()
         .ok_or(ReviewTaskCandidateManagedRuntimeErrorV1::Admission)?;
-    if permit.contract().is_none_or(|actual| {
-        actual.owner != contract.owner
-            || actual.name != contract.name
-            || actual.major != contract.major
-            || actual.revision != contract.revision
-            || actual.schema_sha256 != contract.schema_sha256
-    }) {
+    if matching.next().is_some() {
         return Err(ReviewTaskCandidateManagedRuntimeErrorV1::Admission);
     }
     Ok(permit)
@@ -596,6 +624,23 @@ fn submission_error(
             ReviewTaskCandidateManagedRuntimeErrorV1::Persistence(error)
         }
         ReviewTaskCandidateSubmissionErrorV1::EventUnavailable => {
+            ReviewTaskCandidateManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn promotion_result_error(
+    error: ReviewTaskCandidatePromotionResultErrorV1,
+) -> ReviewTaskCandidateManagedRuntimeErrorV1 {
+    match error {
+        ReviewTaskCandidatePromotionResultErrorV1::InvalidEnvelope
+        | ReviewTaskCandidatePromotionResultErrorV1::InvalidPayload => {
+            ReviewTaskCandidateManagedRuntimeErrorV1::EventContract
+        }
+        ReviewTaskCandidatePromotionResultErrorV1::Persistence(error) => {
+            ReviewTaskCandidateManagedRuntimeErrorV1::Persistence(error)
+        }
+        ReviewTaskCandidatePromotionResultErrorV1::EventUnavailable => {
             ReviewTaskCandidateManagedRuntimeErrorV1::EventUnavailable
         }
     }

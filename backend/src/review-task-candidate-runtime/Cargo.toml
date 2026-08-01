@@ -23,6 +23,7 @@ hermes-events-protocol = { path = "../platform/events" }
 hermes-review-task-candidate-api = { path = "../review-task-candidate-api" }
 hermes-review-task-candidate-core = { path = "../review-task-candidate-core" }
 hermes-review-task-candidate-persistence = { path = "../review-task-candidate-persistence" }
+hermes-review-task-candidate-promotion-api = { path = "../review-task-candidate-promotion-api" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-storage-vault = { path = "../platform/storage/vault" }

@@ -111,6 +111,7 @@ where
             .map_err(|_| "Review Task Candidate clock is invalid".to_owned())?;
         retry_runtime(executor.block_on(runtime.pump_control_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_submission_once(now)))?;
+        retry_runtime(executor.block_on(runtime.consume_promotion_result_once()))?;
         retry_runtime(executor.block_on(runtime.relay_outbox_once(now)))?;
         retry_runtime(executor.block_on(runtime.pump_client_realtime_once()))?;
         std::thread::sleep(Duration::from_millis(25));

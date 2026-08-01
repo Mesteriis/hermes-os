@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "reviewed_task_candidate_promotion_runtime_v1",
+    "currentSlice": "review_task_candidate_promotion_result_consumer_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1699,6 +1699,10 @@
         },
         {
           "name": "hermes-review-task-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-task-candidate-promotion-api",
           "kind": "normal"
         },
         {
@@ -9083,6 +9087,7 @@
         "review.communication-attention.storage.v1",
         "review.task-candidate.blob.v1",
         "review.task-candidate.client.v1",
+        "review.task-candidate.promotion-result.consumer.v1",
         "review.task-candidate.promotion-result.v1",
         "review.task-candidate.promotion.v1",
         "review.task-candidate.storage.v1",
