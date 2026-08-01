@@ -46,6 +46,7 @@
       "tasks",
       "calendar",
       "documents",
+      "knowledge",
       "review",
       "ai"
     ],
@@ -53,12 +54,11 @@
       "relationships",
       "projects",
       "obligations",
-      "decisions",
-      "knowledge"
+      "decisions"
     ]
   },
   "implementation": {
-    "currentSlice": "review_note_candidate_contract_core_v1",
+    "currentSlice": "knowledge_verified_note_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1145,6 +1145,18 @@
         "name": "hermes-review-note-candidate-core",
         "role": "domain",
         "owner": "review",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-knowledge-command-api",
+        "role": "domain",
+        "owner": "knowledge",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-knowledge-core",
+        "role": "domain",
+        "owner": "knowledge",
         "surface": "implementation"
       }
     ],
@@ -3461,7 +3473,12 @@
         { "name": "hermes-events-protocol", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" }
       ],
-      "hermes-review-note-candidate-core": []
+      "hermes-review-note-candidate-core": [],
+      "hermes-knowledge-command-api": [
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-knowledge-core": []
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-communication-summary-api": [
@@ -3627,6 +3644,17 @@
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-review-note-candidate-core": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-knowledge-command-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-knowledge-core": [
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-events-protocol": [
@@ -8798,6 +8826,14 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-knowledge-command-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-knowledge-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -9106,6 +9142,7 @@
     "ownerInventory": {
       "domains": [
         "communications",
+        "knowledge",
         "review",
         "tasks"
       ],
@@ -9235,6 +9272,8 @@
         "communications_export.blob.v1",
         "communications_export.events.v1",
         "communications_export.storage.v1",
+        "knowledge.reviewed-candidate.blob.v1",
+        "knowledge.reviewed-candidate.command.v1",
         "mail.attachment-anchor.consume.v1",
         "mail.attachment-blob-admission.publish.v1",
         "mail.attachment-safety-state.consume.v1",

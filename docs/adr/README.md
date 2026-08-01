@@ -676,3 +676,12 @@ Tasks command отдельным `reviewed_task_candidate_promotion` workflow. W
 domain implementations; terminal Tasks result возвращается в Review через
 отдельный Review-owned typed contract и только затем меняет promotion
 projection/SSE.
+ADR-0369 переносит legacy note extraction как отдельный deterministic workflow:
+Communications отдаёт source через target-bound Blob, Review владеет human
+decision, а accepted result может стать durable Knowledge truth только через
+отдельный promotion workflow и target command.
+ADR-0370 узко разблокирует Knowledge для `VerifiedKnowledgeNoteV1`: exact
+command/core units принимают только reviewed candidate с provenance и
+Knowledge-bound Blob. Generic Notes, Graph/Search/Context/Memory projections и
+direct domain calls остаются запрещены; managed owner gate ещё требует
+persistence/runtime/assembly и live evidence.

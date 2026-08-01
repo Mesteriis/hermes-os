@@ -684,7 +684,7 @@ test('keeps WhatsApp implementation in the hidden host WebView boundary', () => 
 
 
 
-for (const owner of ['relationships', 'projects', 'obligations', 'decisions', 'knowledge']) {
+for (const owner of ['relationships', 'projects', 'obligations', 'decisions']) {
   test(`rejects a Cargo package owned by blocked domain ${owner}`, () => {
     const packages = [
       kernel(),

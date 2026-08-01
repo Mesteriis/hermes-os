@@ -176,7 +176,7 @@ test('requires an explicit single-layout policy', () => {
 
 
 
-for (const owner of ['relationships', 'projects', 'obligations', 'decisions', 'knowledge']) {
+for (const owner of ['relationships', 'projects', 'obligations', 'decisions']) {
   test(`rejects a production path for blocked domain ${owner}`, () => {
     const violations = validateSourceEntries(policy(), [
       { path: `modules/${owner}/src/lib.rs`, content: '' },
@@ -236,7 +236,7 @@ test('does not treat SQL comments as ownership declarations', () => {
 
 
 
-test('allows source paths for enabled domains including AI', () => {
+test('allows source paths for enabled domains including Knowledge and AI', () => {
   const violations = validateSourceEntries(policy(), [
     { path: 'modules/communications/src/lib.rs', content: '' },
     { path: 'modules/contacts/src/lib.rs', content: '' },
@@ -244,6 +244,7 @@ test('allows source paths for enabled domains including AI', () => {
     { path: 'modules/tasks/src/lib.rs', content: '' },
     { path: 'modules/calendar/src/lib.rs', content: '' },
     { path: 'modules/documents/src/lib.rs', content: '' },
+    { path: 'modules/knowledge/src/lib.rs', content: '' },
     { path: 'modules/ai/src/lib.rs', content: '' },
   ]);
 

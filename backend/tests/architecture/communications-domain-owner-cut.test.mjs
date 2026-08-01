@@ -36,7 +36,7 @@ test('Communications domain does not import integration or Blob implementations'
   }
 });
 
-test('Communications remains isolated after Review owner admission', async () => {
+test('Communications remains isolated after Knowledge owner admission', async () => {
   const [
     policySource,
     ingressSources,
@@ -58,10 +58,10 @@ test('Communications remains isolated after Review owner admission', async () =>
 
   assert.equal(
     policy.implementation.currentSlice,
-    'review_note_candidate_contract_core_v1',
+    'knowledge_verified_note_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
-    domains: ['communications', 'review', 'tasks'],
+    domains: ['communications', 'knowledge', 'review', 'tasks'],
     integrations: ['mail'],
     workflows: [
       'communication_cross_channel_forward',
@@ -182,6 +182,8 @@ test('Communications remains isolated after Review owner admission', async () =>
       'communications_export.blob.v1',
       'communications_export.events.v1',
       'communications_export.storage.v1',
+      'knowledge.reviewed-candidate.blob.v1',
+      'knowledge.reviewed-candidate.command.v1',
       'mail.attachment-anchor.consume.v1',
       'mail.attachment-blob-admission.publish.v1',
       'mail.attachment-safety-state.consume.v1',

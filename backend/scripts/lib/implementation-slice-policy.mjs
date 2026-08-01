@@ -1084,6 +1084,12 @@ const REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_PRODUCTION_PACKAGES = [
   { name: 'hermes-review-note-candidate-core', role: 'domain', owner: 'review', surface: 'implementation' },
 ];
 
+const KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_PRODUCTION_PACKAGES,
+  { name: 'hermes-knowledge-command-api', role: 'domain', owner: 'knowledge', surface: 'contract' },
+  { name: 'hermes-knowledge-core', role: 'domain', owner: 'knowledge', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3095,6 +3101,15 @@ const REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-review-note-candidate-core': [],
 };
 
+const KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-knowledge-command-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-knowledge-core': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4004,6 +4019,21 @@ const REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-knowledge-command-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-knowledge-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -4634,6 +4664,16 @@ const REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_INVENTORY = {
   ].sort(),
 };
 
+const KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_INVENTORY = {
+  ...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_INVENTORY,
+  domains: [...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_INVENTORY.domains, 'knowledge'].sort(),
+  businessCapabilities: [
+    ...REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'knowledge.reviewed-candidate.blob.v1',
+    'knowledge.reviewed-candidate.command.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -4849,6 +4889,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-communications-task-source-api',
       'hermes-communication-note-candidate-api',
       'hermes-communications-note-source-api',
+      'hermes-knowledge-command-api',
       'hermes-ai-contracts',
       'hermes-attachment-archive-inspection-api',
       'hermes-attachment-archive-inspection-ingress',
@@ -6139,6 +6180,17 @@ function expectedSlice(currentSlice) {
       packages: REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_PRODUCTION_PACKAGES,
       workspaceDependencies: REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: REVIEW_NOTE_CANDIDATE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'knowledge_verified_note_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: KNOWLEDGE_VERIFIED_NOTE_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
