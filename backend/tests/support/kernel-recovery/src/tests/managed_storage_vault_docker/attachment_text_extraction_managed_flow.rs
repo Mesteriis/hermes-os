@@ -559,37 +559,37 @@ fn managed_attachment_text_extraction_completes_through_gateway_and_replays_afte
         gateway_runtime: &gateway_runtime,
         cookie: &restarted_cookie,
     };
-    negative.assert_terminal_failure_v1(
-        5,
-        "text-extraction-malformed-pdf",
-        [0xe1; 16],
-        [0xe2; 16],
-        b"%PDF-1.7\ninvalid".to_vec(),
-        AttachmentTextExtractionStateV1::Rejected,
-        AttachmentTextExtractionErrorCodeV1::ParserFailed,
-    );
-    negative.assert_terminal_failure_v1(
-        6,
-        "text-extraction-unsupported",
-        [0xe3; 16],
-        [0xe4; 16],
-        vec![0xff, 0xfe, 0xfd],
-        AttachmentTextExtractionStateV1::Unsupported,
-        AttachmentTextExtractionErrorCodeV1::Unsupported,
-    );
+    negative.assert_terminal_failure_v1(ManagedAttachmentTextFailureScenarioV1 {
+        expected_count: 5,
+        scenario_id: "text-extraction-malformed-pdf",
+        blob_id: [0xe1; 16],
+        operation_id: [0xe2; 16],
+        source: b"%PDF-1.7\ninvalid".to_vec(),
+        expected_state: AttachmentTextExtractionStateV1::Rejected,
+        expected_error: AttachmentTextExtractionErrorCodeV1::ParserFailed,
+    });
+    negative.assert_terminal_failure_v1(ManagedAttachmentTextFailureScenarioV1 {
+        expected_count: 6,
+        scenario_id: "text-extraction-unsupported",
+        blob_id: [0xe3; 16],
+        operation_id: [0xe4; 16],
+        source: vec![0xff, 0xfe, 0xfd],
+        expected_state: AttachmentTextExtractionStateV1::Unsupported,
+        expected_error: AttachmentTextExtractionErrorCodeV1::Unsupported,
+    });
     remove_staged_attachment_text_extraction_ocr_runner_v1(
         &root.join("runtime"),
         text.runtime_generation,
     );
-    negative.assert_terminal_failure_v1(
-        7,
-        "text-extraction-parser-unavailable",
-        [0xe5; 16],
-        [0xe6; 16],
-        attachment_text_ocr_png_source_v1(),
-        AttachmentTextExtractionStateV1::Rejected,
-        AttachmentTextExtractionErrorCodeV1::ParserUnavailable,
-    );
+    negative.assert_terminal_failure_v1(ManagedAttachmentTextFailureScenarioV1 {
+        expected_count: 7,
+        scenario_id: "text-extraction-parser-unavailable",
+        blob_id: [0xe5; 16],
+        operation_id: [0xe6; 16],
+        source: attachment_text_ocr_png_source_v1(),
+        expected_state: AttachmentTextExtractionStateV1::Rejected,
+        expected_error: AttachmentTextExtractionErrorCodeV1::ParserUnavailable,
+    });
 
     let current_parser_identity = AttachmentTextExtractionParserRuntimeV1::new(None)
         .extract(PRIVATE_SOURCE_TEXT)
@@ -688,17 +688,27 @@ struct ManagedAttachmentTextNegativeContourV1<'a> {
     cookie: &'a str,
 }
 
+struct ManagedAttachmentTextFailureScenarioV1 {
+    expected_count: i64,
+    scenario_id: &'static str,
+    blob_id: [u8; 16],
+    operation_id: [u8; 16],
+    source: Vec<u8>,
+    expected_state: AttachmentTextExtractionStateV1,
+    expected_error: AttachmentTextExtractionErrorCodeV1,
+}
+
 impl ManagedAttachmentTextNegativeContourV1<'_> {
-    fn assert_terminal_failure_v1(
-        &self,
-        expected_count: i64,
-        scenario_id: &str,
-        blob_id: [u8; 16],
-        operation_id: [u8; 16],
-        source: Vec<u8>,
-        expected_state: AttachmentTextExtractionStateV1,
-        expected_error: AttachmentTextExtractionErrorCodeV1,
-    ) {
+    fn assert_terminal_failure_v1(&self, scenario: ManagedAttachmentTextFailureScenarioV1) {
+        let ManagedAttachmentTextFailureScenarioV1 {
+            expected_count,
+            scenario_id,
+            blob_id,
+            operation_id,
+            source,
+            expected_state,
+            expected_error,
+        } = scenario;
         let blob = self.blob_source.write(
             self.store,
             self.supervisor,
