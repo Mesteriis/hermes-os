@@ -720,6 +720,8 @@ pub struct BlobDataClient {
     timeout: Duration,
 }
 
+const DEFAULT_BLOB_DATA_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl BlobDataClient {
     pub fn new(socket_path: impl Into<PathBuf>) -> Result<Self, BlobClientError> {
         let socket_path = socket_path.into();
@@ -728,7 +730,7 @@ impl BlobDataClient {
         }
         Ok(Self {
             socket_path,
-            timeout: Duration::from_secs(2),
+            timeout: DEFAULT_BLOB_DATA_TIMEOUT,
         })
     }
 
@@ -920,6 +922,16 @@ mod tests {
                 .expect("valid path")
                 .with_timeout(Duration::ZERO),
             Err(BlobClientError::InvalidTimeout)
+        );
+    }
+
+    #[test]
+    fn default_timeout_covers_the_admitted_large_local_frame() {
+        assert_eq!(
+            BlobDataClient::new("/tmp/blob.sock")
+                .expect("valid path")
+                .timeout,
+            Duration::from_secs(30)
         );
     }
 

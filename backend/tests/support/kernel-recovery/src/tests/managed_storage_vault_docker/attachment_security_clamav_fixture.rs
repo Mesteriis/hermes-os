@@ -149,7 +149,8 @@ fn serve_scan(
     release_held_scan: &AtomicBool,
 ) -> ClamAvFixtureOutcomeV1 {
     stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
+        .set_nonblocking(false)
+        .and_then(|_| stream.set_read_timeout(Some(Duration::from_secs(5))))
         .and_then(|_| stream.set_write_timeout(Some(Duration::from_secs(5))))
         .expect("configure ClamAV fixture connection");
     let mut command = [0_u8; CLAMAV_INSTREAM_COMMAND.len()];

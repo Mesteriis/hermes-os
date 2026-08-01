@@ -2,6 +2,7 @@
 
 use super::*;
 
+use sha2::{Digest, Sha256};
 use sqlx::{
     Row,
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
@@ -67,6 +68,86 @@ pub(super) fn attachment_preview_diagnostics_v1() -> AttachmentPreviewDiagnostic
                     .expect("security delegation result count"),
             }
         })
+}
+
+pub(super) fn replace_attachment_preview_renderer_identity_v1(
+    logical_owner_id: &str,
+    run_id: &[u8],
+    expected_identity_sha256: [u8; 32],
+    replacement_identity_sha256: [u8; 32],
+) {
+    assert_eq!(run_id.len(), 16);
+    assert!(expected_identity_sha256.iter().any(|byte| *byte != 0));
+    assert!(replacement_identity_sha256.iter().any(|byte| *byte != 0));
+    attachment_preview_fixture_runtime_v1().block_on(async {
+        let pool = attachment_preview_diagnostics_pool_v1().await;
+        let changed = sqlx::query(
+            "UPDATE hermes_data.attachment_preview_artifacts SET renderer_identity_sha256=$4 WHERE logical_owner_id=$1 AND run_id=$2 AND renderer_identity_sha256=$3",
+        )
+        .bind(logical_owner_id)
+        .bind(run_id)
+        .bind(expected_identity_sha256.as_slice())
+        .bind(replacement_identity_sha256.as_slice())
+        .execute(&pool)
+        .await
+        .expect("replace disposable Preview renderer identity")
+        .rows_affected();
+        assert_eq!(changed, 1, "renderer identity replacement must use exact CAS");
+    });
+}
+
+pub(super) fn replace_attachment_preview_state_revision_v1(
+    logical_owner_id: &str,
+    run_id: &[u8],
+    expected_revision: u64,
+    replacement_revision: u64,
+) {
+    assert_eq!(run_id.len(), 16);
+    assert!(expected_revision > 0);
+    assert!(replacement_revision > 0);
+    attachment_preview_fixture_runtime_v1().block_on(async {
+        let pool = attachment_preview_diagnostics_pool_v1().await;
+        let changed = sqlx::query(
+            "UPDATE hermes_data.attachment_preview_runs SET state_revision=$4 WHERE logical_owner_id=$1 AND run_id=$2 AND state_revision=$3",
+        )
+        .bind(logical_owner_id)
+        .bind(run_id)
+        .bind(i64::try_from(expected_revision).expect("bounded expected Preview revision"))
+        .bind(i64::try_from(replacement_revision).expect("bounded replacement Preview revision"))
+        .execute(&pool)
+        .await
+        .expect("replace disposable Preview state revision")
+        .rows_affected();
+        assert_eq!(changed, 1, "state revision replacement must use exact CAS");
+    });
+}
+
+pub(super) fn expire_attachment_preview_ticket_v1(
+    logical_owner_id: &str,
+    run_id: &[u8],
+    opaque_ticket: &[u8],
+) {
+    assert_eq!(run_id.len(), 16);
+    assert_eq!(opaque_ticket.len(), 32);
+    let ticket_sha256: [u8; 32] = Sha256::digest(opaque_ticket).into();
+    attachment_preview_fixture_runtime_v1().block_on(async {
+        let pool = attachment_preview_diagnostics_pool_v1().await;
+        let changed = sqlx::query(
+            "UPDATE hermes_data.attachment_preview_read_tickets SET expires_at_unix_seconds=created_at_unix_seconds+1 WHERE logical_owner_id=$1 AND run_id=$2 AND ticket_sha256=$3 AND used_at_unix_seconds IS NULL AND expires_at_unix_seconds>created_at_unix_seconds+1",
+        )
+        .bind(logical_owner_id)
+        .bind(run_id)
+        .bind(ticket_sha256.as_slice())
+        .execute(&pool)
+        .await
+        .expect("expire disposable Preview tickets")
+        .rows_affected();
+        assert_eq!(changed, 1, "exactly one disposable Preview ticket must expire");
+    });
+}
+
+fn attachment_preview_fixture_runtime_v1() -> tokio::runtime::Runtime {
+    tokio::runtime::Runtime::new().expect("Attachment Preview diagnostics runtime")
 }
 
 async fn attachment_preview_diagnostics_pool_v1() -> sqlx::PgPool {

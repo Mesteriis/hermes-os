@@ -219,6 +219,10 @@ fn assert_managed_attachment_preview_failures_v1(
     cookie: &str,
     filter: Option<&str>,
 ) {
+    let mut polyglot_png = STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+        .expect("decode Preview polyglot PNG fixture");
+    polyglot_png.extend_from_slice(b"%PDF-1.7\npolyglot");
     let failures = [
         (
             "preview-bad-pdf",
@@ -243,6 +247,18 @@ fn assert_managed_attachment_preview_failures_v1(
             vec![0xff, 0xfe, 0xfd],
             AttachmentPreviewStateV1::Unsupported,
             AttachmentPreviewErrorCodeV1::Unsupported,
+        ),
+        (
+            "preview-polyglot",
+            polyglot_png,
+            AttachmentPreviewStateV1::Rejected,
+            AttachmentPreviewErrorCodeV1::InvalidContent,
+        ),
+        (
+            "preview-oversized",
+            oversized_docx_v1(),
+            AttachmentPreviewStateV1::Rejected,
+            AttachmentPreviewErrorCodeV1::SourceTooLarge,
         ),
     ];
     if let Some(filter) = filter {
@@ -437,6 +453,43 @@ fn minimal_docx_v1() -> Vec<u8> {
     bytes
 }
 
+fn oversized_docx_v1() -> Vec<u8> {
+    let mut source = Cursor::new(Vec::new());
+    {
+        let mut writer = ZipWriter::new(&mut source);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        writer
+            .start_file("[Content_Types].xml", options)
+            .expect("oversized DOCX content types");
+        writer
+            .write_all(br#"<Types><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#)
+            .expect("oversized DOCX content types body");
+        writer
+            .start_file("_rels/.rels", options)
+            .expect("oversized DOCX relationships");
+        writer
+            .write_all(br#"<Relationships><Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#)
+            .expect("oversized DOCX relationships body");
+        writer
+            .start_file("word/document.xml", options)
+            .expect("oversized DOCX document");
+        writer
+            .write_all(br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>bounded</w:t></w:r></w:p></w:body></w:document>"#)
+            .expect("oversized DOCX document body");
+        writer
+            .start_file("word/oversized.dat", options)
+            .expect("oversized DOCX bounded entry");
+        let chunk = vec![0_u8; 1024 * 1024];
+        for _ in 0..51 {
+            writer
+                .write_all(&chunk)
+                .expect("oversized DOCX compressed entry body");
+        }
+        writer.finish().expect("finish oversized DOCX fixture");
+    }
+    source.into_inner()
+}
+
 fn minimal_mp4_v1() -> Vec<u8> {
     [
         mp4_box_v1(b"ftyp", b"isom\0\0\0\0isom"),
@@ -467,4 +520,14 @@ fn managed_format_fixtures_cross_the_exact_runtime_renderer_dispatch() {
         assert_eq!(rendered.content_type, format.content_type);
         assert_eq!(rendered.truncated, format.truncated);
     }
+}
+
+#[test]
+fn oversized_docx_fixture_is_small_but_exceeds_the_bounded_expansion() {
+    let source = oversized_docx_v1();
+    assert!(source.len() < 1024 * 1024);
+    let error = hermes_attachment_preview_runtime::renderer::AttachmentPreviewRendererRuntimeV1
+        .render(&source)
+        .expect_err("oversized DOCX must fail closed");
+    assert_eq!(format!("{error:?}"), "SourceTooLarge");
 }

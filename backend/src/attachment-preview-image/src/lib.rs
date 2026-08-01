@@ -33,6 +33,11 @@ impl AttachmentPreviewRendererV1 for AttachmentPreviewImageRendererV1 {
         ) {
             return Err(AttachmentPreviewRendererErrorV1::Unsupported);
         }
+        if request.source_format == AttachmentPreviewSourceFormatV1::Png
+            && !has_exact_png_boundary_v1(request.source_bytes)
+        {
+            return Err(AttachmentPreviewRendererErrorV1::InvalidContent);
+        }
         let reader = ImageReader::new(Cursor::new(request.source_bytes))
             .with_guessed_format()
             .map_err(|_| AttachmentPreviewRendererErrorV1::InvalidContent)?;
@@ -66,6 +71,36 @@ impl AttachmentPreviewRendererV1 for AttachmentPreviewImageRendererV1 {
             truncated: false,
         })
     }
+}
+
+fn has_exact_png_boundary_v1(source: &[u8]) -> bool {
+    if !source.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return false;
+    }
+    let mut offset = 8_usize;
+    while let Some(header_end) = offset.checked_add(8) {
+        let Some(header) = source.get(offset..header_end) else {
+            return false;
+        };
+        let length = u32::from_be_bytes(header[..4].try_into().expect("exact PNG length"));
+        let Ok(length) = usize::try_from(length) else {
+            return false;
+        };
+        let Some(chunk_end) = header_end
+            .checked_add(length)
+            .and_then(|value| value.checked_add(4))
+        else {
+            return false;
+        };
+        if chunk_end > source.len() {
+            return false;
+        }
+        if &header[4..] == b"IEND" {
+            return length == 0 && chunk_end == source.len();
+        }
+        offset = chunk_end;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -109,6 +144,19 @@ mod tests {
                 source_bytes: b"%PDF-1.7",
             }),
             Err(AttachmentPreviewRendererErrorV1::Unsupported)
+        );
+    }
+
+    #[test]
+    fn png_polyglot_with_trailing_payload_fails_closed() {
+        let mut source = source_png();
+        source.extend_from_slice(b"%PDF-1.7\npolyglot");
+        assert_eq!(
+            AttachmentPreviewImageRendererV1.render(AttachmentPreviewRenderRequestV1 {
+                source_format: AttachmentPreviewSourceFormatV1::Png,
+                source_bytes: &source,
+            }),
+            Err(AttachmentPreviewRendererErrorV1::InvalidContent)
         );
     }
 }

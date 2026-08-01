@@ -29,12 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_failure_boundaries_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_stale_outage_input_boundaries_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
+  assert.match(adr, /Следующий managed gate[\s\S]*bounded DOCX expansion rejection/);
   assert.match(adr, /Browser evidence,[\s\S]*privacy-negative матрица ещё не реализованы/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
@@ -272,6 +273,8 @@ test('safe text image and media adapters are three isolated byte-only units', as
   assert.match(text, /ATTACHMENT_PREVIEW_MAX_TEXT_BYTES_V1/);
   assert.match(image, /write_to\(&mut output, ImageFormat::Png\)/);
   assert.match(image, /ATTACHMENT_PREVIEW_MAX_IMAGE_PIXELS_V1/);
+  assert.match(image, /has_exact_png_boundary_v1/);
+  assert.match(image, /png_polyglot_with_trailing_payload_fails_closed/);
   assert.match(media, /validate_mp3_v1/);
   assert.match(media, /validate_mp4_v1/);
   assert.match(media, /allowed_mp4_brand/);
@@ -296,6 +299,7 @@ test('PDF adapter rasterizes one bounded page without native or owner authority'
   assert.match(source, /MAX_RENDER_DIMENSION_V1/);
   assert.match(source, /ATTACHMENT_PREVIEW_MAX_IMAGE_PIXELS_V1/);
   assert.match(source, /FORBIDDEN_ACTIVE_MARKERS_V1/);
+  assert.match(source, /oversized_source_fails_before_pdf_parsing/);
   assert.match(source, /catch_unwind/);
   assert.match(source, /AttachmentPreviewKindV1::Document/);
   assert.doesNotMatch(
@@ -471,10 +475,18 @@ test('Preview has an authenticated exact signed managed admission gate', async (
   assert.match(flow, /set_authenticated_nats_container_running\(true\)/);
   assert.match(flow, /authenticate_secondary_gateway_router/);
   assert.match(flow, /StatusCode::NOT_FOUND/);
+  assert.match(flow, /stale renderer identity/);
+  assert.match(flow, /stale state revision/);
+  assert.match(flow, /expired ticket/);
+  assert.match(flow, /stale runtime generation/);
+  assert.match(flow, /Blob outage/);
+  assert.match(flow, /Vault outage/);
   assert.match(formats, /preview-bad-pdf/);
   assert.match(formats, /preview-active-pdf/);
   assert.match(formats, /preview-bad-png/);
   assert.match(formats, /preview-unsupported/);
+  assert.match(formats, /preview-polyglot/);
+  assert.match(formats, /preview-oversized/);
   assert.match(formats, /assert_private_source_absent_v1/);
   assert.match(persistence, /attachment_preview_custody_outbox/);
   assert.match(persistence, /attachment_preview_artifacts/);

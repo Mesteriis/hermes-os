@@ -3,12 +3,16 @@
 use super::*;
 use super::{
     attachment_preview_gateway_fixture::{
-        attachment_preview_gateway_v1, get_attachment_preview_v1,
+        AttachmentPreviewGateway, attachment_preview_gateway_v1, get_attachment_preview_v1,
         post_attachment_preview_proto_status_v1, post_attachment_preview_proto_v1,
         read_attachment_preview_blob_v1, read_terminal_attachment_preview_sse_event_v1,
         wait_for_ready_attachment_preview_v1,
     },
     attachment_preview_managed_formats::assert_managed_attachment_preview_formats_v1,
+    attachment_preview_persistence_fixture::{
+        expire_attachment_preview_ticket_v1, replace_attachment_preview_renderer_identity_v1,
+        replace_attachment_preview_state_revision_v1,
+    },
     attachment_security_blob_fixture::AttachmentSecurityBlobSourceFixture,
     attachment_security_clamav_fixture::AttachmentSecurityClamAvFixture,
     attachment_security_event_flow::{
@@ -317,6 +321,104 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         &cookie,
     );
 
+    let current_renderer_identity =
+        hermes_attachment_preview_runtime::attachment_preview_renderer_identity_v1();
+    let stale_renderer_identity = [0x79; 32];
+    assert_ne!(current_renderer_identity, stale_renderer_identity);
+    let renderer_ticket =
+        issue_attachment_preview_ticket_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    replace_attachment_preview_renderer_identity_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        current_renderer_identity,
+        stale_renderer_identity,
+    );
+    assert_failed_attachment_preview_blob_read_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        renderer_ticket,
+        StatusCode::NOT_FOUND,
+        "stale renderer identity",
+    );
+    replace_attachment_preview_renderer_identity_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        stale_renderer_identity,
+        current_renderer_identity,
+    );
+
+    let stale_revision_ticket =
+        issue_attachment_preview_ticket_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    let stale_revision = ready
+        .state_revision
+        .checked_add(1)
+        .expect("bounded stale Preview revision");
+    replace_attachment_preview_state_revision_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        ready.state_revision,
+        stale_revision,
+    );
+    assert_failed_attachment_preview_blob_read_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        stale_revision_ticket,
+        StatusCode::NOT_FOUND,
+        "stale state revision",
+    );
+    replace_attachment_preview_state_revision_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        stale_revision,
+        ready.state_revision,
+    );
+
+    let expired_ticket =
+        issue_attachment_preview_ticket_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    expire_attachment_preview_ticket_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &accepted.run_id,
+        &expired_ticket,
+    );
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    assert_failed_attachment_preview_blob_read_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        expired_ticket,
+        StatusCode::NOT_FOUND,
+        "expired ticket",
+    );
+
+    let stale_generation_ticket =
+        issue_attachment_preview_ticket_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    let blob_outage_ticket =
+        issue_attachment_preview_ticket_v1(&router, &gateway_runtime, &cookie, &accepted.run_id);
+    supervisor
+        .stop(blob_binding::BLOB_PROCESS_ID)
+        .expect("stop Blob for Preview client-blob outage");
+    assert_failed_attachment_preview_blob_read_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        blob_outage_ticket,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Blob outage",
+    );
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("restart signed Blob runtime after Preview outage"),
+        2
+    );
+
     assert!(
         realtime
             .revoke_owner(ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1)
@@ -351,6 +453,54 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
     );
     assert_eq!(replayed_event.cursor, first_cursor);
     assert_eq!(replayed_event.payload, first_event.payload);
+    assert_failed_attachment_preview_blob_read_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        stale_generation_ticket,
+        StatusCode::NOT_FOUND,
+        "stale runtime generation",
+    );
+
+    let post_restart = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentPreviewRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0xA4; 16],
+            attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
+        },
+    );
+    assert_eq!(
+        post_restart.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    wait_for_ready_attachment_preview_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        &post_restart.run_id,
+        "post-restart Vault outage",
+    );
+    let vault_outage_ticket = issue_attachment_preview_ticket_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        &post_restart.run_id,
+    );
+    supervisor
+        .stop("vault")
+        .expect("stop Vault for Preview client-blob outage");
+    assert_failed_attachment_preview_blob_read_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        vault_outage_ticket,
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Vault outage",
+    );
 
     let unauthenticated = post_attachment_preview_proto_status_v1(
         &restarted_router,
@@ -370,6 +520,48 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn issue_attachment_preview_ticket_v1(
+    router: &AttachmentPreviewGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) -> Vec<u8> {
+    let ticket = post_attachment_preview_proto_v1::<_, IssueAttachmentPreviewReadResponseV1>(
+        router,
+        runtime,
+        cookie,
+        ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1,
+        IssueAttachmentPreviewReadRequestV1 {
+            protocol_major: 1,
+            run_id: run_id.to_vec(),
+        },
+    );
+    assert_eq!(
+        ticket.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    assert_eq!(ticket.opaque_read_ticket.len(), 32);
+    ticket.opaque_read_ticket
+}
+
+fn assert_failed_attachment_preview_blob_read_v1(
+    router: &AttachmentPreviewGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    ticket: Vec<u8>,
+    expected_status: StatusCode,
+    scenario: &str,
+) {
+    let (status, body) = read_attachment_preview_blob_v1(router, runtime, Some(cookie), ticket);
+    assert_eq!(status, expected_status, "{scenario}");
+    assert!(
+        !body
+            .windows(PRIVATE_SOURCE.len())
+            .any(|window| window == PRIVATE_SOURCE),
+        "Preview source bytes escaped through failed client-blob response: {scenario}"
+    );
 }
 
 fn wait_for_attachment_preview_evidence_v1() {

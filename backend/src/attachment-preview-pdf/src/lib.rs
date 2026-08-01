@@ -199,6 +199,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn oversized_source_fails_before_pdf_parsing() {
+        let mut source = vec![b' '; MAX_PDF_SOURCE_BYTES_V1 + 1];
+        source[..8].copy_from_slice(b"%PDF-1.7");
+        assert_eq!(
+            AttachmentPreviewPdfRendererV1.render(AttachmentPreviewRenderRequestV1 {
+                source_format: AttachmentPreviewSourceFormatV1::Pdf,
+                source_bytes: &source,
+            }),
+            Err(AttachmentPreviewRendererErrorV1::SourceTooLarge)
+        );
+    }
+
     fn minimal_pdf_v1() -> Vec<u8> {
         let mut bytes = b"%PDF-1.4\n".to_vec();
         let mut offsets = Vec::new();

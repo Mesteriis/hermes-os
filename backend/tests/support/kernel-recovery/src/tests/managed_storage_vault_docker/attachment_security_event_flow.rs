@@ -416,7 +416,7 @@ fn assert_attachment_security_verdict_flow(
             let context = async_nats::jetstream::new(client);
             publish_exact(&context, ATTACHMENT_SCAN_CANDIDATE_SUBJECT, &candidate).await;
             let verdict_event =
-                match tokio::time::timeout(Duration::from_secs(15), verdicts.next()).await {
+                match tokio::time::timeout(Duration::from_secs(30), verdicts.next()).await {
                     Ok(Some(verdict)) => verdict,
                     outcome => {
                         let diagnostics = attachment_security_persistence_diagnostics().await;
@@ -455,7 +455,7 @@ fn assert_attachment_security_verdict_flow(
             );
             assert_eq!(verdict.verdict, expectation.verdict as i32);
             assert_eq!(verdict.evidence_id.len(), 16);
-            let state_event = tokio::time::timeout(Duration::from_secs(15), states.next())
+            let state_event = tokio::time::timeout(Duration::from_secs(30), states.next())
                 .await
                 .expect("Communications attachment state timeout")
                 .expect("Communications attachment state");

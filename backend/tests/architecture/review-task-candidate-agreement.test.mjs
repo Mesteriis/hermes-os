@@ -90,7 +90,7 @@ test('Review task-candidate is an exact domain capability, not an attention faca
     ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_failure_boundaries_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_stale_outage_input_boundaries_v1');
   for (const unit of [
     'hermes-review-task-candidate-api',
     'hermes-review-task-candidate-core',

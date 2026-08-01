@@ -52,8 +52,13 @@ partial large frame не превращается в `Broken pipe`; fenced Previ
 доказывает NATS outage/replay без duplicate custody/render/artifact, exact
 request replay и operation-id conflict, actor-fenced one-use Blob tickets,
 malformed PDF/PNG, active PDF и unsupported binary fail-closed outcomes, а
-также отсутствие source bytes в status/SSE carriers. Browser evidence,
-stale-fence/polyglot/oversized matrix, Blob/Vault/renderer outages и полная
+также отсутствие source bytes в status/SSE carriers. Следующий managed gate
+доказывает stale renderer/state revision/runtime generation, expired/replayed/
+wrong-actor ticket fencing, Blob и Vault outages, strict PNG trailing-payload
+polyglot rejection и bounded DOCX expansion rejection. Общий Blob data client
+получил bounded 30-second local-frame timeout, а loopback ClamAV conformance
+явно переводит inherited accepted stream в blocking mode. Browser evidence,
+stale custody proof/grant epoch/source-hash, unavailable renderer и полная
 log/error/health/telemetry privacy-negative матрица ещё не реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
