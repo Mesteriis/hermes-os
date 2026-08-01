@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_persistence_v1",
+    "currentSlice": "attachment_preview_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1362,6 +1362,12 @@
         "role": "workflow",
         "owner": "attachment_preview",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-attachment-preview-runtime",
+        "role": "workflow",
+        "owner": "attachment_preview",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2552,6 +2558,26 @@
           "name": "hermes-storage-protocol",
           "kind": "normal"
         }
+      ],
+      "hermes-attachment-preview-runtime": [
+        { "name": "hermes-attachment-preview-api", "kind": "normal" },
+        { "name": "hermes-attachment-preview-core", "kind": "normal" },
+        { "name": "hermes-attachment-preview-docx", "kind": "normal" },
+        { "name": "hermes-attachment-preview-image", "kind": "normal" },
+        { "name": "hermes-attachment-preview-ingress", "kind": "normal" },
+        { "name": "hermes-attachment-preview-media", "kind": "normal" },
+        { "name": "hermes-attachment-preview-pdf", "kind": "normal" },
+        { "name": "hermes-attachment-preview-persistence", "kind": "normal" },
+        { "name": "hermes-attachment-preview-renderer-contract", "kind": "normal" },
+        { "name": "hermes-attachment-preview-text", "kind": "normal" },
+        { "name": "hermes-attachment-security-contract", "kind": "normal" },
+        { "name": "hermes-blob-client", "kind": "normal" },
+        { "name": "hermes-communications-attachment-contract", "kind": "normal" },
+        { "name": "hermes-events-jetstream", "kind": "normal" },
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "hermes-storage-vault", "kind": "normal" }
       ],
       "hermes-attachment-text-extraction-plain": [
         {
@@ -7259,6 +7285,14 @@
           ]
         }
       ],
+      "hermes-attachment-preview-runtime": [
+        { "name": "getrandom", "kind": "normal", "source": "crates_io", "version": "=0.4.3", "defaultFeatures": false, "features": [] },
+        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
+        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+      ],
       "hermes-attachment-text-extraction-plain": [],
       "hermes-attachment-text-extraction-pdf": [
         {
@@ -9695,6 +9729,10 @@
       },
       "hermes-attachment-preview-persistence": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-runtime": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-attachment-text-extraction-plain": {

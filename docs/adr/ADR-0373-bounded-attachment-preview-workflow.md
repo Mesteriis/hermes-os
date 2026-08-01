@@ -4,7 +4,7 @@
 
 Дата: 2026-08-01
 
-Состояние реализации: staged persistence slice. Clean-room owner boundary,
+Состояние реализации: staged managed runtime slice. Clean-room owner boundary,
 client/private-content boundary, event-only custody, renderer topology и phase
 gate определены. Отдельные `hermes-attachment-preview-api`, `-ingress`, `-core`
 и `-renderer-contract` admitted и реализуют versioned Start/Get/IssueRead/
@@ -23,8 +23,15 @@ DejaVu Sans с pinned digest и включённой лицензией. Pure co
 Отдельный `hermes-attachment-preview-persistence` реализует owner-local
 PostgreSQL request replay, exact inbox/outbox, order-independent evidence join,
 fenced jobs, derived artifact metadata, replayable realtime и hashed one-use
-actor-bound read tickets без private content или ticket plaintext. Managed
-runtime, assembly и live evidence ещё не реализованы. Inventory gate
+actor-bound read tickets без private content или ticket plaintext. Отдельный
+`hermes-attachment-preview-runtime` теперь является admitted managed workflow
+binary: он аутентифицирует exact descriptor/settings, получает fenced NATS,
+Storage, Vault и Blob grants, owner-locally обрабатывает request/query/
+client_blob, custody inbox/outbox, magic-only renderer dispatch, derived Blob
+commit и metadata-only replayable realtime. Runtime не импортирует
+Communications или Attachment Security implementation, не содержит SQL и не
+возвращает private bytes через query/SSE. Assembly и managed/live/browser
+evidence ещё не реализованы. Inventory gate
 `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

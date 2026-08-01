@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_runtime_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
-  assert.match(adr, /Состояние реализации: staged persistence slice/);
-  assert.match(adr, /Managed\s+runtime, assembly/);
+  assert.match(adr, /Состояние реализации: staged managed runtime slice/);
+  assert.match(adr, /Assembly и managed\/live\/browser/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -347,5 +347,41 @@ test('DOCX adapter rebuilds a bounded fixed-font card without external resources
   assert.doesNotMatch(
     source,
     /Command::|TcpStream|File::|filesystem|source_path|provider|account_id|filename|content_type_hint|data_url|url/,
+  );
+});
+
+test('managed Preview runtime composes public contracts without owning assembly or another owner implementation', async () => {
+  const [manifest, entrypoint, admission, runtime, clientPort, realtime, renderer, blob] = await Promise.all([
+    readFile(new URL('src/attachment-preview-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/renderer.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-preview-runtime/src/blob.rs', BACKEND_ROOT), 'utf8'),
+  ]);
+  const source = `${entrypoint}\n${admission}\n${runtime}\n${clientPort}\n${realtime}\n${renderer}\n${blob}`;
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "attachment_preview"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(manifest, /\[\[bin\]\]/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-(?:communications-domain|attachment-security-engine|attachment-preview-assembly|attachment-text-extraction|attachment-archive-inspection)/,
+  );
+  assert.match(admission, /ClientBlob/);
+  assert.match(admission, /ATTACHMENT_PREVIEW_MAX_VIDEO_BYTES_V1/);
+  assert.match(runtime, /receive_runtime_pull_delivery/);
+  assert.match(runtime, /dispatch_attachment_preview_client_request_v1/);
+  assert.match(runtime, /attachment_preview_renderer_identity_v1/);
+  assert.match(clientPort, /ModuleClientBlobAuthorizationV1/);
+  assert.match(clientPort, /redeem_read_ticket/);
+  assert.match(realtime, /PublishClientRealtime/);
+  assert.match(renderer, /detect_attachment_preview_source_format_v1/);
+  assert.match(blob, /hermes\.attachment-preview\.derived-blob\.v1/);
+  assert.doesNotMatch(
+    source,
+    /sqlx::|TcpListener|Command::|data_url|ticket_plaintext|provider_id|account_id|filename|content_type_hint/,
   );
 });

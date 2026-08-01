@@ -2057,6 +2057,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-preview-runtime"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "hermes-attachment-preview-api",
+ "hermes-attachment-preview-core",
+ "hermes-attachment-preview-docx",
+ "hermes-attachment-preview-image",
+ "hermes-attachment-preview-ingress",
+ "hermes-attachment-preview-media",
+ "hermes-attachment-preview-pdf",
+ "hermes-attachment-preview-persistence",
+ "hermes-attachment-preview-renderer-contract",
+ "hermes-attachment-preview-text",
+ "hermes-attachment-security-contract",
+ "hermes-blob-client",
+ "hermes-communications-attachment-contract",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-attachment-preview-text"
 version = "0.1.0"
 dependencies = [

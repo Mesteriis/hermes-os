@@ -6,6 +6,7 @@ pub const ATTACHMENT_PREVIEW_MODULE_ID_V1: &str = "hermes-attachment-preview-run
 pub const ATTACHMENT_PREVIEW_COMMAND_CONTRACT_NAME_V1: &str = "attachment_preview.command";
 pub const ATTACHMENT_PREVIEW_QUERY_CONTRACT_NAME_V1: &str = "attachment_preview.query";
 pub const ATTACHMENT_PREVIEW_TICKET_CONTRACT_NAME_V1: &str = "attachment_preview.ticket";
+pub const ATTACHMENT_PREVIEW_REALTIME_CONTRACT_NAME_V1: &str = "attachment_preview.realtime";
 pub const ATTACHMENT_PREVIEW_READ_CONTRACT_NAME_V1: &str = "attachment_preview.read";
 pub const ATTACHMENT_PREVIEW_CONTRACT_MAJOR_V1: u32 = 1;
 pub const ATTACHMENT_PREVIEW_CONTRACT_REVISION_V1: u32 = 1;
@@ -16,6 +17,7 @@ pub const ATTACHMENT_PREVIEW_QUERY_CONNECT_PATH_V1: &str =
 pub const ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1: &str =
     "/hermes.attachment_preview.v1.AttachmentPreviewTicketService/IssueRead";
 pub const ATTACHMENT_PREVIEW_READ_BLOB_PATH_V1: &str = "/api/blobs/attachment-preview/v1/artifact";
+pub const ATTACHMENT_PREVIEW_REALTIME_EVENT_KIND_V1: &str = "attachment_preview.status_changed.v1";
 pub const ATTACHMENT_PREVIEW_READ_TICKET_BYTES_V1: usize = 32;
 pub const ATTACHMENT_PREVIEW_READ_TICKET_TTL_SECONDS_V1: i64 = 30;
 pub const ATTACHMENT_PREVIEW_MAX_TEXT_BYTES_V1: u64 = 64 * 1024;
