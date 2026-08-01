@@ -33,6 +33,8 @@ test('Review note-candidate is a distinct domain capability without Task or Know
     promotionResult,
     clientRealtime,
     managedRuntime,
+    assemblyManifest,
+    assembly,
   ] = await Promise.all([
     readFile(
       new URL(
@@ -84,16 +86,19 @@ test('Review note-candidate is a distinct domain capability without Task or Know
     readFile(new URL('src/review-note-candidate-runtime/src/promotion_result.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/review-note-candidate-runtime/src/client_realtime.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/review-note-candidate-runtime/src/managed_runtime.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/review-note-candidate-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_note_candidate_managed_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'review_note_candidate_assembly_v1');
   for (const unit of [
     'hermes-review-note-candidate-api',
     'hermes-review-note-candidate-core',
     'hermes-review-note-candidate-persistence',
     'hermes-review-note-candidate-promotion-api',
     'hermes-review-note-candidate-runtime',
+    'hermes-review-note-candidate-assembly',
   ]) {
     assert.match(workspace, new RegExp(`"src/${unit.replace('hermes-', '')}"`));
     assert.match(adr, new RegExp(`\\b${unit}\\b`));
@@ -115,6 +120,9 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   assert.match(runtimeManifest, /role = "domain"/);
   assert.match(runtimeManifest, /owner = "review"/);
   assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(assemblyManifest, /role = "domain"/);
+  assert.match(assemblyManifest, /owner = "review"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
 
   assert.match(api, /review\.note-candidate\.submission\.v1/);
   assert.match(api, /review\.note-candidate\.promotion\.v1/);
@@ -200,5 +208,13 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   assert.doesNotMatch(
     `${runtimeManifest}\n${admission}\n${submission}\n${blobMaterialization}\n${promotionResult}\n${clientRealtime}\n${managedRuntime}`,
     /hermes_(communications|tasks|knowledge)|hermes-(communications|tasks|knowledge)|ollama|provider_id|account_id/,
+  );
+  assert.match(assembly, /materialize_review_note_candidate_release_assembly_v1/);
+  assert.match(assembly, /REVIEW_NOTE_CANDIDATE_RUNTIME_ARTIFACT_ID_V1/);
+  assert.match(assembly, /REVIEW_NOTE_CANDIDATE_STORAGE_ARTIFACT_ID_V1/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.doesNotMatch(
+    assembly,
+    /hermes_(communications|tasks|knowledge)|hermes-(communications|tasks|knowledge)|signing[_-]?key|private[_-]?key|ollama/,
   );
 });

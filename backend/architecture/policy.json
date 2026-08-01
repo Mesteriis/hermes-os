@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_note_candidate_managed_runtime_v1",
+    "currentSlice": "review_note_candidate_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1194,6 +1194,12 @@
         "role": "domain",
         "owner": "review",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-review-note-candidate-assembly",
+        "role": "domain",
+        "owner": "review",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -3555,6 +3561,12 @@
         { "name": "hermes-runtime-protocol", "kind": "normal" },
         { "name": "hermes-storage-protocol", "kind": "normal" },
         { "name": "hermes-storage-vault", "kind": "normal" }
+      ],
+      "hermes-review-note-candidate-assembly": [
+        { "name": "hermes-review-note-candidate-persistence", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-runtime", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -3768,6 +3780,11 @@
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
         { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-review-note-candidate-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
       "hermes-events-protocol": [
         {
@@ -8967,6 +8984,10 @@
         "customBuildAllowed": true
       },
       "hermes-review-note-candidate-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-review-note-candidate-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       },

@@ -63,6 +63,7 @@ members = [
   "src/review-note-candidate-persistence",
   "src/review-task-candidate-runtime",
   "src/review-note-candidate-runtime",
+  "src/review-note-candidate-assembly",
   "src/review-task-candidate-assembly",
   "src/tasks-command-api",
   "src/tasks-core",

@@ -1,0 +1,26 @@
+[package]
+name = "hermes-review-note-candidate-assembly"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hermes-review-note-candidate-assembly"
+path = "src/main.rs"
+
+[package.metadata.hermes]
+role = "domain"
+owner = "review"
+surface = "assembly"
+
+[dependencies]
+hermes-review-note-candidate-persistence = { path = "../review-note-candidate-persistence" }
+hermes-review-note-candidate-runtime = { path = "../review-note-candidate-runtime" }
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+prost = "=0.14.4"
+serde = { version = "=1.0.228", default-features = false, features = ["derive", "std"] }
+serde_json = "=1.0.150"
