@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'review_note_candidate_assembly_v1',
+    'reviewed_note_candidate_promotion_assembly_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'knowledge', 'review', 'tasks'],
@@ -74,6 +74,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'communication_task_candidate_extraction',
       'communication_translation',
       'communications_export',
+      'reviewed_note_candidate_promotion',
       'reviewed_task_candidate_promotion',
     ],
     engines: ['ai', 'attachment_archive_inspection', 'attachment_security'],
@@ -224,6 +225,13 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'review.task-candidate.promotion.v1',
       'review.task-candidate.storage.v1',
       'review.task-candidate.submission.v1',
+      'reviewed-note-candidate-promotion.source.blob.v1',
+      'reviewed_note_candidate_promotion.knowledge-command.publish.v1',
+      'reviewed_note_candidate_promotion.knowledge-created.consume.v1',
+      'reviewed_note_candidate_promotion.knowledge-rejected.consume.v1',
+      'reviewed_note_candidate_promotion.review-approved.consume.v1',
+      'reviewed_note_candidate_promotion.review-result.publish.v1',
+      'reviewed_note_candidate_promotion.storage.v1',
       'reviewed_task_candidate_promotion.review-approved.consume.v1',
       'reviewed_task_candidate_promotion.review-result.publish.v1',
       'reviewed_task_candidate_promotion.storage.v1',

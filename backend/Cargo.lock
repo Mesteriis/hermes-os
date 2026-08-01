@@ -3806,6 +3806,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-reviewed-note-candidate-promotion-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-reviewed-note-candidate-promotion-persistence",
+ "hermes-reviewed-note-candidate-promotion-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hermes-reviewed-note-candidate-promotion-core"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-reviewed-note-candidate-promotion-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-reviewed-note-candidate-promotion-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-reviewed-note-candidate-promotion-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-knowledge-command-api",
+ "hermes-review-note-candidate-api",
+ "hermes-review-note-candidate-promotion-api",
+ "hermes-reviewed-note-candidate-promotion-core",
+ "hermes-reviewed-note-candidate-promotion-persistence",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-reviewed-task-candidate-promotion-assembly"
 version = "0.1.0"
 dependencies = [

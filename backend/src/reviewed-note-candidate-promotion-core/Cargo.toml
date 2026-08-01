@@ -1,0 +1,16 @@
+[package]
+name = "hermes-reviewed-note-candidate-promotion-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "workflow"
+owner = "reviewed_note_candidate_promotion"
+surface = "implementation"
+
+[dependencies]
+sha2 = { version = "=0.11.0", default-features = false }

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "review_note_candidate_assembly_v1",
+    "currentSlice": "reviewed_note_candidate_promotion_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1199,6 +1199,30 @@
         "name": "hermes-review-note-candidate-assembly",
         "role": "domain",
         "owner": "review",
+        "surface": "assembly"
+      },
+      {
+        "name": "hermes-reviewed-note-candidate-promotion-core",
+        "role": "workflow",
+        "owner": "reviewed_note_candidate_promotion",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-reviewed-note-candidate-promotion-persistence",
+        "role": "workflow",
+        "owner": "reviewed_note_candidate_promotion",
+        "surface": "persistence"
+      },
+      {
+        "name": "hermes-reviewed-note-candidate-promotion-runtime",
+        "role": "workflow",
+        "owner": "reviewed_note_candidate_promotion",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-reviewed-note-candidate-promotion-assembly",
+        "role": "workflow",
+        "owner": "reviewed_note_candidate_promotion",
         "surface": "assembly"
       }
     ],
@@ -3567,6 +3591,31 @@
         { "name": "hermes-review-note-candidate-runtime", "kind": "normal" },
         { "name": "hermes-runtime-protocol", "kind": "normal" },
         { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
+      "hermes-reviewed-note-candidate-promotion-core": [],
+      "hermes-reviewed-note-candidate-promotion-persistence": [
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-reviewed-note-candidate-promotion-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
+      "hermes-reviewed-note-candidate-promotion-runtime": [
+        { "name": "hermes-blob-client", "kind": "normal" },
+        { "name": "hermes-events-jetstream", "kind": "normal" },
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-knowledge-command-api", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-api", "kind": "normal" },
+        { "name": "hermes-review-note-candidate-promotion-api", "kind": "normal" },
+        { "name": "hermes-reviewed-note-candidate-promotion-core", "kind": "normal" },
+        { "name": "hermes-reviewed-note-candidate-promotion-persistence", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" },
+        { "name": "hermes-storage-vault", "kind": "normal" }
+      ],
+      "hermes-reviewed-note-candidate-promotion-assembly": [
+        { "name": "hermes-reviewed-note-candidate-promotion-persistence", "kind": "normal" },
+        { "name": "hermes-reviewed-note-candidate-promotion-runtime", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
       ]
     },
     "thirdPartyDependencyAllowlist": {
@@ -3782,6 +3831,25 @@
         { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
       ],
       "hermes-review-note-candidate-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-reviewed-note-candidate-promotion-core": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-reviewed-note-candidate-promotion-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-reviewed-note-candidate-promotion-runtime": [
+        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
+        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+      ],
+      "hermes-reviewed-note-candidate-promotion-assembly": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
         { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
@@ -8475,6 +8543,10 @@
         "default": [],
         "conformance-test-support": []
       },
+      "hermes-reviewed-note-candidate-promotion-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-mail-api": {
         "default": [],
         "conformance-test-support": []
@@ -8991,6 +9063,22 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-reviewed-note-candidate-promotion-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-reviewed-note-candidate-promotion-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-reviewed-note-candidate-promotion-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-reviewed-note-candidate-promotion-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-ai-contracts": {
         "primaryKind": "lib",
         "customBuildAllowed": true
@@ -9317,6 +9405,7 @@
         "communication_task_candidate_extraction",
         "communication_translation",
         "communications_export",
+        "reviewed_note_candidate_promotion",
         "reviewed_task_candidate_promotion"
     ],
     "engines": [
@@ -9471,6 +9560,13 @@
         "review.task-candidate.promotion.v1",
         "review.task-candidate.storage.v1",
         "review.task-candidate.submission.v1",
+        "reviewed-note-candidate-promotion.source.blob.v1",
+        "reviewed_note_candidate_promotion.knowledge-command.publish.v1",
+        "reviewed_note_candidate_promotion.knowledge-created.consume.v1",
+        "reviewed_note_candidate_promotion.knowledge-rejected.consume.v1",
+        "reviewed_note_candidate_promotion.review-approved.consume.v1",
+        "reviewed_note_candidate_promotion.review-result.publish.v1",
+        "reviewed_note_candidate_promotion.storage.v1",
         "reviewed_task_candidate_promotion.review-approved.consume.v1",
         "reviewed_task_candidate_promotion.review-result.publish.v1",
         "reviewed_task_candidate_promotion.storage.v1",

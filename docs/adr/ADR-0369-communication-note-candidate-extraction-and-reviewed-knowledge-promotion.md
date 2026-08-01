@@ -10,8 +10,13 @@ PostgreSQL persistence unit с run state, request replay, inbox, outbox и
 replayable realtime, exact Review note-candidate API/core с immutable human
 decision и отдельным promotion lifecycle, owner-local Review
 persistence/managed runtime/assembly с Review-owned promotion-result contract,
-а также Knowledge command/core/persistence/runtime/assembly. Extraction
-runtime/assembly, promotion workflow и aggregate managed conformance ещё не реализованы; поэтому
+а также Knowledge command/core/persistence/runtime/assembly. Promotion workflow
+реализован отдельными core/persistence/runtime/assembly units: он резервирует
+approval до side effect, принимает только workflow-targeted Blob custody,
+явно декодирует и повторно кодирует bounded typed content в новый
+Knowledge-targeted Blob, атомарно сохраняет exact Knowledge command outbox и
+публикует terminal Knowledge result обратно в Review. Extraction
+runtime/assembly и aggregate managed conformance ещё не реализованы; поэтому
 `communication_note_candidate_extraction_v1` остаётся `planned`.
 
 Уточняет:
@@ -75,7 +80,22 @@ admission создаёт отдельную Knowledge-bound custody. Поэто�
 Knowledge получает собственные command API, core, persistence, runtime и
 assembly units. Только Knowledge создаёт durable verified note. Promotion
 между terminal Review decision и Knowledge command выполняет отдельный
-`reviewed_note_candidate_promotion` workflow.
+`reviewed_note_candidate_promotion` workflow:
+
+- `hermes-reviewed-note-candidate-promotion-core`;
+- `hermes-reviewed-note-candidate-promotion-persistence`;
+- `hermes-reviewed-note-candidate-promotion-runtime`;
+- `hermes-reviewed-note-candidate-promotion-assembly`.
+
+Workflow не переиспользует Review receipt как Knowledge receipt. Он получает
+custody как отдельный admitted owner, проверяет exact bytes/hash и закрытую
+typed schema, создаёт новый deterministic Knowledge-bound Blob и только после
+этого публикует Knowledge command. Невалидное source content не становится
+poison retry: workflow атомарно сохраняет terminal typed failure для Review и
+идемпотентно освобождает принятую custody. Временно недоступный Blob остаётся
+retryable и не подтверждает durable delivery. Assembly материализует exact
+unsigned artifacts, но не подписывает distribution и не получает launch
+authority.
 
 Ни один domain package не импортирует implementation, persistence или runtime
 другого domain. Cross-owner flow использует только typed command/event/result

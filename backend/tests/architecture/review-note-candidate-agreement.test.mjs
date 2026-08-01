@@ -91,7 +91,7 @@ test('Review note-candidate is a distinct domain capability without Task or Know
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'review_note_candidate_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'reviewed_note_candidate_promotion_assembly_v1');
   for (const unit of [
     'hermes-review-note-candidate-api',
     'hermes-review-note-candidate-core',

@@ -71,6 +71,10 @@ const MAIL_CARGO_FEATURES = {
     default: [],
     'conformance-test-support': [],
   },
+  'hermes-reviewed-note-candidate-promotion-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
   'hermes-mail-api': {
     default: [],
     'conformance-test-support': [],
@@ -103,7 +107,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'review_note_candidate_assembly_v1',
+    'reviewed_note_candidate_promotion_assembly_v1',
   );
   assert.deepEqual(inventory.domains, ['communications', 'knowledge', 'review', 'tasks']);
   assert.deepEqual(inventory.integrations, ['mail']);
@@ -118,6 +122,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     'communication_task_candidate_extraction',
     'communication_translation',
     'communications_export',
+    'reviewed_note_candidate_promotion',
     'reviewed_task_candidate_promotion',
   ]);
   assert.deepEqual(inventory.engines, [

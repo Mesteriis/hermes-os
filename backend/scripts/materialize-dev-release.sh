@@ -162,6 +162,12 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-review-task-candidate-assembly \
 	--package hermes-tasks-runtime \
 	--package hermes-tasks-assembly \
+	--package hermes-knowledge-runtime \
+	--package hermes-knowledge-assembly \
+	--package hermes-review-note-candidate-runtime \
+	--package hermes-review-note-candidate-assembly \
+	--package hermes-reviewed-note-candidate-promotion-runtime \
+	--package hermes-reviewed-note-candidate-promotion-assembly \
 	--package hermes-reviewed-task-candidate-promotion-runtime \
 	--package hermes-reviewed-task-candidate-promotion-assembly \
 	--package hermes-communication-delayed-delivery-runtime \
@@ -227,6 +233,9 @@ communication_recipient_suggestion_assembly="$assembly_root/communication-recipi
 communication_task_candidate_assembly="$assembly_root/communication-task-candidate"
 review_task_candidate_assembly="$assembly_root/review-task-candidate"
 tasks_assembly="$assembly_root/tasks"
+knowledge_assembly="$assembly_root/knowledge"
+review_note_candidate_assembly="$assembly_root/review-note-candidate"
+reviewed_note_candidate_promotion_assembly="$assembly_root/reviewed-note-candidate-promotion"
 reviewed_task_candidate_promotion_assembly="$assembly_root/reviewed-task-candidate-promotion"
 communication_delayed_delivery_assembly="$assembly_root/communication-delayed-delivery"
 attachment_security_assembly="$assembly_root/attachment-security"
@@ -288,6 +297,18 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$tasks_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-tasks-runtime"
+"$cargo_target_dir/debug/hermes-knowledge-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$knowledge_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-knowledge-runtime"
+"$cargo_target_dir/debug/hermes-review-note-candidate-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$review_note_candidate_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-review-note-candidate-runtime"
+"$cargo_target_dir/debug/hermes-reviewed-note-candidate-promotion-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$reviewed_note_candidate_promotion_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-reviewed-note-candidate-promotion-runtime"
 "$cargo_target_dir/debug/hermes-reviewed-task-candidate-promotion-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$reviewed_task_candidate_promotion_assembly" \
@@ -364,6 +385,9 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$communication_task_candidate_assembly/communication_task_candidate.release-artifacts.json" \
 	--artifact-fragment "$review_task_candidate_assembly/review-task-candidate.release-artifacts.json" \
 	--artifact-fragment "$tasks_assembly/tasks.release-artifacts.json" \
+	--artifact-fragment "$knowledge_assembly/knowledge.release-artifacts.json" \
+	--artifact-fragment "$review_note_candidate_assembly/review-note-candidate.release-artifacts.json" \
+	--artifact-fragment "$reviewed_note_candidate_promotion_assembly/reviewed_note_candidate_promotion.release-artifacts.json" \
 	--artifact-fragment "$reviewed_task_candidate_promotion_assembly/reviewed_task_candidate_promotion.release-artifacts.json" \
 	--artifact-fragment "$communication_delayed_delivery_assembly/communication_delayed_delivery.release-artifacts.json" \
 	--artifact-fragment "$attachment_security_assembly/attachment-security.release-artifacts.json" \
