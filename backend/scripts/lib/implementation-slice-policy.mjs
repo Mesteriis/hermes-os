@@ -5612,6 +5612,14 @@ const ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_TRANSLATION_AI_ENGINE_INVENTORY = {
+  ...ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY,
+  businessCapabilities: [
+    ...ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY.businessCapabilities,
+    'ai.attachment-translation.request.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -7389,6 +7397,17 @@ function expectedSlice(currentSlice) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_translation_ai_engine_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TRANSLATION_AI_ENGINE_INVENTORY,
       cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
       packages: ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,

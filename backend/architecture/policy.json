@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_translation_persistence_v1",
+    "currentSlice": "attachment_translation_ai_engine_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -10748,6 +10748,7 @@
         "attachment_security"
       ],
       "businessCapabilities": [
+        "ai.attachment-translation.request.v1",
         "ai.explanation.request.v1",
         "ai.provider.explain.v1",
         "ai.provider.translate.v1",

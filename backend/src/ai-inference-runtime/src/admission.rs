@@ -1,13 +1,15 @@
 use hermes_ai_contracts::{
-    AI_EXPLANATION_REQUEST_CAPABILITY_ID_V1, AI_INFERENCE_BLOB_CAPABILITY_ID_V1,
-    AI_INFERENCE_MODULE_ID_V1, AI_INFERENCE_REQUEST_CAPABILITY_ID_V1,
-    AI_MAX_PRIVATE_SOURCE_BYTES_V1, AI_OWNER_V1, AI_PROVIDER_EXPLANATION_CAPABILITY_ID_V1,
+    AI_ATTACHMENT_TRANSLATION_MAX_SOURCE_BYTES_V1,
+    AI_ATTACHMENT_TRANSLATION_REQUEST_CAPABILITY_ID_V1, AI_EXPLANATION_REQUEST_CAPABILITY_ID_V1,
+    AI_INFERENCE_BLOB_CAPABILITY_ID_V1, AI_INFERENCE_MODULE_ID_V1,
+    AI_INFERENCE_REQUEST_CAPABILITY_ID_V1, AI_OWNER_V1, AI_PROVIDER_EXPLANATION_CAPABILITY_ID_V1,
     AI_PROVIDER_GENERATION_CAPABILITY_ID_V1, AI_PROVIDER_SUMMARY_CAPABILITY_ID_V1,
     AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1, AI_SUMMARY_REQUEST_CAPABILITY_ID_V1,
     AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1, ai_provider_explanation_contract_reference_v1,
     ai_provider_reply_generation_contract_reference_v1,
     ai_provider_summary_generation_contract_reference_v1,
     ai_provider_translation_contract_reference_v1,
+    attachment_translation_inference_contract_reference_v1,
     communication_explanation_inference_contract_reference_v1,
     communication_reply_inference_contract_reference_v1,
     communication_summary_inference_contract_reference_v1,
@@ -26,7 +28,7 @@ pub const AI_INFERENCE_STORAGE_CAPABILITY_ID_V1: &str = "ai.inference.storage.v1
 pub const AI_INFERENCE_STORAGE_CONNECTION_BUDGET_V1: u32 = 4;
 pub const AI_INFERENCE_STORAGE_TIMEOUT_MILLIS_V1: u32 = 5_000;
 pub const AI_INFERENCE_BLOB_CUSTODY_SCOPE_ID_V1: &str = "ai.inference.source.v1";
-pub const AI_INFERENCE_BLOB_QUOTA_BYTES_V1: u64 = 4 * AI_MAX_PRIVATE_SOURCE_BYTES_V1;
+pub const AI_INFERENCE_BLOB_QUOTA_BYTES_V1: u64 = 4 * AI_ATTACHMENT_TRANSLATION_MAX_SOURCE_BYTES_V1;
 
 #[must_use]
 pub fn ai_inference_settings_schema_v1() -> SettingsSchemaV1 {
@@ -59,6 +61,7 @@ pub fn ai_inference_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
             minimum_revision: 1,
         }),
         capabilities: vec![
+            attachment_translation_request_capability(),
             explanation_request_capability(),
             blob_capability(),
             inference_request_capability(),
@@ -83,6 +86,21 @@ pub fn ai_inference_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
             max_cpu_millis: 1_000,
         }),
         display_name: "AI Inference".to_owned(),
+    }
+}
+
+fn attachment_translation_request_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: AI_ATTACHMENT_TRANSLATION_REQUEST_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::RequestRpc as i32,
+            contract: Some(attachment_translation_inference_contract_reference_v1()),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        ..Default::default()
     }
 }
 
@@ -243,6 +261,7 @@ mod tests {
                 .map(|capability| capability.capability_id.as_str())
                 .collect::<Vec<_>>(),
             [
+                AI_ATTACHMENT_TRANSLATION_REQUEST_CAPABILITY_ID_V1,
                 AI_EXPLANATION_REQUEST_CAPABILITY_ID_V1,
                 AI_INFERENCE_BLOB_CAPABILITY_ID_V1,
                 AI_INFERENCE_REQUEST_CAPABILITY_ID_V1,
@@ -256,19 +275,19 @@ mod tests {
             ]
         );
         assert_eq!(
-            descriptor.capabilities[5].dependencies,
+            descriptor.capabilities[6].dependencies,
             vec![ai_provider_reply_generation_contract_reference_v1()]
         );
         assert_eq!(
-            descriptor.capabilities[6].dependencies,
+            descriptor.capabilities[7].dependencies,
             vec![ai_provider_summary_generation_contract_reference_v1()]
         );
         assert_eq!(
-            descriptor.capabilities[7].dependencies,
+            descriptor.capabilities[8].dependencies,
             vec![ai_provider_translation_contract_reference_v1()]
         );
         assert_eq!(
-            descriptor.capabilities[4].dependencies,
+            descriptor.capabilities[5].dependencies,
             vec![ai_provider_explanation_contract_reference_v1()]
         );
     }

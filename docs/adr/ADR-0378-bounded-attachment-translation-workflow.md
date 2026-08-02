@@ -5,13 +5,16 @@
 Дата: 2026-08-02
 
 Состояние реализации: частично реализовано. Phase gate
-`attachment_translation_persistence_v1` закрывает четыре production units:
+`attachment_translation_ai_engine_v1` закрывает четыре workflow production units:
 generated private-content-free client API, exact durable source ingress, pure
 lifecycle core и owner-local PostgreSQL persistence. Persistence атомарно
 владеет idempotency, inbox/outbox, recovery и realtime, а SQL хранит только
-authority receipts и result metadata без source/translated text. Runtime,
-source producer, AI use-case extension, assembly и managed/live evidence ещё
-отсутствуют, поэтому `attachment_translation_v1` остаётся `planned`.
+authority receipts и result metadata без source/translated text. Кроме них AI
+Engine получил distinct `AttachmentTranslationInferenceRequestV1`, отдельный
+use-case receipt, owner-local additive persistence и worker, переиспользующий
+только нижний `ai.provider.translate.v1`. Workflow runtime, source producer,
+assembly и managed/live evidence ещё отсутствуют, поэтому
+`attachment_translation_v1` остаётся `planned`.
 
 Уточняет:
 
@@ -230,6 +233,13 @@ bundle, operation fingerprint, commit-before-Ack inbox, exact outbox bytes,
 recoverable non-terminal runs и replayable realtime sequence. Он не вводит
 runtime, AI provider или cross-owner SQL и также не меняет состояние полного
 inventory gate.
+
+Phase gate `attachment_translation_ai_engine_v1` добавляет backward-compatible
+revision общего AI contract, но не добавляет Attachment Translation behavior в
+Communication Translation. AI Engine предоставляет отдельную capability
+`ai.attachment-translation.request.v1`, отдельные core lifecycle/persistence
+records и worker. Только provider-facing translation operation остаётся общей;
+provider/model/endpoint/prompt не попадают в новый request.
 
 `attachment_translation_v1` становится `implemented` только атомарно после:
 

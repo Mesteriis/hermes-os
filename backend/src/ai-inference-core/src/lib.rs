@@ -1,9 +1,17 @@
 #![forbid(unsafe_code)]
 
+mod attachment_translation;
 mod explanation;
 mod summary;
 mod translation;
 
+pub use attachment_translation::{
+    AiAttachmentTranslationExecutionPlanV1, AiAttachmentTranslationRunV1,
+    accept_attachment_translation_inference_v1, attachment_translation_inference_execution_plan_v1,
+    attachment_translation_prompt_policy_sha256_v1, begin_attachment_translation_inference_v1,
+    build_attachment_translation_provider_input_v1, complete_attachment_translation_inference_v1,
+    reject_attachment_translation_inference_v1,
+};
 pub use explanation::{
     AI_EXPLANATION_SOURCE_BODY_EXCERPT_BYTES_V1, AiExplanationExecutionPlanV1, AiExplanationRunV1,
     accept_explanation_inference_v1, begin_explanation_inference_v1,

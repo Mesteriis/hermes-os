@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod admission;
+mod attachment_translation_worker;
 mod explanation_worker;
 mod managed_ports;
 mod managed_runtime;

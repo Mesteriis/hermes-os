@@ -716,7 +716,7 @@ test('Attachment Security remains one exact engine after Mail integration admiss
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_translation_persistence_v1',
+    'attachment_translation_ai_engine_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.engines, [
     'ai',

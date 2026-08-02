@@ -17,8 +17,8 @@ use hermes_ai_contracts::{
     },
 };
 use hermes_ai_inference_core::{
-    AiExplanationExecutionPlanV1, AiInferenceExecutionPlanV1, AiSummaryExecutionPlanV1,
-    AiTranslationExecutionPlanV1,
+    AiAttachmentTranslationExecutionPlanV1, AiExplanationExecutionPlanV1,
+    AiInferenceExecutionPlanV1, AiSummaryExecutionPlanV1, AiTranslationExecutionPlanV1,
 };
 use hermes_blob_client::{
     BlobDataClient, ManagedBlobCustodyTransferRequestV1, ManagedBlobSessionRequestV1,
@@ -76,6 +76,11 @@ pub(crate) trait AiInferenceExecutionPortsV1 {
     fn materialize_translation_source(
         &mut self,
         plan: &AiTranslationExecutionPlanV1,
+    ) -> Result<Zeroizing<Vec<u8>>, AiInferenceSourcePortErrorV1>;
+
+    fn materialize_attachment_translation_source(
+        &mut self,
+        plan: &AiAttachmentTranslationExecutionPlanV1,
     ) -> Result<Zeroizing<Vec<u8>>, AiInferenceSourcePortErrorV1>;
 
     fn translate(
@@ -230,6 +235,19 @@ impl AiInferenceExecutionPortsV1 for ManagedAiInferenceExecutionPortsV1<'_> {
     fn materialize_translation_source(
         &mut self,
         plan: &AiTranslationExecutionPlanV1,
+    ) -> Result<Zeroizing<Vec<u8>>, AiInferenceSourcePortErrorV1> {
+        materialize_source(
+            self.control_channel,
+            self.dispatcher,
+            &plan.source,
+            &plan.run_id,
+            &plan.request_digest,
+        )
+    }
+
+    fn materialize_attachment_translation_source(
+        &mut self,
+        plan: &AiAttachmentTranslationExecutionPlanV1,
     ) -> Result<Zeroizing<Vec<u8>>, AiInferenceSourcePortErrorV1> {
         materialize_source(
             self.control_channel,

@@ -1,7 +1,8 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_ai_contracts::{
-    AI_OWNER_V1, communication_explanation_inference_contract_reference_v1,
+    AI_OWNER_V1, attachment_translation_inference_contract_reference_v1,
+    communication_explanation_inference_contract_reference_v1,
     communication_reply_inference_contract_reference_v1,
     communication_summary_inference_contract_reference_v1,
     communication_translation_inference_contract_reference_v1,
@@ -28,6 +29,9 @@ use hermes_storage_vault::{
 };
 
 use crate::{
+    attachment_translation_worker::{
+        execute_attachment_translation_payload_v1, recover_pending_attachment_translations_v1,
+    },
     explanation_worker::{execute_explanation_payload_v1, recover_pending_explanations_v1},
     managed_ports::ManagedAiInferenceExecutionPortsV1,
     summary_worker::{execute_summary_payload_v1, recover_pending_summaries_v1},
@@ -147,6 +151,13 @@ impl AiInferenceManagedRuntimeV1 {
         )
         .await
         .map_err(runtime_error);
+        let attachment_translations = recover_pending_attachment_translations_v1(
+            &self.persistence,
+            &mut ports,
+            &self.logical_human_owner_id,
+        )
+        .await
+        .map_err(runtime_error);
         let explanations = recover_pending_explanations_v1(
             &self.persistence,
             &mut ports,
@@ -159,13 +170,16 @@ impl AiInferenceManagedRuntimeV1 {
             .set_nonblocking(true)
             .map_err(|_| AiInferenceManagedRuntimeErrorV1::Unavailable)?;
         explanations.and_then(|explanations| {
-            translations.and_then(|translations| {
-                summaries.and_then(|summaries| {
-                    replies
-                        .checked_add(summaries)
-                        .and_then(|count| count.checked_add(translations))
-                        .and_then(|count| count.checked_add(explanations))
-                        .ok_or(AiInferenceManagedRuntimeErrorV1::Unavailable)
+            attachment_translations.and_then(|attachment_translations| {
+                translations.and_then(|translations| {
+                    summaries.and_then(|summaries| {
+                        replies
+                            .checked_add(summaries)
+                            .and_then(|count| count.checked_add(translations))
+                            .and_then(|count| count.checked_add(attachment_translations))
+                            .and_then(|count| count.checked_add(explanations))
+                            .ok_or(AiInferenceManagedRuntimeErrorV1::Unavailable)
+                    })
                 })
             })
         })
@@ -189,10 +203,16 @@ impl AiInferenceManagedRuntimeV1 {
                     contract == Some(&communication_summary_inference_contract_reference_v1());
                 let is_translation =
                     contract == Some(&communication_translation_inference_contract_reference_v1());
+                let is_attachment_translation =
+                    contract == Some(&attachment_translation_inference_contract_reference_v1());
                 let is_explanation =
                     contract == Some(&communication_explanation_inference_contract_reference_v1());
                 let response = if validate_module_request_delivery_v1(&delivery).is_err()
-                    || (!is_reply && !is_summary && !is_translation && !is_explanation)
+                    || (!is_reply
+                        && !is_summary
+                        && !is_translation
+                        && !is_attachment_translation
+                        && !is_explanation)
                     || delivery.logical_owner_id != self.logical_human_owner_id
                 {
                     rejected(request_id)
@@ -206,7 +226,15 @@ impl AiInferenceManagedRuntimeV1 {
                         control_channel: &mut self.control_channel,
                         dispatcher: &mut dispatcher,
                     };
-                    let executed = if is_explanation {
+                    let executed = if is_attachment_translation {
+                        execute_attachment_translation_payload_v1(
+                            &self.persistence,
+                            &mut ports,
+                            &self.logical_human_owner_id,
+                            &delivery.request_payload,
+                        )
+                        .await
+                    } else if is_explanation {
                         execute_explanation_payload_v1(
                             &self.persistence,
                             &mut ports,

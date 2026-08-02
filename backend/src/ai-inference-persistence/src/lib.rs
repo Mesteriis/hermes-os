@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod attachment_translation_model;
+mod attachment_translation_repository;
 mod explanation_model;
 mod explanation_repository;
 mod model;
@@ -10,6 +12,10 @@ mod summary_repository;
 mod translation_model;
 mod translation_repository;
 
+pub use attachment_translation_model::{
+    AiAttachmentTranslationPersistenceOutcomeV1, AiAttachmentTranslationTransitionV1,
+    PersistedAiAttachmentTranslationRunV1,
+};
 pub use explanation_model::{
     AiExplanationPersistenceOutcomeV1, AiExplanationTransitionV1, PersistedAiExplanationRunV1,
 };

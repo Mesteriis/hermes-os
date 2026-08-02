@@ -1,9 +1,18 @@
 #![forbid(unsafe_code)]
 
+mod attachment_translation;
 mod explanation;
 mod translation;
 mod validation;
 
+pub use attachment_translation::{
+    AI_ATTACHMENT_TRANSLATION_MAX_SOURCE_BYTES_V1,
+    compute_attachment_translation_inference_request_digest_v1,
+    seal_attachment_translation_inference_request_v1,
+    validate_attachment_translation_inference_request_v1,
+    validate_attachment_translation_inference_result_v1,
+    validate_attachment_translation_source_text_v1,
+};
 pub use explanation::{
     compute_explanation_inference_request_digest_v1,
     compute_provider_explanation_request_digest_v1, decode_explanation_inference_result_v1,
@@ -41,7 +50,7 @@ pub use validation::{
 pub const PACKAGE: &str = "hermes-ai-contracts";
 pub const AI_OWNER_V1: &str = "ai";
 pub const AI_CONTRACT_MAJOR_V1: u32 = 1;
-pub const AI_CONTRACT_REVISION_V1: u32 = 3;
+pub const AI_CONTRACT_REVISION_V1: u32 = 4;
 pub const COMMUNICATION_REPLY_INFERENCE_CONTRACT_NAME_V1: &str =
     "communication_reply_suggestion_inference";
 pub const AI_PROVIDER_REPLY_GENERATION_CONTRACT_NAME_V1: &str = "ai_provider_reply_generation";
@@ -50,6 +59,8 @@ pub const COMMUNICATION_SUMMARY_INFERENCE_CONTRACT_NAME_V1: &str =
 pub const AI_PROVIDER_SUMMARY_GENERATION_CONTRACT_NAME_V1: &str = "ai_provider_summary_generation";
 pub const COMMUNICATION_TRANSLATION_INFERENCE_CONTRACT_NAME_V1: &str =
     "communication_translation_inference";
+pub const ATTACHMENT_TRANSLATION_INFERENCE_CONTRACT_NAME_V1: &str =
+    "attachment_translation_inference";
 pub const AI_PROVIDER_TRANSLATION_CONTRACT_NAME_V1: &str = "ai_provider_translation";
 pub const COMMUNICATION_EXPLANATION_INFERENCE_CONTRACT_NAME_V1: &str =
     "communication_explanation_inference";
@@ -59,6 +70,8 @@ pub const AI_PROVIDER_GENERATION_CAPABILITY_ID_V1: &str = "ai.provider.generate.
 pub const AI_SUMMARY_REQUEST_CAPABILITY_ID_V1: &str = "ai.summary.request.v1";
 pub const AI_PROVIDER_SUMMARY_CAPABILITY_ID_V1: &str = "ai.provider.summarize.v1";
 pub const AI_TRANSLATION_REQUEST_CAPABILITY_ID_V1: &str = "ai.translation.request.v1";
+pub const AI_ATTACHMENT_TRANSLATION_REQUEST_CAPABILITY_ID_V1: &str =
+    "ai.attachment-translation.request.v1";
 pub const AI_PROVIDER_TRANSLATION_CAPABILITY_ID_V1: &str = "ai.provider.translate.v1";
 pub const AI_EXPLANATION_REQUEST_CAPABILITY_ID_V1: &str = "ai.explanation.request.v1";
 pub const AI_PROVIDER_EXPLANATION_CAPABILITY_ID_V1: &str = "ai.provider.explain.v1";
@@ -109,6 +122,11 @@ pub fn communication_translation_inference_contract_reference_v1() -> ContractRe
 }
 
 #[must_use]
+pub fn attachment_translation_inference_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(ATTACHMENT_TRANSLATION_INFERENCE_CONTRACT_NAME_V1)
+}
+
+#[must_use]
 pub fn ai_provider_translation_contract_reference_v1() -> ContractReferenceV1 {
     contract_reference(AI_PROVIDER_TRANSLATION_CONTRACT_NAME_V1)
 }
@@ -147,7 +165,7 @@ mod tests {
                 owner: "ai".to_owned(),
                 name: "communication_reply_suggestion_inference".to_owned(),
                 major: 1,
-                revision: 3,
+                revision: 4,
                 schema_sha256: AI_CONTRACTS_SCHEMA_SHA256.to_vec(),
             }
         );
@@ -170,6 +188,10 @@ mod tests {
         assert_eq!(
             ai_provider_translation_contract_reference_v1().name,
             "ai_provider_translation"
+        );
+        assert_eq!(
+            attachment_translation_inference_contract_reference_v1().name,
+            "attachment_translation_inference"
         );
         assert_eq!(
             communication_explanation_inference_contract_reference_v1().name,

@@ -685,7 +685,7 @@ test('delivery-intent workflow ingress is event-only and bodyless', async () => 
   );
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_translation_persistence_v1',
+    'attachment_translation_ai_engine_v1',
   );
   assert.ok(
     policy.implementation.productionPackages.some(

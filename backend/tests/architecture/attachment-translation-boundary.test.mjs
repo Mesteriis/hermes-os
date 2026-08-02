@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
 test('attachment translation agreement keeps workflow source engine and provider separate', async () => {
-  const [inventorySource, policySource, workspace, apiManifest, api, apiProto, ingressManifest, ingress, coreManifest, core, persistenceManifest, persistence, schema, adr] = await Promise.all([
+  const [inventorySource, policySource, workspace, apiManifest, api, apiProto, ingressManifest, ingress, coreManifest, core, persistenceManifest, persistence, schema, aiProto, aiContract, aiCore, aiSchema, aiRepository, aiWorker, aiAdmission, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
       'utf8',
@@ -29,6 +29,13 @@ test('attachment translation agreement keeps workflow source engine and provider
     readFile(new URL('src/attachment-translation-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-persistence/migrations/0001_translation.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-contracts/proto/hermes/ai/contracts/v1/ai.proto', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-contracts/src/attachment_translation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-core/src/attachment_translation.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-persistence/migrations/0005_ai_attachment_translation_runs.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-persistence/src/attachment_translation_repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/attachment_translation_worker.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/ai-inference-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL('docs/adr/ADR-0378-bounded-attachment-translation-workflow.md', REPOSITORY_ROOT),
       'utf8',
@@ -68,7 +75,7 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(adr, /distinct capability/);
   assert.match(adr, /Source text и translated[\s\S]*не попадают в SQL workflow owner/);
   assert.match(adr, /inventory state остаётся `planned`/);
-  assert.equal(policy.implementation.currentSlice, 'attachment_translation_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_ai_engine_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_translation'));
   for (const packageName of [
     'hermes-attachment-translation-api',
@@ -99,6 +106,25 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(schema, /pending_translated_sha256/);
   assert.match(schema, /artifact_translated_sha256/);
   assert.doesNotMatch(schema, /translated_text|source_text|provider_id|model_id|prompt/);
+  assert.match(aiProto, /AI_USE_CASE_ATTACHMENT_TRANSLATION = 5/);
+  assert.match(aiProto, /message AttachmentTranslationInferenceRequestV1/);
+  assert.match(aiProto, /message AttachmentTranslationInferenceResultV1/);
+  assert.doesNotMatch(
+    aiProto.match(/message AttachmentTranslationInferenceRequestV1 \{[\s\S]*?\n\}/)?.[0] ?? '',
+    /provider_id|model_id|endpoint|prompt/,
+  );
+  assert.match(aiContract, /seal_attachment_translation_inference_request_v1/);
+  assert.match(aiContract, /AiUseCaseAttachmentTranslation/);
+  assert.match(aiCore, /build_attachment_translation_provider_input_v1/);
+  assert.match(aiCore, /validate_attachment_translation_source_text_v1/);
+  assert.match(aiSchema, /hermes_data\.ai_attachment_translation_runs/);
+  assert.match(aiRepository, /load_recoverable_attachment_translation_runs/);
+  assert.match(aiWorker, /execute_attachment_translation_payload_v1/);
+  assert.match(aiWorker, /materialize_attachment_translation_source/);
+  assert.match(aiAdmission, /AI_ATTACHMENT_TRANSLATION_REQUEST_CAPABILITY_ID_V1/);
+  assert(policy.implementation.ownerInventory.businessCapabilities.includes(
+    'ai.attachment-translation.request.v1',
+  ));
   assert.doesNotMatch(
     adr,
     /Communications owns attachment translation|legacy REST facade открывает gate|caller выбирает provider/,
