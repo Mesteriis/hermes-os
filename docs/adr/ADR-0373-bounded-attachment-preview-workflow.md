@@ -62,8 +62,11 @@ authority gate доказывает stale runtime/grant route fencing, stale del
 custody proof после замены source grant epoch, exact source-receipt mismatch
 после fenced lease recovery и отсутствие derived artifact/private bytes во
 всех этих сценариях. ADR-0375 отдельно доказывает static renderer admission и
-исключает fake runtime outage. Browser evidence и полная log/error/health/
-telemetry privacy-negative матрица ещё не реализованы.
+исключает fake runtime outage. Privacy-negative gate дополнительно фиксирует
+закрытый enum runtime diagnostic stages, bounded sanitized reason codes без
+`Debug` исходной ошибки, metadata-only client errors/SSE, identifier-only
+managed readiness, отсутствие owner health endpoint и отсутствие telemetry
+capability/signal у Preview. Browser evidence ещё не реализовано.
 Inventory gate `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:
@@ -236,6 +239,28 @@ empty successful preview.
 
 Legacy base64 `data:` URL не восстанавливается: он дублировал private bytes в
 JSON/heap/logging surfaces и обходил `client_blob` authorization.
+
+## Diagnostics, health и telemetry privacy
+
+Preview не вводит owner-specific health API. Kernel видит только generic
+managed readiness signal с `registration_id`, `runtime_generation` и
+`grant_epoch`; source/derived Blob authority, attachment metadata и private
+content в этом signal отсутствуют. Descriptor не запрашивает telemetry
+capability, а runtime не формирует telemetry signals.
+
+Обычный managed launch направляет stdout в null и stderr в null. В explicit
+developer-verbose режиме runtime может записать только fixed-shape diagnostic:
+
+```text
+developer_attachment_preview_runtime_error stage=<closed-enum> reason=<bounded-code>
+```
+
+Stage не принимается из request/provider data, reason является закрытым кодом,
+а raw/`Debug` error не форматируется. Source/preview bytes, Blob reference,
+receipt/proof, ticket, provider/account/filename/content metadata не входят в
+diagnostic, client error, health или telemetry surfaces. Architecture и Rust
+regression tests проверяют эти отрицательные границы, а managed format/failure
+contours проверяют отсутствие source bytes в status, terminal event и SSE.
 
 ## Derived artifact и fencing
 

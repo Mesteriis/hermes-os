@@ -25,6 +25,13 @@ use hermes_runtime_protocol::{
 };
 use prost::Message;
 
+mod diagnostics;
+
+use diagnostics::{
+    AttachmentPreviewDiagnosticStageV1 as DiagnosticStage,
+    emit_attachment_preview_diagnostic_v1 as diagnostic,
+};
+
 struct InheritedPaths {
     descriptor: PathBuf,
     settings_schema: PathBuf,
@@ -109,7 +116,7 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
             AttachmentPreviewRendererRuntimeV1,
         ))
         .map_err(|error| {
-            diagnostic("startup", error);
+            diagnostic(DiagnosticStage::Startup, error);
             "Attachment Preview runtime admission was rejected".to_owned()
         })?;
     let mut interval =
@@ -120,11 +127,11 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
             .map_err(|_| "Attachment Preview clock is unavailable".to_owned())?;
         for (stage, result) in [
             (
-                "client-delivery",
+                DiagnosticStage::ClientDelivery,
                 executor.block_on(runtime.pump_control_once(now_millis)),
             ),
             (
-                "consume",
+                DiagnosticStage::Consume,
                 executor.block_on(runtime.consume_next(now_millis)),
             ),
         ] {
@@ -135,16 +142,16 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
         if let Err(error) =
             executor.block_on(runtime.materialize_pending_custody_requests(now_millis, nanos))
         {
-            diagnostic("custody-materialize", error);
+            diagnostic(DiagnosticStage::CustodyMaterialize, error);
         }
         if let Err(error) = executor.block_on(runtime.relay_custody_outbox(now_millis)) {
-            diagnostic("custody-outbox", error);
+            diagnostic(DiagnosticStage::CustodyOutbox, error);
         }
         if let Err(error) = executor.block_on(runtime.process_next_job(now_millis)) {
-            diagnostic("render", error);
+            diagnostic(DiagnosticStage::Render, error);
         }
         if let Err(error) = executor.block_on(runtime.pump_client_realtime_once()) {
-            diagnostic("client-realtime", error);
+            diagnostic(DiagnosticStage::ClientRealtime, error);
         }
     }
 }
@@ -224,13 +231,4 @@ fn read_contract(path: &Path) -> Result<Vec<u8>, String> {
 fn write_stdout(bytes: &[u8], artifact: &str) -> Result<(), String> {
     std::io::Write::write_all(&mut std::io::stdout(), bytes)
         .map_err(|_| format!("Attachment Preview {artifact} is unavailable"))
-}
-
-fn diagnostic(
-    stage: &str,
-    error: hermes_attachment_preview_runtime::runtime::AttachmentPreviewRuntimeErrorV1,
-) {
-    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-        eprintln!("developer_attachment_preview_runtime_error stage={stage} error={error:?}");
-    }
 }

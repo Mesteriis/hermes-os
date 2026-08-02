@@ -336,5 +336,11 @@ mod tests {
                         && route.max_response_bytes == ATTACHMENT_PREVIEW_MAX_VIDEO_BYTES_V1
                 })
         }));
+        assert!(descriptor.capabilities.iter().all(|capability| {
+            capability
+                .requests
+                .iter()
+                .all(|request| !matches!(request.request, Some(Request::TelemetrySignal(_))))
+        }));
     }
 }

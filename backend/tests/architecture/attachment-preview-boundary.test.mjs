@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 
 const BACKEND_ROOT = new URL('../..', import.meta.url);
@@ -36,14 +36,14 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_static_renderer_admission_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_privacy_fences_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
   assert.match(adr, /Следующий managed\s+authority gate[\s\S]*source-receipt mismatch/);
-  assert.match(adr, /Browser evidence[\s\S]*privacy-negative матрица ещё не реализованы/);
+  assert.match(adr, /Privacy-negative gate[\s\S]*Browser evidence ещё не реализовано/);
   assert.match(rendererAdmissionAdr, /availability является admission invariant/);
   assert.match(rendererAdmissionAdr, /environment test hook или fake outage не вводятся/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
@@ -99,6 +99,71 @@ test('public Preview contract separates status ticket and private client blob by
   );
 });
 
+test('Preview logs errors health and telemetry expose only fixed-shape technical state', async () => {
+  const [admission, runtimeMain, diagnostics, runtime, controlProto, ownerSources, flow, formats] =
+    await Promise.all([
+      readFile(new URL('src/attachment-preview-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+      readFile(new URL('src/attachment-preview-runtime/src/main.rs', BACKEND_ROOT), 'utf8'),
+      readFile(
+        new URL('src/attachment-preview-runtime/src/diagnostics.rs', BACKEND_ROOT),
+        'utf8',
+      ),
+      readFile(new URL('src/attachment-preview-runtime/src/runtime.rs', BACKEND_ROOT), 'utf8'),
+      readFile(
+        new URL(
+          'src/platform/runtime_protocol/proto/hermes/runtime/v1/managed_runtime_control.proto',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readPreviewProductionSources(),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_flow.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_formats.rs',
+          BACKEND_ROOT,
+        ),
+        'utf8',
+      ),
+    ]);
+
+  const descriptor = admission.slice(0, admission.indexOf('#[cfg(test)]'));
+  assert.doesNotMatch(descriptor, /TelemetrySignal|telemetry_signal/);
+  assert.doesNotMatch(
+    ownerSources,
+    /(?:["'`]\/(?:health|ready)|\bHealth(?:Check|Response|Status)\b|\bfn\s+(?:health|readiness)\s*\()/i,
+  );
+
+  const ready = controlProto.slice(
+    controlProto.indexOf('message ManagedRuntimeReadyRequestV1'),
+    controlProto.indexOf('message ManagedRuntimeEventCredentialRequestV1'),
+  );
+  assert.match(ready, /string registration_id = 1/);
+  assert.match(ready, /uint64 runtime_generation = 2/);
+  assert.match(ready, /uint64 grant_epoch = 3/);
+  assert.doesNotMatch(
+    ready,
+    /(?:blob|receipt|proof|ticket|provider|account|filename|content|payload|bytes)/i,
+  );
+
+  assert.match(runtime, /pub const fn sanitized_reason_code\(self\)/);
+  assert.match(diagnostics, /AttachmentPreviewDiagnosticStageV1/);
+  assert.match(diagnostics, /reason=\{\}/);
+  assert.doesNotMatch(`${runtimeMain}\n${diagnostics}`, /error=\{error:\?\}/);
+  assert.doesNotMatch(
+    diagnostics.slice(0, diagnostics.indexOf('#[cfg(test)]')),
+    /(?:source|blob|receipt|proof|ticket|provider|account|filename|content|payload)/i,
+  );
+  assert.match(flow, /assert_private_preview_source_absent_v1/);
+  assert.match(formats, /assert_private_source_absent_v1/);
+});
+
 test('pure Preview core owns evidence join lifecycle and output policy only', async () => {
   const [manifest, source, join, lifecycle, policy] = await Promise.all([
     readFile(new URL('src/attachment-preview-core/Cargo.toml', BACKEND_ROOT), 'utf8'),
@@ -133,6 +198,40 @@ test('pure Preview core owns evidence join lifecycle and output policy only', as
     /TcpStream|File::|sqlx|postgres|nats|jetstream|hermes_communications|hermes_attachment_security/,
   );
 });
+
+async function readPreviewProductionSources() {
+  const roots = [
+    'src/attachment-preview-api/src/',
+    'src/attachment-preview-core/src/',
+    'src/attachment-preview-docx/src/',
+    'src/attachment-preview-image/src/',
+    'src/attachment-preview-ingress/src/',
+    'src/attachment-preview-media/src/',
+    'src/attachment-preview-pdf/src/',
+    'src/attachment-preview-persistence/src/',
+    'src/attachment-preview-renderer-contract/src/',
+    'src/attachment-preview-runtime/src/',
+    'src/attachment-preview-text/src/',
+  ];
+  const sources = await Promise.all(roots.map((path) => readRustTree(new URL(path, BACKEND_ROOT))));
+  return sources.flat().map(stripRustTestModule).join('\n');
+}
+
+async function readRustTree(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const sources = await Promise.all(entries.map(async (entry) => {
+    const path = new URL(entry.name, directory);
+    if (entry.isDirectory()) return readRustTree(new URL(`${entry.name}/`, directory));
+    if (entry.isFile() && entry.name.endsWith('.rs')) return [await readFile(path, 'utf8')];
+    return [];
+  }));
+  return sources.flat();
+}
+
+function stripRustTestModule(source) {
+  const marker = source.indexOf('#[cfg(test)]');
+  return marker === -1 ? source : source.slice(0, marker);
+}
 
 test('Preview persistence owns replay jobs artifacts tickets and realtime without private content', async () => {
   const [manifest, source, model, evidence, custody, jobs, tickets, repository, schema, migration] = await Promise.all([

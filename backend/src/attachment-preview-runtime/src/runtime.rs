@@ -841,6 +841,18 @@ pub enum AttachmentPreviewRuntimeErrorV1 {
     Unavailable,
 }
 
+impl AttachmentPreviewRuntimeErrorV1 {
+    #[must_use]
+    pub const fn sanitized_reason_code(self) -> &'static str {
+        match self {
+            Self::Admission => "attachment_preview_runtime_admission_rejected",
+            Self::InvalidDelivery => "attachment_preview_runtime_invalid_delivery",
+            Self::InvalidJob => "attachment_preview_runtime_invalid_job",
+            Self::Unavailable => "attachment_preview_runtime_unavailable",
+        }
+    }
+}
+
 pub fn current_runtime_time_v1() -> Result<(i64, i32), AttachmentPreviewRuntimeErrorV1> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
