@@ -44,6 +44,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     AttachmentTranslationBlobErrorV1, AttachmentTranslationInferenceErrorV1,
+    AttachmentTranslationInferenceExecutionV1,
     blob_materialization::{
         AttachmentTranslationSourceBlobReceiptV1, materialize_translation_source_for_ai_v1,
         release_translation_source_blobs_v1,
@@ -154,9 +155,11 @@ pub async fn consume_translation_source_prepared_once_v1(
                 dispatcher,
                 &persisted,
                 sealed,
-                runtime_generation,
-                grant_epoch,
-                consumed_at_unix_millis,
+                AttachmentTranslationInferenceExecutionV1 {
+                    runtime_generation,
+                    grant_epoch,
+                    occurred_at_unix_millis: consumed_at_unix_millis,
+                },
             )
             .await
             .map_err(AttachmentTranslationSourceResultErrorV1::Inference)?

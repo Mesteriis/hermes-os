@@ -22,6 +22,13 @@ Blob-копию, атомарно сохраняет owner-local inbox/outbox и
 commit. Managed signed-release/live evidence ещё отсутствуют, поэтому
 `attachment_translation_v1` остаётся `planned`.
 
+Restart recovery выделен из inference execution в отдельную функциональную
+единицу. Он не переиспользует сохранённый runtime-bound Blob proof: current
+generation заново материализует AI source из durable workflow authority,
+перезапечатывает тот же canonical request (custody proof не входит в digest),
+проверяет неизменность request/source identity и только после terminal state
+выполняет custody release и owner-local cleanup.
+
 Уточняет:
 
 - [ADR-0201](ADR-0201-core-module-communication-and-nats.md);
@@ -207,7 +214,8 @@ Recovery выбирает только non-terminal runs current logical owner �
 только idempotent external steps. Runtime generation, grant epoch, Storage
 binding, source custody и AI route проверяются перед каждым external action.
 Restart, revoke или stale generation инвалидируют старые authorities и не могут
-продолжить run.
+продолжить run. Runtime-bound proof после restart всегда перевыпускается через
+current capability session; persisted proof не считается живым credential.
 
 ### Kernel и Gateway boundary
 

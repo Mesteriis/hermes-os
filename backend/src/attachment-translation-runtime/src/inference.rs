@@ -13,8 +13,7 @@ use hermes_ai_contracts::{
 use hermes_attachment_translation_core::{
     AttachmentTranslationCompletenessV1, AttachmentTranslationDetectedLanguageV1,
     AttachmentTranslationLanguageV1, AttachmentTranslationPendingResultV1,
-    AttachmentTranslationRejectionCodeV1, AttachmentTranslationStateV1,
-    AttachmentTranslationTransitionV1,
+    AttachmentTranslationRejectionCodeV1, AttachmentTranslationTransitionV1,
 };
 use hermes_attachment_translation_persistence::{
     AttachmentTranslationInferenceResultV1 as PersistInferenceResultV1,
@@ -50,47 +49,11 @@ pub enum AttachmentTranslationInferenceErrorV1 {
     Unavailable,
 }
 
-#[allow(clippy::too_many_arguments)]
-pub async fn recover_attachment_translation_once_v1(
-    persistence: &AttachmentTranslationPersistenceV1,
-    channel: &mut ManagedControlChannelV2<UnixStream>,
-    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
-    logical_owner_id: &str,
-    runtime_generation: u64,
-    grant_epoch: u64,
-    occurred_at_unix_millis: i64,
-) -> Result<bool, AttachmentTranslationInferenceErrorV1> {
-    let runs = persistence
-        .load_recoverable_runs(logical_owner_id)
-        .await
-        .map_err(AttachmentTranslationInferenceErrorV1::Persistence)?;
-    let Some(run) = runs.into_iter().find(|run| {
-        matches!(
-            run.status.state,
-            AttachmentTranslationStateV1::AwaitingInference
-                | AttachmentTranslationStateV1::MaterializingResult
-        )
-    }) else {
-        return Ok(false);
-    };
-    let request = AttachmentTranslationInferenceRequestV1::decode(
-        run.inference_request_bytes
-            .as_deref()
-            .ok_or(AttachmentTranslationInferenceErrorV1::InvalidRequest)?,
-    )
-    .map_err(|_| AttachmentTranslationInferenceErrorV1::InvalidRequest)?;
-    complete_attachment_translation_inference_v1(
-        persistence,
-        channel,
-        dispatcher,
-        &run,
-        request,
-        runtime_generation,
-        grant_epoch,
-        occurred_at_unix_millis,
-    )
-    .await
-    .map(|_| true)
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttachmentTranslationInferenceExecutionV1 {
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub occurred_at_unix_millis: i64,
 }
 
 pub async fn complete_attachment_translation_inference_v1(
@@ -99,9 +62,7 @@ pub async fn complete_attachment_translation_inference_v1(
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     run: &PersistedAttachmentTranslationRunV1,
     request: AttachmentTranslationInferenceRequestV1,
-    runtime_generation: u64,
-    grant_epoch: u64,
-    occurred_at_unix_millis: i64,
+    execution: AttachmentTranslationInferenceExecutionV1,
 ) -> Result<bool, AttachmentTranslationInferenceErrorV1> {
     validate_request_for_run(run, &request)?;
     let result = match route_inference(channel, dispatcher, request) {
@@ -111,7 +72,7 @@ pub async fn complete_attachment_translation_inference_v1(
                 persistence,
                 run,
                 AttachmentTranslationRejectionCodeV1::InferenceRejected,
-                occurred_at_unix_millis,
+                execution.occurred_at_unix_millis,
             )
             .await?;
             return Ok(false);
@@ -132,7 +93,7 @@ pub async fn complete_attachment_translation_inference_v1(
                     logical_owner_id: run.logical_owner_id.clone(),
                     run_id: run.draft.run_id,
                     transition: AttachmentTranslationTransitionV1::InferenceCompleted(pending),
-                    occurred_at_unix_millis,
+                    occurred_at_unix_millis: execution.occurred_at_unix_millis,
                 })
                 .await
                 .map_err(AttachmentTranslationInferenceErrorV1::Persistence)?;
@@ -148,22 +109,22 @@ pub async fn complete_attachment_translation_inference_v1(
                     transition: AttachmentTranslationTransitionV1::ResultMaterialized {
                         artifact_id: artifact.reference_id,
                     },
-                    runtime_generation,
-                    grant_epoch,
-                    occurred_at_unix_millis,
+                    runtime_generation: execution.runtime_generation,
+                    grant_epoch: execution.grant_epoch,
+                    occurred_at_unix_millis: execution.occurred_at_unix_millis,
                 })
                 .await
                 .map_err(AttachmentTranslationInferenceErrorV1::Persistence)?;
             Ok(true)
         }
         AttachmentTranslationTerminalResultV1::Rejected(code) => {
-            persist_rejection(persistence, run, code, occurred_at_unix_millis).await?;
+            persist_rejection(persistence, run, code, execution.occurred_at_unix_millis).await?;
             Ok(false)
         }
     }
 }
 
-fn validate_request_for_run(
+pub(crate) fn validate_request_for_run(
     run: &PersistedAttachmentTranslationRunV1,
     request: &AttachmentTranslationInferenceRequestV1,
 ) -> Result<(), AttachmentTranslationInferenceErrorV1> {
