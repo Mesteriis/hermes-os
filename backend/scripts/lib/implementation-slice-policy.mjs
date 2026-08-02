@@ -1202,6 +1202,11 @@ const ATTACHMENT_PREVIEW_ASSEMBLY_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-preview-assembly', role: 'workflow', owner: 'attachment_preview', surface: 'assembly' },
 ];
 
+const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_PREVIEW_ASSEMBLY_PRODUCTION_PACKAGES,
+  { name: 'hermes-retained-evidence-replay-protocol', role: 'workflow', owner: 'attachment_preview_evidence_replay', surface: 'contract' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3513,6 +3518,11 @@ const ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-retained-evidence-replay-protocol': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4677,6 +4687,16 @@ const ATTACHMENT_PREVIEW_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-retained-evidence-replay-protocol': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -5392,6 +5412,14 @@ const ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_INVENTORY = {
+  ...ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY,
+  workflows: [
+    ...ATTACHMENT_PREVIEW_FOUNDATION_INVENTORY.workflows,
+    'attachment_preview_evidence_replay',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -5582,6 +5610,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
     const packageDescriptor = expectedPackages.find(({ name }) => name === packageName);
     const protocolPackage = [
       'hermes-events-protocol',
+      'hermes-retained-evidence-replay-protocol',
       'hermes-runtime-protocol',
       'hermes-gateway-protocol',
       'hermes-storage-protocol',
@@ -7126,7 +7155,6 @@ function expectedSlice(currentSlice) {
     || currentSlice === 'attachment_preview_failure_boundaries_v1'
     || currentSlice === 'attachment_preview_stale_outage_input_boundaries_v1'
     || currentSlice === 'attachment_preview_job_authority_fences_v1'
-    || currentSlice === 'attachment_preview_retained_evidence_replay_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,
@@ -7135,6 +7163,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_PREVIEW_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_PREVIEW_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_preview_retained_evidence_replay_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

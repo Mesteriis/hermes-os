@@ -4,12 +4,17 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: planned. Диагностический browser gate Preview подтвердил,
-что generated Start/Get проходят через Core Gateway и один shared SSE stream,
-но source events старше bounded JetStream retention уже отсутствуют в broker.
-Producer-owned exact outbox bytes сохранены, однако owner-authorized replay port,
-audited selection и conformance ещё не реализованы. Никакая SQL-правка publish
-state не считается реализацией этого решения.
+Состояние реализации: protocol foundation implemented, gate planned.
+Диагностический browser gate Preview подтвердил, что generated Start/Get
+проходят через Core Gateway и один shared SSE stream, но source events старше
+bounded JetStream retention уже отсутствуют в broker. Отдельный workflow-owned
+build unit `hermes-retained-evidence-replay-protocol` реализует bounded exact
+message selection, producer registration, owner-device actor hash,
+runtime/grant fences и sanitized terminal result без subject/query/payload
+surface. Producer-owned exact outbox bytes сохранены, однако owner-local
+selection/audit adapters, workflow runtime и live conformance ещё не
+реализованы. Никакая SQL-правка publish state не считается реализацией этого
+решения.
 
 ## Контекст
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "src/platform/events",
+  "src/attachment-preview-evidence-replay-protocol",
   "src/platform/events/jetstream",
   "src/platform/events/authority",
   "src/platform/events/authority/runtime",

@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package hermes.events.replay.v1;
+
+// Shared wire shape only. Producer-specific contracts bind this schema to an
+// exact owner and capability; this package does not provide a replay service.
+message ReplayExactEvidenceCommandV1 {
+  uint32 protocol_major = 1;
+  bytes operation_id = 2;
+  string logical_owner_id = 3;
+  bytes owner_device_actor_sha256 = 4;
+  string producer_registration_id = 5;
+  uint64 producer_runtime_generation = 6;
+  uint64 producer_grant_epoch = 7;
+  RetainedEvidenceContractRefV1 original_contract = 8;
+  repeated bytes original_message_ids = 9;
+}
+
+message RetainedEvidenceContractRefV1 {
+  string owner = 1;
+  string name = 2;
+  uint32 major = 3;
+  uint32 revision = 4;
+  bytes schema_sha256 = 5;
+}
+
+message ReplayExactEvidenceResultV1 {
+  bytes operation_id = 1;
+  RetainedEvidenceReplayOutcomeV1 outcome = 2;
+  repeated bytes original_message_ids = 3;
+  RetainedEvidenceReplayFailureCodeV1 failure_code = 4;
+}
+
+enum RetainedEvidenceReplayOutcomeV1 {
+  RETAINED_EVIDENCE_REPLAY_OUTCOME_V1_UNSPECIFIED = 0;
+  RETAINED_EVIDENCE_REPLAY_OUTCOME_V1_PUBLISHED = 1;
+  RETAINED_EVIDENCE_REPLAY_OUTCOME_V1_ALREADY_PUBLISHED = 2;
+  RETAINED_EVIDENCE_REPLAY_OUTCOME_V1_REJECTED = 3;
+  RETAINED_EVIDENCE_REPLAY_OUTCOME_V1_UNAVAILABLE = 4;
+}
+
+enum RetainedEvidenceReplayFailureCodeV1 {
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_UNSPECIFIED = 0;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_NOT_FOUND = 1;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_HASH_MISMATCH = 2;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_WRONG_CONTRACT = 3;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_STALE_RUNTIME_FENCE = 4;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_STALE_GRANT_FENCE = 5;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_OWNER_MISMATCH = 6;
+  RETAINED_EVIDENCE_REPLAY_FAILURE_CODE_V1_PUBLISH_UNAVAILABLE = 7;
+}

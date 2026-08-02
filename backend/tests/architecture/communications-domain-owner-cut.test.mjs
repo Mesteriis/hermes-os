@@ -65,6 +65,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
     integrations: ['mail'],
     workflows: [
       'attachment_preview',
+      'attachment_preview_evidence_replay',
       'attachment_text_extraction',
       'communication_cross_channel_forward',
       'communication_delivery_intent',

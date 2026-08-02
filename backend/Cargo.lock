@@ -4156,6 +4156,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-retained-evidence-replay-protocol"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-review-attention-api"
 version = "0.1.0"
 dependencies = [
