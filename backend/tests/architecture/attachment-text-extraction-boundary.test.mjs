@@ -35,7 +35,7 @@ test('text extraction is an implemented workflow and not a Communications facade
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_persistence_v1',
+    'contacts_mail_identity_command_runtime_assembly_v1',
   );
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',

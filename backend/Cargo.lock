@@ -3654,6 +3654,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-contacts-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-contacts-persistence",
+ "hermes-contacts-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-contacts-command-api"
 version = "0.1.0"
 dependencies = [
@@ -3681,6 +3694,26 @@ dependencies = [
  "hermes-storage-protocol",
  "sha2 0.11.0",
  "sqlx",
+]
+
+[[package]]
+name = "hermes-contacts-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-contacts-command-api",
+ "hermes-contacts-core",
+ "hermes-contacts-persistence",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -3996,6 +4029,9 @@ dependencies = [
  "hermes-communications-saved-query-api",
  "hermes-communications-sender-insights-api",
  "hermes-communications-task-source-api",
+ "hermes-contacts-command-api",
+ "hermes-contacts-persistence",
+ "hermes-contacts-runtime",
  "hermes-events-jetstream",
  "hermes-events-protocol",
  "hermes-gateway-protocol",

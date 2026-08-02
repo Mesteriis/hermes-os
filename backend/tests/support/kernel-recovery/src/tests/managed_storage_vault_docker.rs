@@ -204,6 +204,10 @@ use attachment_translation_managed_setup::*;
 mod archive_inspection_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_security_persistence_fixture.rs"]
 mod attachment_security_persistence_fixture;
+#[path = "managed_storage_vault_docker/contacts_managed_flow.rs"]
+mod contacts_managed_flow;
+#[path = "managed_storage_vault_docker/contacts_managed_setup.rs"]
+mod contacts_managed_setup;
 #[path = "managed_storage_vault_docker/mail_attachment_flow.rs"]
 mod mail_attachment_flow;
 #[path = "managed_storage_vault_docker/mail_composition_flow.rs"]
@@ -250,6 +254,7 @@ mod task_candidate_blob_negative;
 mod task_candidate_gateway_flow;
 #[path = "managed_storage_vault_docker/task_candidate_managed_flow.rs"]
 mod task_candidate_managed_flow;
+use contacts_managed_setup::*;
 #[path = "managed_storage_vault_docker/task_candidate_managed_setup.rs"]
 mod task_candidate_managed_setup;
 #[path = "managed_storage_vault_docker/task_candidate_persistence_flow.rs"]

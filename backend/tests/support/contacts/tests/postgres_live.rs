@@ -3,8 +3,8 @@ use hermes_contacts_core::{
     ContactUpsertOutcomeV1,
 };
 use hermes_contacts_persistence::{
-    ApplyMailEntryCommandV1, ContactsOutboxRecordV1, ContactsPersistenceConformanceV1,
-    ContactsPersistenceErrorV1,
+    ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1, ContactsOutboxRecordV1,
+    ContactsPersistenceConformanceV1, ContactsPersistenceErrorV1, RejectMailEntryCommandV1,
 };
 use sha2::{Digest, Sha256};
 
@@ -95,12 +95,43 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
             .await,
         Err(ContactsPersistenceErrorV1::IdentityAmbiguous)
     );
+    let rejected_result = terminal(16, ambiguous.command_id, ContactUpsertOutcomeV1::Unchanged)
+        .expect("rejected terminal fixture");
+    let rejection = RejectMailEntryCommandV1 {
+        command_message_id: ambiguous.command_message_id,
+        command_envelope_sha256: ambiguous.command_envelope_sha256,
+        command_id: ambiguous.command_id,
+        logical_owner_id: ambiguous.draft.logical_owner_id.clone(),
+        entry_digest: ambiguous.draft.provenance.entry_digest,
+        received_at_unix_millis: ambiguous.received_at_unix_millis,
+        completed_at_unix_millis: ambiguous.completed_at_unix_millis,
+        code: ContactMailEntryRejectCodeV1::IdentityAmbiguous,
+        terminal_result: rejected_result.clone(),
+    };
+    let rejected = persistence
+        .reject_mail_entry(&rejection)
+        .await
+        .expect("persist rejection");
+    assert!(!rejected.replayed);
+    assert_eq!(rejected.terminal_result, rejected_result);
+    let replayed_rejection = persistence
+        .reject_mail_entry(&rejection)
+        .await
+        .expect("replay rejection");
+    assert!(replayed_rejection.replayed);
+    assert_eq!(replayed_rejection.terminal_result, rejected_result);
+    assert_eq!(
+        persistence
+            .apply_mail_entry(&ambiguous, |_, _| panic!("rejected command cannot apply"))
+            .await,
+        Err(ContactsPersistenceErrorV1::IdentityAmbiguous)
+    );
 
     let pending = persistence
         .load_pending_outbox("owner-1")
         .await
         .expect("pending outbox");
-    assert_eq!(pending.len(), 4);
+    assert_eq!(pending.len(), 5);
 }
 
 fn command(seed: u8, source_revision: u64, email: &str, phone: &str) -> ApplyMailEntryCommandV1 {

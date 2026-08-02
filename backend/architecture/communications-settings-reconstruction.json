@@ -720,7 +720,7 @@
       "gate": "contacts_mail_identity_command_v1",
       "role": "domain",
       "owner": "contacts",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": ["client_gateway_v1"]
     },
     {

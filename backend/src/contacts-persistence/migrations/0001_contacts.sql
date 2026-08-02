@@ -9,6 +9,7 @@ CREATE TABLE hermes_data.contacts_mail_entry_inbox (
     contact_id BYTEA,
     contact_revision BIGINT,
     outcome SMALLINT,
+    reject_code SMALLINT,
     result_message_id BYTEA,
     received_at_unix_millis BIGINT NOT NULL,
     completed_at_unix_millis BIGINT,
@@ -23,9 +24,14 @@ CREATE TABLE hermes_data.contacts_mail_entry_inbox (
     CHECK (received_at_unix_millis > 0),
     CHECK (
         (NOT completed AND contact_id IS NULL AND contact_revision IS NULL AND outcome IS NULL
-            AND result_message_id IS NULL AND completed_at_unix_millis IS NULL)
+            AND reject_code IS NULL AND result_message_id IS NULL
+            AND completed_at_unix_millis IS NULL)
         OR (completed AND length(contact_id) = 16 AND contact_revision > 0
-            AND outcome IN (1, 2, 3) AND length(result_message_id) = 16
+            AND outcome IN (1, 2, 3) AND reject_code IS NULL
+            AND length(result_message_id) = 16
+            AND completed_at_unix_millis >= received_at_unix_millis)
+        OR (completed AND contact_id IS NULL AND contact_revision IS NULL AND outcome IS NULL
+            AND reject_code IN (1, 2, 3, 4, 5) AND length(result_message_id) = 16
             AND completed_at_unix_millis >= received_at_unix_millis)
     )
 );

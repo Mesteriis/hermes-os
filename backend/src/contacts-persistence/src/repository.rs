@@ -11,10 +11,13 @@ use sqlx::{
     postgres::{PgConnectOptions, PgPoolOptions},
 };
 
-use crate::model::{CONTACTS_OUTBOX_LIMIT_V1, valid_apply, valid_outbox, valid_owner};
+use crate::model::{
+    CONTACTS_OUTBOX_LIMIT_V1, valid_apply, valid_outbox, valid_owner, valid_reject,
+};
 use crate::{
-    AppliedMailEntryCommandV1, ApplyMailEntryCommandV1, ContactsOutboxRecordV1,
-    ContactsPersistenceErrorV1,
+    AppliedMailEntryCommandV1, ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1,
+    ContactsOutboxRecordV1, ContactsPersistenceErrorV1, RejectMailEntryCommandV1,
+    RejectedMailEntryCommandV1,
 };
 
 #[derive(Clone)]
@@ -89,7 +92,7 @@ impl ContactsPersistenceV1 {
         if !valid_apply(input) {
             return Err(ContactsPersistenceErrorV1::InvalidInput);
         }
-        let fingerprint = input.command_fingerprint()?;
+        let fingerprint = input.command_fingerprint();
         let mut transaction = self.pool.begin().await.map_err(storage)?;
         let inserted = reserve_inbox(&mut transaction, input, fingerprint).await?;
         if !inserted {
@@ -138,6 +141,36 @@ impl ContactsPersistenceV1 {
             contact_revision: contact.contact_revision,
             outcome,
             terminal_result,
+            replayed: false,
+        })
+    }
+
+    pub async fn reject_mail_entry(
+        &self,
+        input: &RejectMailEntryCommandV1,
+    ) -> Result<RejectedMailEntryCommandV1, ContactsPersistenceErrorV1> {
+        if !valid_reject(input) {
+            return Err(ContactsPersistenceErrorV1::InvalidInput);
+        }
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let inserted = reserve_rejected_inbox(&mut transaction, input).await?;
+        if !inserted {
+            let replay = load_rejected_inbox(&mut transaction, input).await?;
+            transaction.commit().await.map_err(storage)?;
+            return Ok(replay);
+        }
+        insert_outbox(
+            &mut transaction,
+            &input.logical_owner_id,
+            &input.terminal_result,
+            input.completed_at_unix_millis,
+        )
+        .await?;
+        complete_rejected_inbox(&mut transaction, input).await?;
+        transaction.commit().await.map_err(storage)?;
+        Ok(RejectedMailEntryCommandV1 {
+            code: input.code,
+            terminal_result: input.terminal_result.clone(),
             replayed: false,
         })
     }
@@ -215,13 +248,36 @@ async fn reserve_inbox(
     .map(|result| result.rows_affected() == 1)
 }
 
+async fn reserve_rejected_inbox(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &RejectMailEntryCommandV1,
+) -> Result<bool, ContactsPersistenceErrorV1> {
+    sqlx::query(
+        "INSERT INTO hermes_data.contacts_mail_entry_inbox (logical_owner_id, \
+         command_message_id, command_envelope_sha256, command_id, command_fingerprint, \
+         entry_digest, received_at_unix_millis) VALUES ($1,$2,$3,$4,$5,$6,$7) \
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.command_message_id.as_slice())
+    .bind(input.command_envelope_sha256.as_slice())
+    .bind(input.command_id.as_slice())
+    .bind(input.command_fingerprint().as_slice())
+    .bind(input.entry_digest.as_slice())
+    .bind(input.received_at_unix_millis)
+    .execute(&mut **transaction)
+    .await
+    .map_err(storage)
+    .map(|result| result.rows_affected() == 1)
+}
+
 async fn load_inbox(
     transaction: &mut Transaction<'_, Postgres>,
     input: &ApplyMailEntryCommandV1,
 ) -> Result<AppliedMailEntryCommandV1, ContactsPersistenceErrorV1> {
     let row = sqlx::query(
         "SELECT command_envelope_sha256, command_id, command_fingerprint, entry_digest, \
-         completed, contact_id, contact_revision, outcome, result_message_id \
+         completed, contact_id, contact_revision, outcome, reject_code, result_message_id \
          FROM hermes_data.contacts_mail_entry_inbox \
          WHERE logical_owner_id = $1 AND command_message_id = $2 FOR UPDATE",
     )
@@ -253,13 +309,16 @@ async fn load_inbox(
     let entry_digest = bytes32(&row, "entry_digest")?;
     if envelope_hash != input.command_envelope_sha256
         || command_id != input.command_id
-        || fingerprint != input.command_fingerprint()?
+        || fingerprint != input.command_fingerprint()
         || entry_digest != input.draft.provenance.entry_digest
     {
         return Err(ContactsPersistenceErrorV1::InboxConflict);
     }
     if !row.get::<bool, _>("completed") {
         return Err(ContactsPersistenceErrorV1::CommandConflict);
+    }
+    if let Some(code) = row.get::<Option<i16>, _>("reject_code") {
+        return Err(reject_error(decode_reject_code(code)?));
     }
     let outcome = decode_outcome(row.get::<i16, _>("outcome"))?;
     let result_message_id = bytes16(&row, "result_message_id")?;
@@ -273,6 +332,54 @@ async fn load_inbox(
         contact_id: bytes16(&row, "contact_id")?,
         contact_revision: u64_value(row.get("contact_revision"))?,
         outcome,
+        terminal_result,
+        replayed: true,
+    })
+}
+
+async fn load_rejected_inbox(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &RejectMailEntryCommandV1,
+) -> Result<RejectedMailEntryCommandV1, ContactsPersistenceErrorV1> {
+    let row = sqlx::query(
+        "SELECT command_message_id, command_envelope_sha256, command_fingerprint, entry_digest, \
+         completed, reject_code, result_message_id FROM hermes_data.contacts_mail_entry_inbox \
+         WHERE logical_owner_id = $1 AND (command_message_id = $2 OR command_id = $3) \
+         ORDER BY command_message_id = $2 DESC LIMIT 1 FOR UPDATE",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.command_message_id.as_slice())
+    .bind(input.command_id.as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(storage)?
+    .ok_or(ContactsPersistenceErrorV1::NotFound)?;
+    if bytes16(&row, "command_message_id")? != input.command_message_id {
+        return Err(ContactsPersistenceErrorV1::CommandConflict);
+    }
+    if bytes32(&row, "command_envelope_sha256")? != input.command_envelope_sha256
+        || bytes32(&row, "command_fingerprint")? != input.command_fingerprint()
+        || bytes32(&row, "entry_digest")? != input.entry_digest
+        || !row.get::<bool, _>("completed")
+    {
+        return Err(ContactsPersistenceErrorV1::InboxConflict);
+    }
+    let code = decode_reject_code(
+        row.try_get::<Option<i16>, _>("reject_code")
+            .map_err(|_| ContactsPersistenceErrorV1::InvalidRow)?
+            .ok_or(ContactsPersistenceErrorV1::InvalidRow)?,
+    )?;
+    if code != input.code {
+        return Err(ContactsPersistenceErrorV1::CommandConflict);
+    }
+    let terminal_result = load_outbox(
+        transaction,
+        &input.logical_owner_id,
+        bytes16(&row, "result_message_id")?,
+    )
+    .await?;
+    Ok(RejectedMailEntryCommandV1 {
+        code,
         terminal_result,
         replayed: true,
     })
@@ -625,6 +732,29 @@ async fn complete_inbox(
     Ok(())
 }
 
+async fn complete_rejected_inbox(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &RejectMailEntryCommandV1,
+) -> Result<(), ContactsPersistenceErrorV1> {
+    let result = sqlx::query(
+        "UPDATE hermes_data.contacts_mail_entry_inbox SET completed = TRUE, reject_code = $3, \
+         result_message_id = $4, completed_at_unix_millis = $5 WHERE logical_owner_id = $1 \
+         AND command_message_id = $2 AND NOT completed",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.command_message_id.as_slice())
+    .bind(input.code as i16)
+    .bind(input.terminal_result.message_id.as_slice())
+    .bind(input.completed_at_unix_millis)
+    .execute(&mut **transaction)
+    .await
+    .map_err(storage)?;
+    if result.rows_affected() != 1 {
+        return Err(ContactsPersistenceErrorV1::CommandConflict);
+    }
+    Ok(())
+}
+
 fn decode_outbox(
     row: &sqlx::postgres::PgRow,
 ) -> Result<ContactsOutboxRecordV1, ContactsPersistenceErrorV1> {
@@ -685,6 +815,33 @@ fn decode_outcome(value: i16) -> Result<ContactUpsertOutcomeV1, ContactsPersiste
         2 => Ok(ContactUpsertOutcomeV1::Updated),
         3 => Ok(ContactUpsertOutcomeV1::Unchanged),
         _ => Err(ContactsPersistenceErrorV1::InvalidRow),
+    }
+}
+
+fn decode_reject_code(
+    value: i16,
+) -> Result<ContactMailEntryRejectCodeV1, ContactsPersistenceErrorV1> {
+    match value {
+        1 => Ok(ContactMailEntryRejectCodeV1::InvalidRequest),
+        2 => Ok(ContactMailEntryRejectCodeV1::IdentityAmbiguous),
+        3 => Ok(ContactMailEntryRejectCodeV1::ProviderLinkConflict),
+        4 => Ok(ContactMailEntryRejectCodeV1::StaleSource),
+        5 => Ok(ContactMailEntryRejectCodeV1::Policy),
+        _ => Err(ContactsPersistenceErrorV1::InvalidRow),
+    }
+}
+
+fn reject_error(value: ContactMailEntryRejectCodeV1) -> ContactsPersistenceErrorV1 {
+    match value {
+        ContactMailEntryRejectCodeV1::InvalidRequest => ContactsPersistenceErrorV1::InvalidInput,
+        ContactMailEntryRejectCodeV1::IdentityAmbiguous => {
+            ContactsPersistenceErrorV1::IdentityAmbiguous
+        }
+        ContactMailEntryRejectCodeV1::ProviderLinkConflict => {
+            ContactsPersistenceErrorV1::ProviderLinkConflict
+        }
+        ContactMailEntryRejectCodeV1::StaleSource => ContactsPersistenceErrorV1::StaleSource,
+        ContactMailEntryRejectCodeV1::Policy => ContactsPersistenceErrorV1::PolicyRejected,
     }
 }
 

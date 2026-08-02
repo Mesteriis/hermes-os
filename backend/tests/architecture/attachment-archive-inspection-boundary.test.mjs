@@ -35,7 +35,7 @@ test('archive inspection production gate is implemented as an exact engine inven
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_persistence_v1',
+    'contacts_mail_identity_command_runtime_assembly_v1',
   );
   assert(policy.implementation.ownerInventory.engines.includes(
     'attachment_archive_inspection',

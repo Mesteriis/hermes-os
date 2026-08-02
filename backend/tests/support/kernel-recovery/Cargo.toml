@@ -114,6 +114,9 @@ hermes-reviewed-task-candidate-promotion-runtime = { path = "../../../src/review
 hermes-tasks-command-api = { path = "../../../src/tasks-command-api" }
 hermes-tasks-persistence = { path = "../../../src/tasks-persistence" }
 hermes-tasks-runtime = { path = "../../../src/tasks-runtime" }
+hermes-contacts-command-api = { path = "../../../src/contacts-command-api" }
+hermes-contacts-persistence = { path = "../../../src/contacts-persistence", features = ["conformance-test-support"] }
+hermes-contacts-runtime = { path = "../../../src/contacts-runtime" }
 hermes-review-note-candidate-api = { path = "../../../src/review-note-candidate-api" }
 hermes-review-note-candidate-core = { path = "../../../src/review-note-candidate-core" }
 hermes-review-note-candidate-persistence = { path = "../../../src/review-note-candidate-persistence" }

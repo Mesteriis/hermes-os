@@ -1,4 +1,4 @@
-use hermes_contacts_core::{ContactUpsertDraftV1, ContactUpsertOutcomeV1, upsert_fingerprint_v1};
+use hermes_contacts_core::{ContactUpsertDraftV1, ContactUpsertOutcomeV1};
 use sha2::{Digest, Sha256};
 
 pub const CONTACTS_MAX_EVENT_BYTES_V1: usize = 64 * 1024;
@@ -22,15 +22,55 @@ pub struct ApplyMailEntryCommandV1 {
 }
 
 impl ApplyMailEntryCommandV1 {
-    pub fn command_fingerprint(&self) -> Result<[u8; 32], ContactsPersistenceErrorV1> {
-        let upsert = upsert_fingerprint_v1(&self.draft)
-            .map_err(|_| ContactsPersistenceErrorV1::InvalidInput)?;
-        let mut hash = Sha256::new();
-        hash.update(b"hermes.contacts.mail-entry.command.v1\0");
-        hash.update(self.command_id);
-        hash.update(upsert);
-        Ok(hash.finalize().into())
+    #[must_use]
+    pub fn command_fingerprint(&self) -> [u8; 32] {
+        command_fingerprint(
+            self.command_envelope_sha256,
+            self.command_id,
+            self.draft.provenance.entry_digest,
+        )
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(i16)]
+pub enum ContactMailEntryRejectCodeV1 {
+    InvalidRequest = 1,
+    IdentityAmbiguous = 2,
+    ProviderLinkConflict = 3,
+    StaleSource = 4,
+    Policy = 5,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RejectMailEntryCommandV1 {
+    pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub command_id: [u8; 16],
+    pub logical_owner_id: String,
+    pub entry_digest: [u8; 32],
+    pub received_at_unix_millis: i64,
+    pub completed_at_unix_millis: i64,
+    pub code: ContactMailEntryRejectCodeV1,
+    pub terminal_result: ContactsOutboxRecordV1,
+}
+
+impl RejectMailEntryCommandV1 {
+    #[must_use]
+    pub fn command_fingerprint(&self) -> [u8; 32] {
+        command_fingerprint(
+            self.command_envelope_sha256,
+            self.command_id,
+            self.entry_digest,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RejectedMailEntryCommandV1 {
+    pub code: ContactMailEntryRejectCodeV1,
+    pub terminal_result: ContactsOutboxRecordV1,
+    pub replayed: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -52,6 +92,7 @@ pub enum ContactsPersistenceErrorV1 {
     IdentityAmbiguous,
     ProviderLinkConflict,
     StaleSource,
+    PolicyRejected,
     NotFound,
 }
 
@@ -62,6 +103,17 @@ pub(crate) fn valid_apply(value: &ApplyMailEntryCommandV1) -> bool {
         && hermes_contacts_core::upsert_fingerprint_v1(&value.draft).is_ok()
         && value.received_at_unix_millis > 0
         && value.completed_at_unix_millis >= value.received_at_unix_millis
+}
+
+pub(crate) fn valid_reject(value: &RejectMailEntryCommandV1) -> bool {
+    nonzero(&value.command_message_id)
+        && nonzero(&value.command_envelope_sha256)
+        && nonzero(&value.command_id)
+        && valid_owner(&value.logical_owner_id)
+        && nonzero(&value.entry_digest)
+        && value.received_at_unix_millis > 0
+        && value.completed_at_unix_millis >= value.received_at_unix_millis
+        && valid_outbox(&value.terminal_result)
 }
 
 pub(crate) fn valid_outbox(value: &ContactsOutboxRecordV1) -> bool {
@@ -84,6 +136,19 @@ pub(crate) fn nonzero<const N: usize>(value: &[u8; N]) -> bool {
     value.iter().any(|byte| *byte != 0)
 }
 
+fn command_fingerprint(
+    command_envelope_sha256: [u8; 32],
+    command_id: [u8; 16],
+    entry_digest: [u8; 32],
+) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"hermes.contacts.mail-entry.command.v1\0");
+    hash.update(command_envelope_sha256);
+    hash.update(command_id);
+    hash.update(entry_digest);
+    hash.finalize().into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,9 +159,9 @@ mod tests {
     #[test]
     fn fingerprint_binds_command_and_canonical_input() {
         let mut input = sample();
-        let first = input.command_fingerprint().expect("fingerprint");
-        input.draft.provenance.source_revision += 1;
-        assert_ne!(first, input.command_fingerprint().expect("fingerprint"));
+        let first = input.command_fingerprint();
+        input.command_envelope_sha256[0] ^= 1;
+        assert_ne!(first, input.command_fingerprint());
     }
 
     fn sample() -> ApplyMailEntryCommandV1 {

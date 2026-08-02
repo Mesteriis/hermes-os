@@ -726,4 +726,6 @@ ADR-0379 разделяет Mail address-book sync между Mail integration, 
 `mail_contacts_sync` workflow и минимальным Contacts command owner. Provider
 protocol/ETag остаются в Mail, canonical identity truth — в Contacts, а
 direction, correlation, checkpoints и retry — в workflow; взаимодействие идёт
-только через typed durable events/commands и owner-local storage.
+только через typed durable events/commands и owner-local storage. Contacts
+command gate реализован пятью изолированными units и доказан live managed
+Vault/Storage/NATS contour; сам Mail sync workflow остаётся planned.

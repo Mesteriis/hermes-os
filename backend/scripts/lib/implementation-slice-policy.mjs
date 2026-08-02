@@ -1255,6 +1255,17 @@ const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_PRODUCTION_PACKAGES =
       : [packageDescriptor]
   ));
 
+const CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES =
+  CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_PRODUCTION_PACKAGES.flatMap((packageDescriptor) => (
+    packageDescriptor.name === 'hermes-contacts-persistence'
+      ? [
+          packageDescriptor,
+          { name: 'hermes-contacts-runtime', role: 'domain', owner: 'contacts', surface: 'runtime' },
+          { name: 'hermes-contacts-assembly', role: 'domain', owner: 'contacts', surface: 'assembly' },
+        ]
+      : [packageDescriptor]
+  ));
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3703,6 +3714,26 @@ const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST 
   ],
 };
 
+const CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-runtime': [
+    { name: 'hermes-contacts-command-api', kind: 'normal' },
+    { name: 'hermes-contacts-core', kind: 'normal' },
+    { name: 'hermes-contacts-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-contacts-assembly': [
+    { name: 'hermes-contacts-persistence', kind: 'normal' },
+    { name: 'hermes-contacts-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4995,6 +5026,23 @@ const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIS
   'hermes-contacts-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-contacts-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -7623,6 +7671,17 @@ function expectedSlice(currentSlice) {
       packages: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'contacts_mail_identity_command_runtime_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_CARGO_FEATURE_ALLOWLIST,
+      packages: CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

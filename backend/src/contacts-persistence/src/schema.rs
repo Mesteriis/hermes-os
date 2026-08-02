@@ -40,6 +40,7 @@ mod tests {
             "contacts_provider_links",
             "contacts_outbox",
             "command_envelope_sha256",
+            "reject_code",
         ] {
             assert!(sql.contains(required), "{required}");
         }

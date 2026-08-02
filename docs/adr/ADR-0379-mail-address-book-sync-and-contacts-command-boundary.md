@@ -4,9 +4,11 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: planned. Решение принято до production implementation.
-Наличие legacy address-book service, Mail account UI или статических contracts
-не открывает `contacts_mail_identity_command_v1` либо `mail_contacts_sync_v1`.
+Состояние реализации: `contacts_mail_identity_command_v1` implemented;
+`mail_contacts_sync_v1` planned. Contacts command открыт только после exact
+five-unit inventory, disposable PostgreSQL и signed managed Vault/Storage/NATS
+conformance. Наличие legacy address-book service, Mail account UI или
+статических contracts не открывает workflow gate.
 
 Уточняет:
 
@@ -182,7 +184,7 @@ not inferred from one missing provider page.
 
 ### `contacts_mail_identity_command_v1`
 
-Opens only after:
+Gate открыт после:
 
 1. five exact Contacts units and compile isolation;
 2. typed command/result and provider provenance without generic maps;
@@ -190,6 +192,16 @@ Opens only after:
 4. deterministic normalization/idempotency and ambiguity negatives;
 5. signed managed runtime evidence through real Vault, Storage and NATS;
 6. duplicate/conflict, restart, revoke, generation/grant and privacy gates.
+
+Executable evidence: `hermes-contacts-command-api`, `hermes-contacts-core`,
+`hermes-contacts-persistence`, `hermes-contacts-runtime` и
+`hermes-contacts-assembly` являются отдельными Contacts-owned units без Mail или
+Communications imports. Disposable PostgreSQL проверяет atomic success/rejection,
+exact replay и conflict fencing. Managed conformance запускает signed Contacts
+process через Kernel admission, Vault credential lease, PgBouncer и NATS,
+проверяет duplicate suppression, terminal rejection, successor restart,
+generation/grant advance, owner revoke и отсутствие private contact/provider
+fields в terminal events.
 
 ### `mail_contacts_sync_v1`
 

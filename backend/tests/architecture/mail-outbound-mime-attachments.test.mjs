@@ -111,7 +111,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_persistence_v1',
+    'contacts_mail_identity_command_runtime_assembly_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',

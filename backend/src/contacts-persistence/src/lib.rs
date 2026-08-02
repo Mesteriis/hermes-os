@@ -11,8 +11,9 @@ mod conformance;
 pub use conformance::ContactsPersistenceConformanceV1;
 
 pub use model::{
-    AppliedMailEntryCommandV1, ApplyMailEntryCommandV1, ContactsOutboxRecordV1,
-    ContactsPersistenceErrorV1,
+    AppliedMailEntryCommandV1, ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1,
+    ContactsOutboxRecordV1, ContactsPersistenceErrorV1, RejectMailEntryCommandV1,
+    RejectedMailEntryCommandV1,
 };
 pub use repository::ContactsPersistenceV1;
 pub use schema::{

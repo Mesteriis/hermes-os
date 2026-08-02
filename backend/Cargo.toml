@@ -79,6 +79,8 @@ members = [
   "src/contacts-command-api",
   "src/contacts-core",
   "src/contacts-persistence",
+  "src/contacts-runtime",
+  "src/contacts-assembly",
   "src/reviewed-task-candidate-promotion-core",
   "src/reviewed-task-candidate-promotion-persistence",
   "src/reviewed-task-candidate-promotion-runtime",

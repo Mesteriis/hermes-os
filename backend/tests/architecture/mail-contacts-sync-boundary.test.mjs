@@ -29,6 +29,13 @@ const files = {
     'src/contacts-persistence/migrations/0001_contacts.sql',
     BACKEND_ROOT,
   ),
+  runtimeManifest: new URL('src/contacts-runtime/Cargo.toml', BACKEND_ROOT),
+  runtimeAdmission: new URL('src/contacts-runtime/src/admission.rs', BACKEND_ROOT),
+  runtimeCommand: new URL('src/contacts-runtime/src/command.rs', BACKEND_ROOT),
+  managedRuntime: new URL('src/contacts-runtime/src/managed_runtime.rs', BACKEND_ROOT),
+  assemblyManifest: new URL('src/contacts-assembly/Cargo.toml', BACKEND_ROOT),
+  assembly: new URL('src/contacts-assembly/src/lib.rs', BACKEND_ROOT),
+  developmentRelease: new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
 };
 
 test('mail contacts sync agreement keeps integration workflow and domain separate', async () => {
@@ -48,7 +55,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
     gate: 'contacts_mail_identity_command_v1',
     role: 'domain',
     owner: 'contacts',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['client_gateway_v1'],
   });
   assert.deepEqual(workflowGate, {
@@ -64,7 +71,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_persistence_v1',
+    'contacts_mail_identity_command_runtime_assembly_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -74,7 +81,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   );
 });
 
-test('staged Contacts slice keeps contract core and persistence as separate units', async () => {
+test('staged Contacts slice keeps five functional build units isolated', async () => {
   const [
     apiManifest,
     coreManifest,
@@ -87,6 +94,13 @@ test('staged Contacts slice keeps contract core and persistence as separate unit
     persistenceManifest,
     persistence,
     migration,
+    runtimeManifest,
+    runtimeAdmission,
+    runtimeCommand,
+    managedRuntime,
+    assemblyManifest,
+    assembly,
+    developmentRelease,
   ] =
     await Promise.all([
       readFile(files.apiManifest, 'utf8'),
@@ -100,6 +114,13 @@ test('staged Contacts slice keeps contract core and persistence as separate unit
       readFile(files.persistenceManifest, 'utf8'),
       readFile(files.persistence, 'utf8'),
       readFile(files.migration, 'utf8'),
+      readFile(files.runtimeManifest, 'utf8'),
+      readFile(files.runtimeAdmission, 'utf8'),
+      readFile(files.runtimeCommand, 'utf8'),
+      readFile(files.managedRuntime, 'utf8'),
+      readFile(files.assemblyManifest, 'utf8'),
+      readFile(files.assembly, 'utf8'),
+      readFile(files.developmentRelease, 'utf8'),
     ]);
 
   for (const manifest of [apiManifest, coreManifest]) {
@@ -133,4 +154,33 @@ test('staged Contacts slice keeps contract core and persistence as separate unit
   assert.match(migration, /contacts_provider_links/);
   assert.match(migration, /contacts_outbox/);
   assert.doesNotMatch(migration, /mail_credential|communications_|tasks_|review_/);
+  for (const manifest of [runtimeManifest, assemblyManifest]) {
+    assert.match(manifest, /role = "domain"/);
+    assert.match(manifest, /owner = "contacts"/);
+    assert.doesNotMatch(manifest, /hermes-mail|hermes-communications/);
+  }
+  assert.match(runtimeManifest, /surface = "runtime"/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(runtimeAdmission, /ModuleKindV1::Domain/);
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::DurableConsumer/);
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::DurablePublisher/);
+  assert.match(runtimeAdmission, /StorageNamespaceRequestV1/);
+  assert.doesNotMatch(runtimeAdmission, /ClientRpc|RequestRpc|QueryRpc/);
+  assert.match(runtimeCommand, /consume_contacts_command_once_v1/);
+  assert.match(runtimeCommand, /reject_mail_entry/);
+  assert.match(runtimeCommand, /delivery\.acknowledge\(\)\.await/);
+  assert.match(managedRuntime, /StorageVaultLeaseAdapterV1/);
+  assert.match(managedRuntime, /connect_runtime_with_jwt/);
+  assert.match(managedRuntime, /signal_ready/);
+  assert.doesNotMatch(managedRuntime, /hermes_mail|hermes_communications/);
+  assert.match(assembly, /Unsigned Contacts release assembly/);
+  assert.match(assembly, /contacts_storage_bundle_v1/);
+  assert.match(assembly, /materialize_contacts_release_assembly_v1/);
+  assert.doesNotMatch(assembly, /sign_release|launch_managed|KernelReleaseAuthorityV1/);
+  assert.match(developmentRelease, /--package hermes-contacts-runtime/);
+  assert.match(developmentRelease, /--package hermes-contacts-assembly/);
+  assert.match(
+    developmentRelease,
+    /--artifact-fragment "\$contacts_assembly\/contacts\.release-artifacts\.json"/,
+  );
 });
