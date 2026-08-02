@@ -66,7 +66,7 @@ pub fn decode_mail_contacts_sync_settings_v1(
     if account_id.len() > 256 || !account_id.is_ascii() || account_id.trim() != account_id {
         return Err("mail_contacts_sync_settings_invalid");
     }
-    let direction = match required_string(snapshot, DIRECTION)?.as_str() {
+    let direction = match required_enum(snapshot, DIRECTION)? {
         "provider_to_contacts" => MailContactsSyncDirectionV1::ProviderToContacts,
         "bidirectional" => MailContactsSyncDirectionV1::Bidirectional,
         _ => return Err("mail_contacts_sync_settings_invalid"),
@@ -144,6 +144,16 @@ fn required_boolean(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<b
     }
 }
 
+fn required_enum<'a>(
+    snapshot: &'a SettingsSnapshotV1,
+    setting_id: &str,
+) -> Result<&'a str, &'static str> {
+    match required_value(snapshot, setting_id)? {
+        Value::EnumValue(value) if !value.is_empty() => Ok(value),
+        _ => Err("mail_contacts_sync_settings_invalid"),
+    }
+}
+
 fn required_unsigned(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<u64, &'static str> {
     match required_value(snapshot, setting_id)? {
         Value::UnsignedIntegerValue(value) => Ok(*value),
@@ -155,7 +165,9 @@ fn required_unsigned(snapshot: &SettingsSnapshotV1, setting_id: &str) -> Result<
 mod tests {
     use hermes_runtime_protocol::{
         v1::{SettingValueV1, SettingsValueEntryV1},
-        validation::descriptor::validate_settings_schema_v1,
+        validation::descriptor::{
+            validate_settings_schema_v1, validate_settings_snapshot_against_schema_v1,
+        },
     };
 
     use super::*;
@@ -175,6 +187,11 @@ mod tests {
     #[test]
     fn decoder_fences_direction_interval_and_remote_write() {
         let valid = snapshot("bidirectional", 900, true);
+        validate_settings_snapshot_against_schema_v1(
+            &mail_contacts_sync_settings_schema_v1(),
+            &valid,
+        )
+        .expect("typed settings snapshot");
         assert_eq!(
             decode_mail_contacts_sync_settings_v1(&valid)
                 .expect("valid")
@@ -196,7 +213,7 @@ mod tests {
             revision: 1,
             values: vec![
                 entry(ACCOUNT_ID, Value::StringValue("mail-account-1".to_owned())),
-                entry(DIRECTION, Value::StringValue(direction.to_owned())),
+                entry(DIRECTION, Value::EnumValue(direction.to_owned())),
                 entry(ENABLED, Value::BooleanValue(true)),
                 entry(INTERVAL_SECONDS, Value::UnsignedIntegerValue(interval)),
                 entry(REMOTE_WRITE_ENABLED, Value::BooleanValue(remote_write)),

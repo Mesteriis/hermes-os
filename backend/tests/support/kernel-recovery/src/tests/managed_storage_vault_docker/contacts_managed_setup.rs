@@ -30,15 +30,17 @@ pub(super) struct StartedContactsRuntimeV1 {
 
 pub(super) fn installed_contacts_release_v1(root: &Path) -> InstalledSignedBundle {
     let mut artifacts = communications_release_artifacts();
-    artifacts.push(
-        SignedRuntimeArtifact::new(
-            CONTACTS_RELEASE_ARTIFACT_ID_V1,
-            contacts_binary(),
-            contacts_module_descriptor_v1("managed-contacts-live").encode_to_vec(),
-        )
-        .with_settings_schema(contacts_settings_schema_bytes_v1()),
-    );
+    artifacts.push(contacts_release_artifact_v1());
     InstalledSignedBundle::install(root, &artifacts).expect("install signed Contacts release")
+}
+
+pub(super) fn contacts_release_artifact_v1() -> SignedRuntimeArtifact {
+    SignedRuntimeArtifact::new(
+        CONTACTS_RELEASE_ARTIFACT_ID_V1,
+        contacts_binary(),
+        contacts_module_descriptor_v1("managed-contacts-live").encode_to_vec(),
+    )
+    .with_settings_schema(contacts_settings_schema_bytes_v1())
 }
 
 pub(super) fn admit_contacts_runtime_v1(store: &SqliteControlStore) -> AdmittedContactsRuntimeV1 {

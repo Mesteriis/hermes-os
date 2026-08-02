@@ -143,6 +143,18 @@ const files = {
     'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_carddav_fixture.rs',
     BACKEND_ROOT,
   ),
+  managedSyncSetup: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_contacts_sync_managed_setup.rs',
+    BACKEND_ROOT,
+  ),
+  managedSyncFlow: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_contacts_sync_managed_flow.rs',
+    BACKEND_ROOT,
+  ),
+  authenticatedStorageHarness: new URL(
+    'scripts/test-authenticated-storage.mjs',
+    BACKEND_ROOT,
+  ),
   mailOAuthCore: new URL('src/mail-core/src/oauth.rs', BACKEND_ROOT),
   mailOAuthPersistence: new URL('src/mail-persistence/src/oauth.rs', BACKEND_ROOT),
   mailPortabilityProto: new URL(
@@ -245,7 +257,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_release_assembly_v1',
+    'mail_contacts_sync_managed_provider_to_contacts_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -520,7 +532,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_release_assembly_v1',
+    'mail_contacts_sync_managed_provider_to_contacts_v1',
   );
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(
@@ -586,6 +598,31 @@ test('managed Mail provider conformance keeps endpoints credentials and evidence
   assert.match(cardDavFixture, /authorization/);
   assert.doesNotMatch(cardDavFixture, /managed-mail-carddav-password/);
   assert.doesNotMatch(`${worker}\n${setup}`, /hermes_contacts_(?:runtime|persistence)/);
+});
+
+test('managed provider-to-Contacts sync crosses owners only through durable events', async () => {
+  const [setup, flow, harness, mailManaged] = await Promise.all([
+    readFile(files.managedSyncSetup, 'utf8'),
+    readFile(files.managedSyncFlow, 'utf8'),
+    readFile(files.authenticatedStorageHarness, 'utf8'),
+    readFile(files.mailRuntimeManaged, 'utf8'),
+  ]);
+  assert.match(setup, /installed_mail_contacts_sync_ensemble_release_v1/);
+  assert.match(setup, /mail_release_artifact/);
+  assert.match(setup, /contacts_release_artifact_v1/);
+  assert.match(setup, /mail_contacts_sync_release_artifact_v1/);
+  assert.match(setup, /start_reserved_workflow_with_settings/);
+  assert.match(setup, /ClientRealtimePublishHandlerV1/);
+  assert.match(flow, /managed_mail_contacts_sync_reaches_contacts_through_events/);
+  assert.match(flow, /route_start/);
+  assert.match(flow, /wait_for_completed/);
+  assert.match(flow, /contacts_created, 1/);
+  assert.match(flow, /provider\.accepted_people_reads\(\), 1/);
+  assert.match(flow, /duplicate\.run_id, accepted\.run_id/);
+  assert.match(harness, /hermes-mail-contacts-sync-runtime/);
+  assert.match(harness, /managed_mail_contacts_sync_reaches_contacts_through_events/);
+  assert.match(mailManaged, /address_book_upsert_subscribe_permit,[\s\S]*&self\.logical_human_owner_id/);
+  assert.match(mailManaged, /address_book_fetch_subscribe_permit,[\s\S]*&self\.logical_human_owner_id/);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

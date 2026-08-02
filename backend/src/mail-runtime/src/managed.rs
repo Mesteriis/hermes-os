@@ -2427,7 +2427,7 @@ impl MailAdmittedRuntime {
             &self.address_book_persistence,
             &self.event_connection,
             &self.address_book_upsert_subscribe_permit,
-            &self.logical_owner_id,
+            &self.logical_human_owner_id,
             consumed_at_unix_seconds,
         )
         .await
@@ -2447,7 +2447,7 @@ impl MailAdmittedRuntime {
             &self.address_book_persistence,
             &self.event_connection,
             &self.address_book_fetch_subscribe_permit,
-            &self.logical_owner_id,
+            &self.logical_human_owner_id,
             consumed_at_unix_seconds,
         )
         .await

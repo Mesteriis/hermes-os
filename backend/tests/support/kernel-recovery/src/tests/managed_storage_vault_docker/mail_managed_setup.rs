@@ -977,7 +977,12 @@ fn start_mail_runtime_with_settings_for_human_owner(
     .expect("start managed Mail integration");
     supervisor
         .wait_until_ready(&admitted.registration_id)
-        .expect("wait for managed Mail readiness");
+        .unwrap_or_else(|error| {
+            panic!(
+                "wait for managed Mail readiness: {error}; last_failure={:?}",
+                supervisor.last_failure(&admitted.registration_id)
+            )
+        });
     StartedMailRuntime {
         registration_id: admitted.registration_id,
         runtime_instance_id,

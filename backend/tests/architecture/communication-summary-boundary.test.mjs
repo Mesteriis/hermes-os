@@ -180,7 +180,7 @@ test('summary runtime and assembly expose only exact event request and release b
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_release_assembly_v1',
+    'mail_contacts_sync_managed_provider_to_contacts_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages

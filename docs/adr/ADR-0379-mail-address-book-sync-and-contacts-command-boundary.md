@@ -27,10 +27,14 @@ cursors, atomic Mail-owned inbox/outbox и disposable PostgreSQL replay
 evidence. Managed Mail provider-read conformance для Google People и CardDAV
 реализован через signed process, Vault/Storage/PgBouncer/NATS и loopback TLS
 providers; Google successor restart и exact duplicate suppression также
-доказаны. Managed workflow/Contacts assembly, reverse Blob/provider write,
-revoke/outage и browser conformance ещё не реализованы, поэтому gate остаётся
-закрытым.
-Contacts command открыт только после exact five-unit inventory,
+доказаны. Manual provider-to-Contacts path теперь также доказан полным managed
+ensemble: signed Mail, workflow и Contacts processes запускаются через Kernel,
+Vault, Storage/PgBouncer и NATS; Mail читает TLS Google People fixture, workflow
+передаёт только typed durable events, Contacts выполняет owner-local mutation,
+а повтор Start не вызывает второй provider IO. Scheduled execution, reverse
+Blob/provider write, revoke/outage и browser conformance ещё не доказаны,
+поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
+Contacts command открыт только после exact six-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
 legacy address-book service, Mail account UI или статических contracts не
 открывает workflow gate.
@@ -260,6 +264,14 @@ Opens only after the Contacts gate plus:
 
 Static contracts, fixtures, seeded contacts, direct service calls, shared SQL,
 frontend skeletons or a provider mock do not open either gate.
+
+Текущий executable managed evidence покрывает manual часть пункта 3: один
+disposable contour поднимает exact signed Mail, Contacts и
+`mail_contacts_sync` workflow artifacts, выполняет generated Start/Get route,
+проверяет provider observation → Contacts command/result через NATS, owner-local
+Contacts state и idempotent replay без повторного provider request. Этот evidence
+не считается доказательством scheduled, reverse, outage/revoke или browser
+частей gate.
 
 ## Последствия
 

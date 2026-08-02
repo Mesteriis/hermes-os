@@ -24,11 +24,12 @@ impl MailAddressBookPersistenceV1 {
 
     pub async fn verify_storage_ready(&self) -> Result<(), MailAddressBookPersistenceErrorV1> {
         sqlx::query(
-            "SELECT inbox.command_id, result.message_id, fetch.command_id, page.message_id
+            "SELECT inbox.command_id, result.message_id,
+                    fetch_inbox.command_id, page_outbox.message_id
              FROM hermes_data.mail_address_book_upsert_inbox inbox,
                   hermes_data.mail_address_book_upsert_result_outbox result,
-                  hermes_data.mail_address_book_fetch_inbox fetch,
-                  hermes_data.mail_address_book_fetch_outbox page
+                  hermes_data.mail_address_book_fetch_inbox fetch_inbox,
+                  hermes_data.mail_address_book_fetch_outbox page_outbox
              WHERE FALSE",
         )
         .execute(&self.pool)

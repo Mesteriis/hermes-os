@@ -262,8 +262,14 @@ fn serve_get(
         serde_json::to_vec(&serde_json::json!({
             "connections": [{
                 "resourceName": "people/managed-contact-1",
-                "etag": "managed-etag-1",
-                "metadata": {"deleted": false},
+                "metadata": {
+                    "deleted": false,
+                    "sources": [{
+                        "type": "CONTACT",
+                        "id": "managed-contact-1",
+                        "etag": "managed-etag-1"
+                    }]
+                },
                 "names": [{"displayName": "Private Managed Contact"}],
                 "emailAddresses": [{"value": "private-managed-contact@example.test"}],
                 "phoneNumbers": [{"value": "+12025550125"}]
