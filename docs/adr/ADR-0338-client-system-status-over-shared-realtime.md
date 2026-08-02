@@ -122,6 +122,13 @@ subscription. Subsequent transitions используют тот же owner-loca
 history/replay source. Replay gap заставляет client заново запросить bootstrap
 и открыть SSE; silent cursor reset запрещён.
 
+Первичный browser connect использует уже полученный authenticated bootstrap как
+current snapshot и открывает SSE на текущем edge cursor. Gateway не проигрывает
+новому client process прежние transition frames: иначе UI последовательно
+откатывает свежий bootstrap через исторические состояния. `OPEN` несёт edge
+cursor как SSE `id`; bounded history воспроизводится только при настоящем
+reconnect с browser-managed `Last-Event-ID`.
+
 ### Latency
 
 Initial bootstrap query может показать one-shot round-trip. Он:

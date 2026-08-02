@@ -185,15 +185,15 @@ impl InMemoryBrowserRealtimeSource {
             .and_then(frame_cursor)
             .unwrap_or_default();
         let replay = match after_cursor {
-            None => {
-                let mut replay = Vec::with_capacity(state.history.len() + 1);
-                replay.extend(state.history.iter().cloned());
-                replay.push(stream_state(
-                    ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen,
-                    latest_cursor,
-                ));
-                replay
-            }
+            // The authenticated bootstrap is the initial state snapshot. A new
+            // browser stream starts at the current edge so stale historical
+            // status frames cannot visibly roll that snapshot backwards. The
+            // OPEN frame carries the edge cursor, which EventSource returns as
+            // Last-Event-ID on an actual reconnect; only that path replays.
+            None => vec![stream_state(
+                ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen,
+                latest_cursor,
+            )],
             Some(cursor) => {
                 let Some(position) = state
                     .history
@@ -607,18 +607,17 @@ mod tests {
         );
         publisher.publish(event("cursor/2", 2)).expect("second");
 
-        let (initial_replay, _) = source
+        let (initial_frames, _) = source
             .subscribe(&session, None)
-            .expect("initial bounded replay")
+            .expect("initial edge subscription")
             .into_parts();
-        assert_eq!(initial_replay.len(), 3);
         assert!(matches!(
-            initial_replay[0].frame.as_ref(),
-            Some(Frame::Event(event)) if event.cursor == "cursor/1"
-        ));
-        assert!(matches!(
-            initial_replay[1].frame.as_ref(),
-            Some(Frame::Event(event)) if event.cursor == "cursor/2"
+            initial_frames.as_slice(),
+            [ClientRealtimeFrameV1 {
+                frame: Some(Frame::StreamState(state)),
+            }] if state.state
+                == ClientRealtimeStreamStateKindV1::ClientRealtimeStreamStateKindOpen as i32
+                && state.cursor == "cursor/2"
         ));
 
         let (replay, _) = source
