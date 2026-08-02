@@ -210,6 +210,8 @@ members = [
   "src/attachment-translation-ingress",
   "src/attachment-translation-core",
   "src/attachment-translation-persistence",
+  "src/attachment-translation-runtime",
+  "src/attachment-translation-assembly",
   "src/attachment-preview-api",
   "src/attachment-preview-assembly",
   "src/attachment-preview-ingress",

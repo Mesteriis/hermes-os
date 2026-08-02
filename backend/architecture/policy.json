@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_translation_ai_engine_v1",
+    "currentSlice": "attachment_translation_runtime_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1458,6 +1458,18 @@
         "role": "workflow",
         "owner": "attachment_translation",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-attachment-translation-runtime",
+        "role": "workflow",
+        "owner": "attachment_translation",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-attachment-translation-assembly",
+        "role": "workflow",
+        "owner": "attachment_translation",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1465,43 +1477,122 @@
       "hermes-retained-evidence-replay-protocol": [],
       "hermes-attachment-preview-evidence-replay-api": [],
       "hermes-attachment-preview-evidence-replay-core": [
-        { "name": "hermes-attachment-preview-evidence-replay-api", "kind": "normal" }
+        {
+          "name": "hermes-attachment-preview-evidence-replay-api",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-preview-evidence-replay-persistence": [
-        { "name": "hermes-attachment-preview-evidence-replay-api", "kind": "normal" },
-        { "name": "hermes-attachment-preview-evidence-replay-core", "kind": "normal" },
-        { "name": "hermes-communications-retained-evidence-replay-contract", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-mail-retained-evidence-replay-contract", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-attachment-preview-evidence-replay-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-evidence-replay-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-retained-evidence-replay-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-retained-evidence-replay-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-preview-evidence-replay-runtime": [
-        { "name": "hermes-attachment-preview-evidence-replay-api", "kind": "normal" },
-        { "name": "hermes-attachment-preview-evidence-replay-core", "kind": "normal" },
-        { "name": "hermes-attachment-preview-evidence-replay-persistence", "kind": "normal" },
-        { "name": "hermes-communications-retained-evidence-replay-contract", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-mail-retained-evidence-replay-contract", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-attachment-preview-evidence-replay-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-evidence-replay-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-evidence-replay-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-retained-evidence-replay-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-retained-evidence-replay-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-preview-evidence-replay-assembly": [
-        { "name": "hermes-attachment-preview-evidence-replay-persistence", "kind": "normal" },
-        { "name": "hermes-attachment-preview-evidence-replay-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-attachment-preview-evidence-replay-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-evidence-replay-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-translation-api": [],
       "hermes-attachment-translation-ingress": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-translation-core": [],
       "hermes-attachment-translation-persistence": [
-        { "name": "hermes-attachment-translation-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-attachment-translation-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communications-retained-evidence-replay-persistence": [
         {
@@ -2763,31 +2854,100 @@
         }
       ],
       "hermes-attachment-preview-runtime": [
-        { "name": "hermes-attachment-preview-api", "kind": "normal" },
-        { "name": "hermes-attachment-preview-core", "kind": "normal" },
-        { "name": "hermes-attachment-preview-docx", "kind": "normal" },
-        { "name": "hermes-attachment-preview-image", "kind": "normal" },
-        { "name": "hermes-attachment-preview-ingress", "kind": "normal" },
-        { "name": "hermes-attachment-preview-media", "kind": "normal" },
-        { "name": "hermes-attachment-preview-pdf", "kind": "normal" },
-        { "name": "hermes-attachment-preview-persistence", "kind": "normal" },
-        { "name": "hermes-attachment-preview-renderer-contract", "kind": "normal" },
-        { "name": "hermes-attachment-preview-text", "kind": "normal" },
-        { "name": "hermes-attachment-security-contract", "kind": "normal" },
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-communications-attachment-contract", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-docx",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-image",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-media",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-pdf",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-renderer-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-text",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-security-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-attachment-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-preview-assembly": [
-        { "name": "hermes-attachment-preview-api", "kind": "normal" },
-        { "name": "hermes-attachment-preview-persistence", "kind": "normal" },
-        { "name": "hermes-attachment-preview-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-attachment-preview-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-preview-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-attachment-text-extraction-plain": [
         {
@@ -4083,507 +4243,2455 @@
         }
       ],
       "hermes-communication-explanation-runtime": [
-        { "name": "hermes-ai-contracts", "kind": "normal" },
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-communication-explanation-api", "kind": "normal" },
-        { "name": "hermes-communication-explanation-core", "kind": "normal" },
-        { "name": "hermes-communication-explanation-persistence", "kind": "normal" },
-        { "name": "hermes-communications-ai-source-api", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-explanation-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-explanation-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-explanation-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-ai-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-explanation-assembly": [
-        { "name": "hermes-communication-explanation-persistence", "kind": "normal" },
-        { "name": "hermes-communication-explanation-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-explanation-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-explanation-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-recipient-suggestion-api": [],
       "hermes-communication-recipient-suggestion-core": [],
       "hermes-communication-recipient-suggestion-persistence": [
-        { "name": "hermes-communication-recipient-suggestion-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-recipient-suggestion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-recipient-suggestion-runtime": [
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-communication-recipient-suggestion-api", "kind": "normal" },
-        { "name": "hermes-communication-recipient-suggestion-core", "kind": "normal" },
-        { "name": "hermes-communication-recipient-suggestion-persistence", "kind": "normal" },
-        { "name": "hermes-communications-recipient-source-api", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-recipient-suggestion-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-recipient-suggestion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-recipient-suggestion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-recipient-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-recipient-suggestion-assembly": [
-        { "name": "hermes-communication-recipient-suggestion-persistence", "kind": "normal" },
-        { "name": "hermes-communication-recipient-suggestion-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-recipient-suggestion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-recipient-suggestion-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communications-recipient-source-api": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-task-candidate-api": [],
       "hermes-communication-task-candidate-core": [],
       "hermes-communication-task-candidate-persistence": [
-        { "name": "hermes-communication-task-candidate-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-task-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-task-candidate-runtime": [
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-communication-task-candidate-api", "kind": "normal" },
-        { "name": "hermes-communication-task-candidate-core", "kind": "normal" },
-        { "name": "hermes-communication-task-candidate-persistence", "kind": "normal" },
-        { "name": "hermes-communications-task-source-api", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-review-task-candidate-api", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-task-candidate-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-task-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-task-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-task-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-task-candidate-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-task-candidate-assembly": [
-        { "name": "hermes-communication-task-candidate-persistence", "kind": "normal" },
-        { "name": "hermes-communication-task-candidate-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-task-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-task-candidate-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communications-task-source-api": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-note-candidate-api": [],
       "hermes-communication-note-candidate-core": [],
       "hermes-communications-note-source-api": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-note-candidate-persistence": [
-        { "name": "hermes-communication-note-candidate-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-note-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-review-note-candidate-api": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-review-note-candidate-core": [],
       "hermes-knowledge-command-api": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-knowledge-core": [],
       "hermes-knowledge-persistence": [
-        { "name": "hermes-knowledge-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-knowledge-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-knowledge-runtime": [
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-knowledge-command-api", "kind": "normal" },
-        { "name": "hermes-knowledge-core", "kind": "normal" },
-        { "name": "hermes-knowledge-persistence", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-knowledge-command-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-knowledge-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-knowledge-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-knowledge-assembly": [
-        { "name": "hermes-knowledge-persistence", "kind": "normal" },
-        { "name": "hermes-knowledge-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-knowledge-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-knowledge-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-review-note-candidate-persistence": [
-        { "name": "hermes-review-note-candidate-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-review-note-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-review-note-candidate-promotion-api": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-review-note-candidate-runtime": [
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-api", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-core", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-persistence", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-promotion-api", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-promotion-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-review-note-candidate-assembly": [
-        { "name": "hermes-review-note-candidate-persistence", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-review-note-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-core": [],
       "hermes-reviewed-note-candidate-promotion-persistence": [
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-reviewed-note-candidate-promotion-core", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-reviewed-note-candidate-promotion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-runtime": [
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-knowledge-command-api", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-api", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-promotion-api", "kind": "normal" },
-        { "name": "hermes-reviewed-note-candidate-promotion-core", "kind": "normal" },
-        { "name": "hermes-reviewed-note-candidate-promotion-persistence", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-knowledge-command-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-promotion-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-reviewed-note-candidate-promotion-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-reviewed-note-candidate-promotion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-assembly": [
-        { "name": "hermes-reviewed-note-candidate-promotion-persistence", "kind": "normal" },
-        { "name": "hermes-reviewed-note-candidate-promotion-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-reviewed-note-candidate-promotion-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-reviewed-note-candidate-promotion-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-note-candidate-runtime": [
-        { "name": "hermes-blob-client", "kind": "normal" },
-        { "name": "hermes-communication-note-candidate-api", "kind": "normal" },
-        { "name": "hermes-communication-note-candidate-core", "kind": "normal" },
-        { "name": "hermes-communication-note-candidate-persistence", "kind": "normal" },
-        { "name": "hermes-communications-note-source-api", "kind": "normal" },
-        { "name": "hermes-events-jetstream", "kind": "normal" },
-        { "name": "hermes-events-protocol", "kind": "normal" },
-        { "name": "hermes-review-note-candidate-api", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" },
-        { "name": "hermes-storage-vault", "kind": "normal" }
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-note-candidate-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-note-candidate-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-note-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-note-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-review-note-candidate-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
       ],
       "hermes-communication-note-candidate-assembly": [
-        { "name": "hermes-communication-note-candidate-persistence", "kind": "normal" },
-        { "name": "hermes-communication-note-candidate-runtime", "kind": "normal" },
-        { "name": "hermes-runtime-protocol", "kind": "normal" },
-        { "name": "hermes-storage-protocol", "kind": "normal" }
+        {
+          "name": "hermes-communication-note-candidate-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communication-note-candidate-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-translation-runtime": [
+        {
+          "name": "hermes-ai-contracts",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-attachment-translation-assembly": [
+        {
+          "name": "hermes-attachment-translation-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
       ]
     },
     "thirdPartyDependencyAllowlist": {
       "hermes-retained-evidence-replay-protocol": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-attachment-preview-evidence-replay-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-attachment-preview-evidence-replay-core": [],
       "hermes-attachment-preview-evidence-replay-persistence": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-attachment-preview-evidence-replay-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-attachment-preview-evidence-replay-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-attachment-translation-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-attachment-translation-ingress": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-attachment-translation-core": [],
       "hermes-attachment-translation-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communications-retained-evidence-replay-persistence": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "dev",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "dev",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-mail-retained-evidence-replay-persistence": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "dev",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "dev",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communications-retained-evidence-replay-contract": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-mail-retained-evidence-replay-contract": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-summary-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-summary-core": [],
       "hermes-communication-summary-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communication-summary-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-summary-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-translation-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-translation-core": [],
       "hermes-communication-translation-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communication-translation-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-translation-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-explanation-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-explanation-core": [],
       "hermes-communication-explanation-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communication-explanation-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-explanation-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-recipient-suggestion-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-recipient-suggestion-core": [],
       "hermes-communication-recipient-suggestion-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communication-recipient-suggestion-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-recipient-suggestion-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communications-recipient-source-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-task-candidate-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-task-candidate-core": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-task-candidate-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-communication-task-candidate-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-task-candidate-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communications-task-source-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-note-candidate-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-note-candidate-core": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communications-note-source-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-communication-note-candidate-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-review-note-candidate-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-review-note-candidate-core": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-knowledge-command-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-knowledge-core": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-knowledge-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-knowledge-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-knowledge-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-review-note-candidate-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-review-note-candidate-promotion-api": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-review-note-candidate-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-review-note-candidate-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-core": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-persistence": [
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-reviewed-note-candidate-promotion-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-events-protocol": [
         {
@@ -7583,17 +9691,86 @@
         }
       ],
       "hermes-attachment-preview-runtime": [
-        { "name": "getrandom", "kind": "normal", "source": "crates_io", "version": "=0.4.3", "defaultFeatures": false, "features": [] },
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-attachment-preview-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-attachment-text-extraction-plain": [],
       "hermes-attachment-text-extraction-pdf": [
@@ -9667,16 +11844,160 @@
         }
       ],
       "hermes-communication-note-candidate-runtime": [
-        { "name": "libc", "kind": "normal", "source": "crates_io", "version": "=0.2.186", "defaultFeatures": true, "features": [] },
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
-        { "name": "tokio", "kind": "normal", "source": "crates_io", "version": "=1.52.4", "defaultFeatures": false, "features": ["rt-multi-thread", "time"] },
-        { "name": "zeroize", "kind": "normal", "source": "crates_io", "version": "=1.9.0", "defaultFeatures": true, "features": [] }
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ],
       "hermes-communication-note-candidate-assembly": [
-        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
-        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
-        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-attachment-translation-runtime": [
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-attachment-translation-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -10680,6 +13001,14 @@
       "hermes-reviewed-task-candidate-promotion-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
+      },
+      "hermes-attachment-translation-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-translation-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -10757,6 +13086,7 @@
         "attachment.archive_inspection.v1",
         "attachment.preview.v1",
         "attachment.text_extraction.v1",
+        "attachment.translation.v1",
         "attachment_archive_inspection.blob.v1",
         "attachment_archive_inspection.candidate.observe.v1",
         "attachment_archive_inspection.custody-request.publish.v1",
@@ -10772,6 +13102,12 @@
         "attachment_security.text-extraction-delegation-result.publish.v1",
         "attachment_security.text-extraction-delegation.v1",
         "attachment_security.verdict.publish.v1",
+        "attachment_translation.blob.v1",
+        "attachment_translation.inference.v1",
+        "attachment_translation.source_prepared.v1",
+        "attachment_translation.source_rejected.v1",
+        "attachment_translation.source_requested.v1",
+        "attachment_translation.storage.v1",
         "communication.cross_channel_forward.v1",
         "communication.explanation.v1",
         "communication.note-candidate-extraction.v1",

@@ -79,7 +79,34 @@ pub struct AttachmentTranslationMaterializationResultV1 {
     pub logical_owner_id: String,
     pub run_id: [u8; 16],
     pub transition: AttachmentTranslationTransitionV1,
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
     pub occurred_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IssueAttachmentTranslationTicketV1 {
+    pub ticket_sha256: [u8; 32],
+    pub device_actor_sha256: [u8; 32],
+    pub run_id: [u8; 16],
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub now_unix_seconds: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IssuedAttachmentTranslationTicketV1 {
+    pub run_id: [u8; 16],
+    pub expires_at_unix_seconds: i64,
+    pub translated_size_bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RedeemedAttachmentTranslationTicketV1 {
+    pub run_id: [u8; 16],
+    pub artifact_reference_id: [u8; 16],
+    pub artifact_receipt_sha256: [u8; 32],
+    pub translated_size_bytes: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -105,6 +132,9 @@ pub enum AttachmentTranslationPersistenceErrorV1 {
     RevisionConflict,
     InvalidTransition,
     NotFound,
+    TicketExpired,
+    TicketUsed,
+    StaleFence,
 }
 
 pub(crate) fn request_fingerprint(draft: &AttachmentTranslationDraftV1) -> [u8; 32] {

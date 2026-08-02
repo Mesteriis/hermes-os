@@ -5,15 +5,19 @@
 Дата: 2026-08-02
 
 Состояние реализации: частично реализовано. Phase gate
-`attachment_translation_ai_engine_v1` закрывает четыре workflow production units:
+`attachment_translation_runtime_assembly_v1` закрывает все шесть workflow production units:
 generated private-content-free client API, exact durable source ingress, pure
-lifecycle core и owner-local PostgreSQL persistence. Persistence атомарно
+lifecycle core, owner-local PostgreSQL persistence, managed runtime и release
+assembly. Persistence атомарно
 владеет idempotency, inbox/outbox, recovery и realtime, а SQL хранит только
 authority receipts и result metadata без source/translated text. Кроме них AI
 Engine получил distinct `AttachmentTranslationInferenceRequestV1`, отдельный
 use-case receipt, owner-local additive persistence и worker, переиспользующий
-только нижний `ai.provider.translate.v1`. Workflow runtime, source producer,
-assembly и managed/live evidence ещё отсутствуют, поэтому
+только нижний `ai.provider.translate.v1`. Runtime реализует event-only source
+consumer, request-routed AI, result Blob materialization, Start/Get/Read,
+actor-bound one-use ticket и shared SSE; assembly выдаёт отдельные unsigned
+runtime и Storage artifacts. Text Extraction source producer и managed/live
+evidence ещё отсутствуют, поэтому
 `attachment_translation_v1` остаётся `planned`.
 
 Уточняет:
@@ -240,6 +244,16 @@ Communication Translation. AI Engine предоставляет отдельну
 `ai.attachment-translation.request.v1`, отдельные core lifecycle/persistence
 records и worker. Только provider-facing translation operation остаётся общей;
 provider/model/endpoint/prompt не попадают в новый request.
+
+Phase gate `attachment_translation_runtime_assembly_v1` добавляет только
+workflow runtime и downstream assembly. Runtime импортирует public Text
+Extraction ingress и AI contracts, но не их runtime/storage/implementation;
+source handoff остаётся durable event-only. Translated UTF-8 существует только
+в bounded memory и Blob, а PostgreSQL хранит digest/size/reference и current
+runtime/grant fences. `client_blob` использует отдельный generated read schema и
+одноразовый ticket, привязанный к logical owner, authenticated device, artifact
+revision, runtime generation и grant epoch. Этот gate ещё не утверждает source
+producer или live contour и не меняет reconstruction inventory.
 
 `attachment_translation_v1` становится `implemented` только атомарно после:
 

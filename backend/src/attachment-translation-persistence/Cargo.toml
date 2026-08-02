@@ -13,6 +13,7 @@ owner = "attachment_translation"
 surface = "persistence"
 
 [dependencies]
+hermes-attachment-translation-api = { path = "../attachment-translation-api" }
 hermes-attachment-translation-core = { path = "../attachment-translation-core" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 sha2 = { version = "=0.11.0", default-features = false }

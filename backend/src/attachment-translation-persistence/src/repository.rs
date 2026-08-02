@@ -201,6 +201,7 @@ impl AttachmentTranslationPersistenceV1 {
                 .source_authority
                 .zip(input.inference_request_bytes)
                 .map(|(authority, request)| SourceMaterialization { authority, request }),
+            None,
             input.occurred_at_unix_millis,
         )
         .await
@@ -235,6 +236,7 @@ impl AttachmentTranslationPersistenceV1 {
             input.run_id,
             input.transition,
             None,
+            None,
             input.occurred_at_unix_millis,
         )
         .await
@@ -252,13 +254,21 @@ impl AttachmentTranslationPersistenceV1 {
             input.occurred_at_unix_millis,
         )?;
         if !matches!(
-            input.transition,
+            &input.transition,
             AttachmentTranslationTransitionV1::ResultMaterialized { .. }
                 | AttachmentTranslationTransitionV1::Reject(
                     AttachmentTranslationRejectionCodeV1::ResultRejected
                         | AttachmentTranslationRejectionCodeV1::Policy
                 )
         ) {
+            return Err(AttachmentTranslationPersistenceErrorV1::InvalidInput);
+        }
+        let artifact_fence = matches!(
+            input.transition,
+            AttachmentTranslationTransitionV1::ResultMaterialized { .. }
+        )
+        .then_some((input.runtime_generation, input.grant_epoch));
+        if artifact_fence.is_some() && (input.runtime_generation == 0 || input.grant_epoch == 0) {
             return Err(AttachmentTranslationPersistenceErrorV1::InvalidInput);
         }
         self.persist_event_transition(
@@ -268,6 +278,7 @@ impl AttachmentTranslationPersistenceV1 {
             input.run_id,
             input.transition,
             None,
+            artifact_fence,
             input.occurred_at_unix_millis,
         )
         .await
@@ -324,6 +335,7 @@ impl AttachmentTranslationPersistenceV1 {
         run_id: [u8; 16],
         transition: AttachmentTranslationTransitionV1,
         materialization: Option<SourceMaterialization>,
+        artifact_fence: Option<(u64, u64)>,
         occurred_at_unix_millis: i64,
     ) -> Result<AttachmentTranslationInboxResultV1, AttachmentTranslationPersistenceErrorV1> {
         let mut transaction = self.pool.begin().await.map_err(storage_error)?;
@@ -352,6 +364,7 @@ impl AttachmentTranslationPersistenceV1 {
             current.status.state_revision,
             &next,
             materialization.as_ref(),
+            artifact_fence,
             occurred_at_unix_millis,
         )
         .await?;
@@ -483,6 +496,7 @@ async fn persist_status(
     current_revision: u64,
     next: &AttachmentTranslationStatusV1,
     materialization: Option<&SourceMaterialization>,
+    artifact_fence: Option<(u64, u64)>,
     occurred_at_unix_millis: i64,
 ) -> Result<(), AttachmentTranslationPersistenceErrorV1> {
     if !valid_status(next) || !valid_timestamp(occurred_at_unix_millis) {
@@ -505,8 +519,9 @@ async fn persist_status(
            artifact_translated_size_bytes=$18, artifact_detected_source_language=$19,
            artifact_target_language=$20, artifact_completeness=$21,
            artifact_confidence_basis_points=$22, rejection_code=$23,
-           updated_at_unix_millis=$24
-         WHERE logical_owner_id=$25 AND run_id=$26 AND state_revision=$27",
+           artifact_runtime_generation=$24, artifact_grant_epoch=$25,
+           updated_at_unix_millis=$26
+         WHERE logical_owner_id=$27 AND run_id=$28 AND state_revision=$29",
     )
     .bind(state_code(next.state))
     .bind(signed(next.state_revision)?)
@@ -553,6 +568,16 @@ async fn persist_status(
             .map_err(|_| AttachmentTranslationPersistenceErrorV1::InvalidInput)?,
     )
     .bind(next.rejection.map(rejection_code))
+    .bind(
+        artifact_fence
+            .map(|(runtime_generation, _)| signed(runtime_generation))
+            .transpose()?,
+    )
+    .bind(
+        artifact_fence
+            .map(|(_, grant_epoch)| signed(grant_epoch))
+            .transpose()?,
+    )
     .bind(occurred_at_unix_millis)
     .bind(logical_owner_id)
     .bind(run_id.as_slice())

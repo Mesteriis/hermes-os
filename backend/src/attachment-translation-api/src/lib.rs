@@ -7,6 +7,7 @@ pub const ATTACHMENT_TRANSLATION_CAPABILITY_ID_V1: &str = "attachment.translatio
 pub const ATTACHMENT_TRANSLATION_COMMAND_CONTRACT_NAME_V1: &str = "attachment.translation.command";
 pub const ATTACHMENT_TRANSLATION_QUERY_CONTRACT_NAME_V1: &str = "attachment.translation.query";
 pub const ATTACHMENT_TRANSLATION_TICKET_CONTRACT_NAME_V1: &str = "attachment.translation.ticket";
+pub const ATTACHMENT_TRANSLATION_READ_CONTRACT_NAME_V1: &str = "attachment.translation.read";
 pub const ATTACHMENT_TRANSLATION_REALTIME_CONTRACT_NAME_V1: &str =
     "attachment.translation.status_changed";
 pub const ATTACHMENT_TRANSLATION_REALTIME_EVENT_KIND_V1: &str =
@@ -33,13 +34,30 @@ pub mod wire {
     ));
 }
 
+pub mod read_wire {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/hermes.attachment_translation.read.v1.rs"
+    ));
+}
+
 include!(concat!(
     env!("OUT_DIR"),
-    "/attachment_translation_schema.rs"
+    "/attachment_translation_control_schema.rs"
+));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/attachment_translation_read_schema.rs"
 ));
 
-pub const ATTACHMENT_TRANSLATION_DESCRIPTOR_SET_V1: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/attachment-translation-v1.bin"));
+pub const ATTACHMENT_TRANSLATION_CONTROL_DESCRIPTOR_SET_V1: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/attachment-translation-control-v1.bin"
+));
+pub const ATTACHMENT_TRANSLATION_READ_DESCRIPTOR_SET_V1: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/attachment-translation-read-v1.bin"
+));
 
 #[cfg(test)]
 mod tests {

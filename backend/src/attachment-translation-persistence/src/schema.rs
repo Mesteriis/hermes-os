@@ -1,9 +1,11 @@
 use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
-pub const ATTACHMENT_TRANSLATION_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
+pub const ATTACHMENT_TRANSLATION_STORAGE_BUNDLE_REVISION_V1: u32 = 2;
 pub const ATTACHMENT_TRANSLATION_SCHEMA_V1: &[u8] =
     include_bytes!("../migrations/0001_translation.sql");
+pub const ATTACHMENT_TRANSLATION_READ_TICKETS_SCHEMA_V1: &[u8] =
+    include_bytes!("../migrations/0002_translation_read_tickets.sql");
 
 #[must_use]
 pub fn attachment_translation_storage_bundle_v1() -> StorageBundleV1 {
@@ -12,12 +14,20 @@ pub fn attachment_translation_storage_bundle_v1() -> StorageBundleV1 {
         revision: ATTACHMENT_TRANSLATION_STORAGE_BUNDLE_REVISION_V1,
         bundle_id: "attachment_translation".to_owned(),
         owner_id: "attachment_translation".to_owned(),
-        steps: vec![StorageMigrationStepV1 {
-            revision: ATTACHMENT_TRANSLATION_STORAGE_BUNDLE_REVISION_V1,
-            migration_id: "attachment_translation_initial".to_owned(),
-            forward_sql_utf8: ATTACHMENT_TRANSLATION_SCHEMA_V1.to_vec(),
-            sha256: Sha256::digest(ATTACHMENT_TRANSLATION_SCHEMA_V1).to_vec(),
-        }],
+        steps: vec![
+            StorageMigrationStepV1 {
+                revision: 1,
+                migration_id: "attachment_translation_initial".to_owned(),
+                forward_sql_utf8: ATTACHMENT_TRANSLATION_SCHEMA_V1.to_vec(),
+                sha256: Sha256::digest(ATTACHMENT_TRANSLATION_SCHEMA_V1).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: 2,
+                migration_id: "attachment_translation_read_tickets".to_owned(),
+                forward_sql_utf8: ATTACHMENT_TRANSLATION_READ_TICKETS_SCHEMA_V1.to_vec(),
+                sha256: Sha256::digest(ATTACHMENT_TRANSLATION_READ_TICKETS_SCHEMA_V1).to_vec(),
+            },
+        ],
     }
 }
 

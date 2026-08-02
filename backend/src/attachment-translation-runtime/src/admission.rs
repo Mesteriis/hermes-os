@@ -1,0 +1,288 @@
+use hermes_ai_contracts::attachment_translation_inference_contract_reference_v1;
+use hermes_attachment_translation_api::{
+    ATTACHMENT_TRANSLATION_CAPABILITY_ID_V1, ATTACHMENT_TRANSLATION_COMMAND_CONNECT_PATH_V1,
+    ATTACHMENT_TRANSLATION_MAX_RESULT_BYTES_V1, ATTACHMENT_TRANSLATION_MODULE_ID_V1,
+    ATTACHMENT_TRANSLATION_OWNER_V1, ATTACHMENT_TRANSLATION_QUERY_CONNECT_PATH_V1,
+    ATTACHMENT_TRANSLATION_READ_BLOB_PATH_V1, ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1,
+};
+use hermes_attachment_translation_ingress::{
+    ATTACHMENT_TRANSLATION_BLOB_TARGET_CAPABILITY_ID_V1,
+    attachment_translation_source_prepared_consume_request_v1,
+    attachment_translation_source_prepared_contract_reference_v1,
+    attachment_translation_source_rejected_consume_request_v1,
+    attachment_translation_source_rejected_contract_reference_v1,
+    attachment_translation_source_requested_contract_reference_v1,
+    attachment_translation_source_requested_publish_request_v1,
+};
+use hermes_runtime_protocol::v1::{
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ClientBlobRouteV1, ClientRpcRouteV1, ContractReferenceV1,
+    ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
+    RuntimeBudgetRequestV1, SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
+    capability_request_v1::Request,
+};
+use prost::Message;
+use sha2::{Digest, Sha256};
+
+use crate::contracts::{
+    attachment_translation_command_contract_v1, attachment_translation_query_contract_v1,
+    attachment_translation_read_contract_v1, attachment_translation_realtime_contract_v1,
+    attachment_translation_ticket_contract_v1,
+};
+
+pub const ATTACHMENT_TRANSLATION_STORAGE_CAPABILITY_ID_V1: &str =
+    "attachment_translation.storage.v1";
+pub const ATTACHMENT_TRANSLATION_INFERENCE_CAPABILITY_ID_V1: &str =
+    "attachment_translation.inference.v1";
+pub const ATTACHMENT_TRANSLATION_BLOB_CAPABILITY_ID_V1: &str =
+    ATTACHMENT_TRANSLATION_BLOB_TARGET_CAPABILITY_ID_V1;
+const STORAGE_CONNECTION_BUDGET_V1: u32 = 4;
+
+#[must_use]
+pub fn attachment_translation_settings_schema_v1() -> SettingsSchemaV1 {
+    SettingsSchemaV1 {
+        major: 1,
+        revision: 1,
+        definitions: Vec::new(),
+    }
+}
+
+#[must_use]
+pub fn attachment_translation_settings_schema_bytes_v1() -> Vec<u8> {
+    attachment_translation_settings_schema_v1().encode_to_vec()
+}
+
+#[must_use]
+pub fn attachment_translation_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
+    let settings = attachment_translation_settings_schema_bytes_v1();
+    ModuleDescriptorV1 {
+        descriptor_major: 1,
+        descriptor_revision: 1,
+        module_id: ATTACHMENT_TRANSLATION_MODULE_ID_V1.to_owned(),
+        owner_id: ATTACHMENT_TRANSLATION_OWNER_V1.to_owned(),
+        module_kind: ModuleKindV1::Workflow as i32,
+        module_version: "1".to_owned(),
+        build_id: build_id.to_owned(),
+        runtime_protocol_range: Some(ProtocolRangeV1 {
+            minimum_major: 2,
+            maximum_major: 2,
+            minimum_revision: 1,
+        }),
+        capabilities: vec![
+            client_capability(),
+            blob_capability(),
+            inference_capability(),
+            source_prepared_capability(),
+            source_rejected_capability(),
+            source_requested_capability(),
+            storage_capability(),
+        ],
+        settings_schema_ref: Some(SettingsSchemaRefV1 {
+            major: 1,
+            revision: 1,
+            artifact_size_bytes: settings.len() as u64,
+            sha256: Sha256::digest(&settings).to_vec(),
+        }),
+        runtime_budget_request: Some(RuntimeBudgetRequestV1 {
+            max_processes: 1,
+            max_connections: STORAGE_CONNECTION_BUDGET_V1,
+            max_memory_bytes: 64 * 1024 * 1024,
+            max_cpu_millis: 500,
+        }),
+        display_name: "Attachment Translation".to_owned(),
+    }
+}
+
+fn blob_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_TRANSLATION_BLOB_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: 2 * 1024 * 1024,
+                custody_scope_id: ATTACHMENT_TRANSLATION_OWNER_V1.to_owned(),
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::Write as i32,
+                    BlobQuotaOperationV1::ReadRange as i32,
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
+                    BlobQuotaOperationV1::ReleaseCustody as i32,
+                ],
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+fn client_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_TRANSLATION_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![blob_quota(vec![BlobQuotaOperationV1::ReadRange as i32])],
+        provides: vec![
+            client_surface(
+                attachment_translation_command_contract_v1(),
+                ATTACHMENT_TRANSLATION_COMMAND_CONNECT_PATH_V1,
+            ),
+            client_surface(
+                attachment_translation_query_contract_v1(),
+                ATTACHMENT_TRANSLATION_QUERY_CONNECT_PATH_V1,
+            ),
+            client_surface(
+                attachment_translation_ticket_contract_v1(),
+                ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1,
+            ),
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+                contract: Some(attachment_translation_realtime_contract_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientBlob as i32,
+                contract: Some(attachment_translation_read_contract_v1()),
+                client_rpc_route: None,
+                client_blob_route: Some(ClientBlobRouteV1 {
+                    path: ATTACHMENT_TRANSLATION_READ_BLOB_PATH_V1.to_owned(),
+                    max_response_bytes: ATTACHMENT_TRANSLATION_MAX_RESULT_BYTES_V1,
+                }),
+            },
+        ],
+        ..Default::default()
+    }
+}
+
+fn client_surface(contract: ContractReferenceV1, path: &str) -> ProvidedSurfaceV1 {
+    ProvidedSurfaceV1 {
+        kind: ProvidedSurfaceKindV1::ClientRpc as i32,
+        contract: Some(contract),
+        client_rpc_route: Some(ClientRpcRouteV1 {
+            path: path.to_owned(),
+        }),
+        client_blob_route: None,
+    }
+}
+
+fn inference_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_TRANSLATION_INFERENCE_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        dependencies: vec![attachment_translation_inference_contract_reference_v1()],
+        ..Default::default()
+    }
+}
+
+fn source_requested_capability() -> CapabilityDescriptorV1 {
+    event_capability(
+        "attachment_translation.source_requested.v1",
+        ProvidedSurfaceKindV1::DurablePublisher,
+        attachment_translation_source_requested_contract_reference_v1(),
+        attachment_translation_source_requested_publish_request_v1(),
+    )
+}
+
+fn blob_quota(allowed_operations: Vec<i32>) -> CapabilityRequestV1 {
+    CapabilityRequestV1 {
+        request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+            max_bytes: 2 * 1024 * 1024,
+            custody_scope_id: ATTACHMENT_TRANSLATION_OWNER_V1.to_owned(),
+            allowed_operations,
+        })),
+    }
+}
+
+fn source_prepared_capability() -> CapabilityDescriptorV1 {
+    event_capability(
+        "attachment_translation.source_prepared.v1",
+        ProvidedSurfaceKindV1::DurableConsumer,
+        attachment_translation_source_prepared_contract_reference_v1(),
+        attachment_translation_source_prepared_consume_request_v1(),
+    )
+}
+
+fn source_rejected_capability() -> CapabilityDescriptorV1 {
+    event_capability(
+        "attachment_translation.source_rejected.v1",
+        ProvidedSurfaceKindV1::DurableConsumer,
+        attachment_translation_source_rejected_contract_reference_v1(),
+        attachment_translation_source_rejected_consume_request_v1(),
+    )
+}
+
+fn event_capability(
+    capability_id: &str,
+    kind: ProvidedSurfaceKindV1,
+    contract: ContractReferenceV1,
+    request: CapabilityRequestV1,
+) -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: capability_id.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: kind as i32,
+            contract: Some(contract),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        requests: vec![request],
+        ..Default::default()
+    }
+}
+
+fn storage_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_TRANSLATION_STORAGE_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::StorageNamespace(StorageNamespaceRequestV1 {
+                owner_id: ATTACHMENT_TRANSLATION_OWNER_V1.to_owned(),
+                connection_budget: STORAGE_CONNECTION_BUDGET_V1,
+                timeout_millis: 5_000,
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::{
+        v1::ModuleKindV1,
+        validation::descriptor::{validate_descriptor_v1, validate_settings_schema_v1},
+    };
+
+    use super::*;
+
+    #[test]
+    fn descriptor_is_exact_workflow_with_event_only_source_and_request_rpc_ai() {
+        let descriptor = attachment_translation_module_descriptor_v1("test");
+        validate_descriptor_v1(&descriptor).expect("descriptor");
+        validate_settings_schema_v1(&attachment_translation_settings_schema_v1())
+            .expect("settings");
+        assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
+        assert_eq!(
+            descriptor
+                .capabilities
+                .iter()
+                .map(|capability| capability.capability_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                ATTACHMENT_TRANSLATION_CAPABILITY_ID_V1,
+                ATTACHMENT_TRANSLATION_BLOB_CAPABILITY_ID_V1,
+                ATTACHMENT_TRANSLATION_INFERENCE_CAPABILITY_ID_V1,
+                "attachment_translation.source_prepared.v1",
+                "attachment_translation.source_rejected.v1",
+                "attachment_translation.source_requested.v1",
+                ATTACHMENT_TRANSLATION_STORAGE_CAPABILITY_ID_V1,
+            ]
+        );
+        assert_eq!(
+            descriptor.capabilities[2].dependencies,
+            vec![attachment_translation_inference_contract_reference_v1()]
+        );
+    }
+}

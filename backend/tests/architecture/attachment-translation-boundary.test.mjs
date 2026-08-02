@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
 test('attachment translation agreement keeps workflow source engine and provider separate', async () => {
-  const [inventorySource, policySource, workspace, apiManifest, api, apiProto, ingressManifest, ingress, coreManifest, core, persistenceManifest, persistence, schema, aiProto, aiContract, aiCore, aiSchema, aiRepository, aiWorker, aiAdmission, adr] = await Promise.all([
+  const [inventorySource, policySource, workspace, apiManifest, api, apiProto, readProto, ingressManifest, ingress, coreManifest, core, persistenceManifest, persistence, schema, ticketSchema, tickets, aiProto, aiContract, aiCore, aiSchema, aiRepository, aiWorker, aiAdmission, runtimeManifest, runtimeAdmission, runtimeSource, runtimeClient, assemblyManifest, assembly, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
       'utf8',
@@ -22,6 +22,13 @@ test('attachment translation agreement keeps workflow source engine and provider
       ),
       'utf8',
     ),
+    readFile(
+      new URL(
+        'src/attachment-translation-api/proto/hermes/attachment_translation/read/v1/read.proto',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
     readFile(new URL('src/attachment-translation-ingress/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-ingress/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-core/Cargo.toml', BACKEND_ROOT), 'utf8'),
@@ -29,6 +36,8 @@ test('attachment translation agreement keeps workflow source engine and provider
     readFile(new URL('src/attachment-translation-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-persistence/migrations/0001_translation.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-persistence/migrations/0002_translation_read_tickets.sql', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-persistence/src/tickets.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/proto/hermes/ai/contracts/v1/ai.proto', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-contracts/src/attachment_translation.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-inference-core/src/attachment_translation.rs', BACKEND_ROOT), 'utf8'),
@@ -36,6 +45,12 @@ test('attachment translation agreement keeps workflow source engine and provider
     readFile(new URL('src/ai-inference-persistence/src/attachment_translation_repository.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-inference-runtime/src/attachment_translation_worker.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/ai-inference-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-runtime/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-runtime/src/admission.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-runtime/src/source_results.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-runtime/src/client_port.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-assembly/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-assembly/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL('docs/adr/ADR-0378-bounded-attachment-translation-workflow.md', REPOSITORY_ROOT),
       'utf8',
@@ -75,7 +90,7 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(adr, /distinct capability/);
   assert.match(adr, /Source text и translated[\s\S]*не попадают в SQL workflow owner/);
   assert.match(adr, /inventory state остаётся `planned`/);
-  assert.equal(policy.implementation.currentSlice, 'attachment_translation_ai_engine_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_runtime_assembly_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_translation'));
   for (const packageName of [
     'hermes-attachment-translation-api',
@@ -88,9 +103,13 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(workspace, /"src\/attachment-translation-ingress"/);
   assert.match(workspace, /"src\/attachment-translation-core"/);
   assert.match(workspace, /"src\/attachment-translation-persistence"/);
+  assert.match(workspace, /"src\/attachment-translation-runtime"/);
+  assert.match(workspace, /"src\/attachment-translation-assembly"/);
   assert.match(apiManifest, /owner = "attachment_translation"/);
   assert.match(api, /ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1/);
   assert.doesNotMatch(apiProto, /translated_text_utf8|provider_id|model_id|prompt/);
+  assert.match(readProto, /opaque_read_ticket/);
+  assert.doesNotMatch(readProto, /reference_id|sha256|translated_text/);
   assert.match(ingressManifest, /surface = "contract"/);
   assert.match(ingress, /attachment_translation_source_requested_contract_reference_v1/);
   assert.match(ingress, /ATTACHMENT_TEXT_EXTRACTION_TRANSLATION_SOURCE_CAPABILITY_ID_V1/);
@@ -106,6 +125,10 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(schema, /pending_translated_sha256/);
   assert.match(schema, /artifact_translated_sha256/);
   assert.doesNotMatch(schema, /translated_text|source_text|provider_id|model_id|prompt/);
+  assert.match(ticketSchema, /attachment_translation_read_tickets/);
+  assert.match(ticketSchema, /artifact_runtime_generation/);
+  assert.match(tickets, /device_actor_sha256/);
+  assert.match(tickets, /TicketUsed/);
   assert.match(aiProto, /AI_USE_CASE_ATTACHMENT_TRANSLATION = 5/);
   assert.match(aiProto, /message AttachmentTranslationInferenceRequestV1/);
   assert.match(aiProto, /message AttachmentTranslationInferenceResultV1/);
@@ -122,6 +145,21 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(aiWorker, /execute_attachment_translation_payload_v1/);
   assert.match(aiWorker, /materialize_attachment_translation_source/);
   assert.match(aiAdmission, /AI_ATTACHMENT_TRANSLATION_REQUEST_CAPABILITY_ID_V1/);
+  assert.match(runtimeManifest, /owner = "attachment_translation"/);
+  assert.doesNotMatch(
+    runtimeManifest,
+    /attachment-text-extraction-runtime|ai-inference-runtime|ollama-ai-runtime/,
+  );
+  assert.match(runtimeAdmission, /ProvidedSurfaceKindV1::ClientBlob/);
+  assert.match(runtimeAdmission, /attachment_translation_source_requested_publish_request_v1/);
+  assert.match(runtimeSource, /consume_translation_source_prepared_once_v1/);
+  assert.match(runtimeSource, /seal_attachment_translation_inference_request_v1/);
+  assert.doesNotMatch(runtimeSource, /communications|provider_id|model_id|prompt/);
+  assert.match(runtimeClient, /ModuleClientBlobAuthorizationV1/);
+  assert.match(runtimeClient, /dispatch_attachment_translation_client_request_v1/);
+  assert.match(assemblyManifest, /surface = "assembly"/);
+  assert.match(assembly, /attachment_translation_storage_bundle_v1/);
+  assert.match(assembly, /attachment_translation_module_descriptor_v1/);
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'ai.attachment-translation.request.v1',
   ));

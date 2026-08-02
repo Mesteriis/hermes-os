@@ -1228,6 +1228,12 @@ const ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-translation-persistence', role: 'workflow', owner: 'attachment_translation', surface: 'persistence' },
 ];
 
+const ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-translation-runtime', role: 'workflow', owner: 'attachment_translation', surface: 'runtime' },
+  { name: 'hermes-attachment-translation-assembly', role: 'workflow', owner: 'attachment_translation', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3617,7 +3623,31 @@ const ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 const ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-attachment-translation-persistence': [
+    { name: 'hermes-attachment-translation-api', kind: 'normal' },
     { name: 'hermes-attachment-translation-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
+const ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-translation-runtime': [
+    { name: 'hermes-ai-contracts', kind: 'normal' },
+    { name: 'hermes-attachment-translation-api', kind: 'normal' },
+    { name: 'hermes-attachment-translation-core', kind: 'normal' },
+    { name: 'hermes-attachment-translation-ingress', kind: 'normal' },
+    { name: 'hermes-attachment-translation-persistence', kind: 'normal' },
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+  'hermes-attachment-translation-assembly': [
+    { name: 'hermes-attachment-translation-persistence', kind: 'normal' },
+    { name: 'hermes-attachment-translation-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
@@ -4877,6 +4907,23 @@ const ATTACHMENT_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-translation-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: true, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+  'hermes-attachment-translation-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -5617,6 +5664,20 @@ const ATTACHMENT_TRANSLATION_AI_ENGINE_INVENTORY = {
   businessCapabilities: [
     ...ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY.businessCapabilities,
     'ai.attachment-translation.request.v1',
+  ].sort(),
+};
+
+const ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_INVENTORY = {
+  ...ATTACHMENT_TRANSLATION_AI_ENGINE_INVENTORY,
+  businessCapabilities: [
+    ...ATTACHMENT_TRANSLATION_AI_ENGINE_INVENTORY.businessCapabilities,
+    'attachment.translation.v1',
+    'attachment_translation.blob.v1',
+    'attachment_translation.inference.v1',
+    'attachment_translation.source_prepared.v1',
+    'attachment_translation.source_rejected.v1',
+    'attachment_translation.source_requested.v1',
+    'attachment_translation.storage.v1',
   ].sort(),
 };
 
@@ -7412,6 +7473,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_translation_runtime_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
