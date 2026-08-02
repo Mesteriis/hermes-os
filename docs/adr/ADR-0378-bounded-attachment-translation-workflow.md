@@ -4,10 +4,12 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: запланировано. Этот ADR фиксирует owner, build units,
-event-only source handoff и admission evidence для `attachment_translation_v1`.
-До реализации всех phase gates inventory state остаётся `planned`; наличие
-контрактов, skeleton runtime или canned translation не является переносом.
+Состояние реализации: частично реализовано. Отдельный phase gate
+`attachment_translation_contracts_v1` закрыт тремя production units: generated
+private-content-free client API, exact durable source ingress и pure lifecycle
+core. Runtime, persistence, source producer, AI use-case extension, assembly и
+managed/live evidence ещё отсутствуют, поэтому `attachment_translation_v1`
+остаётся `planned`; contract foundation не является полным переносом.
 
 Уточняет:
 
@@ -207,6 +209,18 @@ Kernel и Gateway не компилируют Attachment Translation schema, н�
 private content, не выбирают AI provider и не становятся workflow facade.
 
 ## Phase gate
+
+`attachment_translation_contracts_v1` является отдельным атомарным foundation
+gate и включает только:
+
+1. `hermes-attachment-translation-api`;
+2. `hermes-attachment-translation-ingress`;
+3. `hermes-attachment-translation-core`;
+4. generated schema digests, event envelope validation, pure lifecycle tests и
+   compile-isolation evidence.
+
+Этот foundation gate не выдаёт runtime grants, Blob authority или AI route и
+не меняет состояние `attachment_translation_v1`.
 
 `attachment_translation_v1` становится `implemented` только атомарно после:
 

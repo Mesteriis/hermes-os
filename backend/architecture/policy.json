@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_retained_evidence_replay_v1",
+    "currentSlice": "attachment_translation_contracts_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1434,6 +1434,24 @@
         "role": "integration",
         "owner": "mail",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-translation-api",
+        "role": "workflow",
+        "owner": "attachment_translation",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-translation-ingress",
+        "role": "workflow",
+        "owner": "attachment_translation",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-translation-core",
+        "role": "workflow",
+        "owner": "attachment_translation",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1469,6 +1487,12 @@
         { "name": "hermes-runtime-protocol", "kind": "normal" },
         { "name": "hermes-storage-protocol", "kind": "normal" }
       ],
+      "hermes-attachment-translation-api": [],
+      "hermes-attachment-translation-ingress": [
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-attachment-translation-core": [],
       "hermes-communications-retained-evidence-replay-persistence": [
         {
           "name": "hermes-communications-attachment-contract",
@@ -4267,6 +4291,21 @@
         { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
         { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
+      "hermes-attachment-translation-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-attachment-translation-ingress": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-types", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-attachment-translation-core": [],
       "hermes-communications-retained-evidence-replay-persistence": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "prost", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -9724,6 +9763,18 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-attachment-translation-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-attachment-translation-ingress": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-attachment-translation-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-communications-retained-evidence-replay-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -10659,6 +10710,7 @@
         "attachment_preview",
         "attachment_preview_evidence_replay",
         "attachment_text_extraction",
+        "attachment_translation",
         "communication_cross_channel_forward",
         "communication_delivery_intent",
         "communication_explanation",

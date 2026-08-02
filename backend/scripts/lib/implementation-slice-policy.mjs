@@ -1216,6 +1216,13 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-retained-evidence-replay-contract', role: 'integration', owner: 'mail', surface: 'contract' },
 ];
 
+const ATTACHMENT_TRANSLATION_CONTRACTS_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-translation-api', role: 'workflow', owner: 'attachment_translation', surface: 'contract' },
+  { name: 'hermes-attachment-translation-ingress', role: 'workflow', owner: 'attachment_translation', surface: 'contract' },
+  { name: 'hermes-attachment-translation-core', role: 'workflow', owner: 'attachment_translation', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3592,6 +3599,16 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST
   ],
 };
 
+const ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-translation-api': [],
+  'hermes-attachment-translation-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-attachment-translation-core': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4820,6 +4837,25 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLI
   ],
 };
 
+const ATTACHMENT_TRANSLATION_CONTRACTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-translation-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-translation-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-attachment-translation-core': [],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -5547,6 +5583,14 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_INVENTORY = {
   ].sort(),
 };
 
+const ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY = {
+  ...ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_INVENTORY,
+  workflows: [
+    ...ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_INVENTORY.workflows,
+    'attachment_translation',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -5778,6 +5822,8 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-attachment-text-extraction-ingress',
       'hermes-attachment-preview-api',
       'hermes-attachment-preview-ingress',
+      'hermes-attachment-translation-api',
+      'hermes-attachment-translation-ingress',
       'hermes-communications-export-api',
       'hermes-communication-delivery-intent-api',
       'hermes-communication-delivery-intent-ingress-api',
@@ -7304,6 +7350,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_translation_contracts_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TRANSLATION_CONTRACTS_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TRANSLATION_CONTRACTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
