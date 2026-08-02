@@ -173,6 +173,7 @@ members = [
   "src/communications-domain",
   "src/communications-ingress",
   "src/communications-persistence",
+  "src/communications-retained-evidence-replay-persistence",
   "src/communications-runtime",
   "src/communications-assembly",
   "src/attachment-security-contract",

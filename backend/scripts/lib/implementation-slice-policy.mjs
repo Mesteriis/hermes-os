@@ -1205,6 +1205,7 @@ const ATTACHMENT_PREVIEW_ASSEMBLY_PRODUCTION_PACKAGES = [
 const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_PRODUCTION_PACKAGES = [
   ...ATTACHMENT_PREVIEW_ASSEMBLY_PRODUCTION_PACKAGES,
   { name: 'hermes-retained-evidence-replay-protocol', role: 'workflow', owner: 'attachment_preview_evidence_replay', surface: 'contract' },
+  { name: 'hermes-communications-retained-evidence-replay-persistence', role: 'domain', owner: 'communications', surface: 'persistence' },
 ];
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -3521,6 +3522,15 @@ const ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-retained-evidence-replay-protocol': [],
+  'hermes-communications-retained-evidence-replay-persistence': [
+    { name: 'hermes-communications-attachment-contract', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-communications-runtime': [
+    ...ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-communications-runtime'],
+    { name: 'hermes-communications-retained-evidence-replay-persistence', kind: 'normal' },
+  ],
 };
 
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
@@ -4694,6 +4704,12 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLI
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-communications-retained-evidence-replay-persistence': [
+    { name: 'prost', kind: 'dev', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'dev', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
 };
 

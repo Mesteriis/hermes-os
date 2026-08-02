@@ -1380,11 +1380,31 @@
         "role": "workflow",
         "owner": "attachment_preview_evidence_replay",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-communications-retained-evidence-replay-persistence",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
       "hermes-events-protocol": [],
       "hermes-retained-evidence-replay-protocol": [],
+      "hermes-communications-retained-evidence-replay-persistence": [
+        {
+          "name": "hermes-communications-attachment-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-runtime-protocol": [],
       "hermes-gateway-protocol": [
         {
@@ -2305,6 +2325,10 @@
         },
         {
           "name": "hermes-communications-note-source-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-retained-evidence-replay-persistence",
           "kind": "normal"
         }
       ],
@@ -4086,6 +4110,12 @@
         { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-communications-retained-evidence-replay-persistence": [
+        { "name": "prost", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-types", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
       ],
       "hermes-communication-summary-api": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -9493,6 +9523,10 @@
       "hermes-retained-evidence-replay-protocol": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-communications-retained-evidence-replay-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       },
       "hermes-runtime-protocol": {
         "primaryKind": "lib",

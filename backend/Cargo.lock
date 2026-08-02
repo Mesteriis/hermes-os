@@ -3413,6 +3413,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-retained-evidence-replay-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-communications-attachment-contract",
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-communications-runtime"
 version = "0.1.0"
 dependencies = [
@@ -3433,6 +3446,7 @@ dependencies = [
  "hermes-communications-note-source-api",
  "hermes-communications-persistence",
  "hermes-communications-recipient-source-api",
+ "hermes-communications-retained-evidence-replay-persistence",
  "hermes-communications-saved-query-api",
  "hermes-communications-sender-insights-api",
  "hermes-communications-task-source-api",

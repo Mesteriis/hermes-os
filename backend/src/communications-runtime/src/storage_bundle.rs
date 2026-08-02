@@ -4,9 +4,22 @@ use hermes_communications_call_evidence_persistence::{
     CommunicationsCallEvidenceSchemaErrorV1, append_communications_call_evidence_storage_v1,
 };
 use hermes_communications_persistence::communications_storage_bundle_v1;
+use hermes_communications_retained_evidence_replay_persistence::{
+    CommunicationsRetainedEvidenceReplaySchemaErrorV1,
+    append_communications_retained_evidence_replay_storage_v1,
+};
 use hermes_storage_protocol::v1::StorageBundleV1;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommunicationsRuntimeStorageBundleErrorV1 {
+    CallEvidence(CommunicationsCallEvidenceSchemaErrorV1),
+    RetainedEvidenceReplay(CommunicationsRetainedEvidenceReplaySchemaErrorV1),
+}
+
 pub fn communications_runtime_storage_bundle_v1()
--> Result<StorageBundleV1, CommunicationsCallEvidenceSchemaErrorV1> {
-    append_communications_call_evidence_storage_v1(communications_storage_bundle_v1())
+-> Result<StorageBundleV1, CommunicationsRuntimeStorageBundleErrorV1> {
+    let bundle = append_communications_call_evidence_storage_v1(communications_storage_bundle_v1())
+        .map_err(CommunicationsRuntimeStorageBundleErrorV1::CallEvidence)?;
+    append_communications_retained_evidence_replay_storage_v1(bundle)
+        .map_err(CommunicationsRuntimeStorageBundleErrorV1::RetainedEvidenceReplay)
 }

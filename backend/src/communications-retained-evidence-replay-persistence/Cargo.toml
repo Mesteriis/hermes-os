@@ -1,0 +1,24 @@
+[package]
+name = "hermes-communications-retained-evidence-replay-persistence"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[package.metadata.hermes]
+role = "domain"
+owner = "communications"
+surface = "persistence"
+
+[dependencies]
+hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
+hermes-events-protocol = { path = "../platform/events" }
+hermes-storage-protocol = { path = "../platform/storage/protocol" }
+sha2 = { version = "=0.11.0", default-features = false }
+sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+
+[dev-dependencies]
+prost = "=0.14.4"
+prost-types = "=0.14.4"
