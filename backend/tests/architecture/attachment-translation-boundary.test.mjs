@@ -170,7 +170,7 @@ test('attachment translation agreement keeps workflow source engine and provider
 });
 
 test('text extraction produces translation source only through durable target-owned events', async () => {
-  const [runtimeManifest, admission, runtime, source, persistence, migration, policySource] = await Promise.all([
+  const [runtimeManifest, admission, runtime, source, persistence, migration, release, developmentAssembly, policySource] = await Promise.all([
     readFile(
       new URL('src/attachment-text-extraction-runtime/Cargo.toml', BACKEND_ROOT),
       'utf8',
@@ -198,6 +198,8 @@ test('text extraction produces translation source only through durable target-ow
       ),
       'utf8',
     ),
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('development/assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
   ]);
   const policy = JSON.parse(policySource);
@@ -223,6 +225,10 @@ test('text extraction produces translation source only through durable target-ow
   assert.match(migration, /translation_source_inbox/);
   assert.match(migration, /translation_source_outbox/);
   assert.doesNotMatch(migration, /source_text|translated_text|provider_id|model_id|prompt/);
+  assert.match(release, /hermes-attachment-translation-assembly/);
+  assert.match(release, /attachment_translation\.release-artifacts\.json/);
+  assert.match(developmentAssembly, /ATTACHMENT_TRANSLATION_RUNTIME_ARTIFACT/);
+  assert.match(developmentAssembly, /PRE_ATTACHMENT_TRANSLATION_MODULE_PLAN_RUNTIME_ARTIFACTS_V3/);
   assert.equal(policy.implementation.currentSlice, 'attachment_translation_source_producer_v1');
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment_text_extraction.translation-source.v1',

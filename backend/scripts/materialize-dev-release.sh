@@ -207,6 +207,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-attachment-preview-assembly \
 	--package hermes-attachment-preview-evidence-replay-runtime \
 	--package hermes-attachment-preview-evidence-replay-assembly \
+	--package hermes-attachment-translation-runtime \
+	--package hermes-attachment-translation-assembly \
 	--package hermes-ollama-ai-runtime \
 	--package hermes-ollama-ai-assembly \
 	--package hermes-mail-runtime \
@@ -276,6 +278,7 @@ attachment_security_assembly="$assembly_root/attachment-security"
 attachment_text_extraction_assembly="$assembly_root/attachment-text-extraction"
 attachment_preview_assembly="$assembly_root/attachment-preview"
 attachment_preview_evidence_replay_assembly="$assembly_root/attachment-preview-evidence-replay"
+attachment_translation_assembly="$assembly_root/attachment-translation"
 ollama_ai_assembly="$assembly_root/ollama-ai"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
@@ -377,6 +380,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$attachment_preview_evidence_replay_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-attachment-preview-evidence-replay-runtime"
+"$cargo_target_dir/debug/hermes-attachment-translation-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$attachment_translation_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-attachment-translation-runtime"
 "$cargo_target_dir/debug/hermes-ollama-ai-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$ollama_ai_assembly" \
@@ -451,6 +458,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$attachment_text_extraction_assembly/attachment_text_extraction.release-artifacts.json" \
 	--artifact-fragment "$attachment_preview_assembly/attachment-preview.release-artifacts.json" \
 	--artifact-fragment "$attachment_preview_evidence_replay_assembly/attachment_preview_evidence_replay.release-artifacts.json" \
+	--artifact-fragment "$attachment_translation_assembly/attachment_translation.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \
