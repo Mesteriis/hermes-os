@@ -62,6 +62,9 @@ const communicationsExportAvailable = computed(() =>
 const attachmentPreviewAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'attachment_preview.client.v1'),
 )
+const attachmentPreviewEvidenceReplayAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'attachment-preview-evidence-replay.command.v1'),
+)
 const currentCanonicalMessageId = ref<Uint8Array>()
 const currentAttachmentAnchorId = ref<Uint8Array>()
 const telegramCommandAvailable = computed(() =>
@@ -218,6 +221,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					/>
 					<AttachmentPreviewWorkflow
 						:can-preview="attachmentPreviewAvailable"
+						:can-replay-evidence="attachmentPreviewEvidenceReplayAvailable"
 						:candidate-attachment-anchor-id="currentAttachmentAnchorId"
 					/>
 					<CommunicationsEvidenceExportWorkflow

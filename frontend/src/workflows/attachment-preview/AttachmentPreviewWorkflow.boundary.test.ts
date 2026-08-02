@@ -15,6 +15,7 @@ describe('Attachment Preview workflow boundary', () => {
 
 		expect(app).toContain('AttachmentPreviewWorkflow')
 		expect(app).toContain("'attachment_preview.client.v1'")
+		expect(app).toContain("'attachment-preview-evidence-replay.command.v1'")
 		expect(route).toContain('canonicalAttachmentSelected')
 		expect(route).not.toMatch(/workflows\/attachment-preview|attachmentPreviewClient/)
 		expect(detail).toContain("emit('selectAttachment', row.key)")
@@ -25,6 +26,7 @@ describe('Attachment Preview workflow boundary', () => {
 		expect(api).toContain('BrowserGatewayFetch')
 		expect(api).not.toMatch(/domains\/communications|integrations\/(mail|telegram|whatsapp|zulip)/)
 		expect(controller).toContain('subscribeAttachmentPreviewStatus')
+		expect(controller).toContain('startAttachmentPreviewEvidenceReplay')
 		expect(controller).not.toMatch(/setInterval\(|setTimeout\(|poll/i)
 		expect(navigation).toContain('getBrowserGatewayRealtimeHub().subscribe')
 		expect(presentation).not.toMatch(/api\/|connect\/|fetch\(|v-html/)

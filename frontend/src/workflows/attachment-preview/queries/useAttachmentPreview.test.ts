@@ -19,12 +19,16 @@ import {
 	subscribeAttachmentPreviewStatus,
 } from '../api/attachmentPreview'
 import { useAttachmentPreview } from './useAttachmentPreview'
+import { startAttachmentPreviewEvidenceReplay } from '../api/attachmentPreviewEvidenceReplay'
 
 vi.mock('../api/attachmentPreview', () => ({
 	getAttachmentPreviewStatus: vi.fn(),
 	readAttachmentPreview: vi.fn(),
 	startAttachmentPreview: vi.fn(),
 	subscribeAttachmentPreviewStatus: vi.fn(),
+}))
+vi.mock('../api/attachmentPreviewEvidenceReplay', () => ({
+	startAttachmentPreviewEvidenceReplay: vi.fn(),
 }))
 
 const anchorId = new Uint8Array(16).fill(1)
@@ -33,12 +37,17 @@ const runId = new Uint8Array(16).fill(2)
 describe('useAttachmentPreview', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.mocked(startAttachmentPreviewEvidenceReplay).mockResolvedValue()
 	})
 
 	it('shows an honest unavailable skeleton without starting a request', async () => {
 		const available = ref(false)
 		const candidate = ref<Uint8Array | undefined>(anchorId)
-		const workflow = useAttachmentPreview(() => available.value, () => candidate.value)
+		const workflow = useAttachmentPreview(
+			() => available.value,
+			() => available.value,
+			() => candidate.value,
+		)
 		await nextTick()
 
 		expect(workflow.model.value).toMatchObject({
@@ -55,7 +64,7 @@ describe('useAttachmentPreview', () => {
 		vi.mocked(startAttachmentPreview).mockResolvedValue(runId)
 		vi.mocked(subscribeAttachmentPreviewStatus).mockImplementation((_runId, observer) => {
 			realtimeObserver = observer
-			return { close: vi.fn() }
+			return { close: vi.fn(), ready: Promise.resolve() }
 		})
 		vi.mocked(getAttachmentPreviewStatus).mockReturnValue(new Promise(resolve => {
 			resolveSnapshot = resolve
@@ -66,9 +75,18 @@ describe('useAttachmentPreview', () => {
 		})
 		const available = ref(true)
 		const candidate = ref<Uint8Array | undefined>(anchorId)
-		const workflow = useAttachmentPreview(() => available.value, () => candidate.value)
+		const workflow = useAttachmentPreview(
+			() => available.value,
+			() => available.value,
+			() => candidate.value,
+		)
 
 		await vi.waitFor(() => expect(realtimeObserver).toBeDefined())
+		expect(startAttachmentPreviewEvidenceReplay).toHaveBeenCalledWith(
+			anchorId,
+			expect.any(Uint8Array),
+			expect.any(AbortSignal),
+		)
 		realtimeObserver?.onStatus(readyStatus(4n))
 		await vi.waitFor(() => expect(workflow.model.value.status).toBe('ready'))
 		expect(workflow.model.value.artifactText).toBe('safe preview')

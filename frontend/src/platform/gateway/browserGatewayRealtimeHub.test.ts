@@ -60,6 +60,26 @@ describe('BrowserGatewayRealtimeHub', () => {
 		expect(observer.onProtocolError).toHaveBeenCalledTimes(1)
 		expect(closeSource).toHaveBeenCalledTimes(1)
 	})
+
+	it('replays the current stream state to a late consumer of the shared source', () => {
+		let sourceObserver: BrowserGatewayRealtimeObserver | undefined
+		const subscribe = vi.fn((observer: BrowserGatewayRealtimeObserver) => {
+			sourceObserver = observer
+			return { close: vi.fn() }
+		})
+		const hub = new BrowserGatewayRealtimeHub({ subscribe })
+		const first = observerFixture()
+		const second = observerFixture()
+		hub.subscribe(first)
+
+		const state = create(ClientRealtimeStreamStateV1Schema, { cursor: 'cursor-3' })
+		sourceObserver?.onStreamState(state)
+		hub.subscribe(second)
+
+		expect(subscribe).toHaveBeenCalledTimes(1)
+		expect(second.onStreamState).toHaveBeenCalledTimes(1)
+		expect(second.onStreamState).toHaveBeenCalledWith(state)
+	})
 })
 
 function observerFixture(): BrowserGatewayRealtimeObserver {

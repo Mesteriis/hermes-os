@@ -4,11 +4,13 @@ import { useAttachmentPreview } from './queries/useAttachmentPreview'
 
 const props = defineProps<{
 	canPreview: boolean
+	canReplayEvidence: boolean
 	candidateAttachmentAnchorId?: Uint8Array
 }>()
 
 const workflow = useAttachmentPreview(
 	() => props.canPreview,
+	() => props.canReplayEvidence,
 	() => props.candidateAttachmentAnchorId,
 )
 </script>

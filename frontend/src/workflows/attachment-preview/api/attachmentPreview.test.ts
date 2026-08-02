@@ -7,7 +7,11 @@ import {
 	AttachmentPreviewStateV1,
 	AttachmentPreviewStatusChangedV1Schema,
 } from '../../../gen/hermes/attachment_preview/v1/preview_pb'
-import { ClientRealtimeEventV1Schema } from '../../../gen/hermes/gateway/v1/client_realtime_pb'
+import {
+	ClientRealtimeEventV1Schema,
+	ClientRealtimeStreamStateKindV1,
+	ClientRealtimeStreamStateV1Schema,
+} from '../../../gen/hermes/gateway/v1/client_realtime_pb'
 import type { BrowserGatewayRealtimeObserver } from '../../../platform/gateway/browserGatewayRealtime'
 import {
 	getAttachmentPreviewStatus,
@@ -64,7 +68,7 @@ describe('attachment preview browser adapter', () => {
 		)
 	})
 
-	it('filters the shared realtime stream by exact contract and run', () => {
+	it('waits for the shared stream and filters events by exact contract and run', async () => {
 		let sourceObserver: BrowserGatewayRealtimeObserver | undefined
 		const close = vi.fn()
 		const hub = {
@@ -75,6 +79,10 @@ describe('attachment preview browser adapter', () => {
 		}
 		const observer = { onStatus: vi.fn(), onUnavailable: vi.fn() }
 		const subscription = subscribeAttachmentPreviewStatus(runId, observer, hub)
+		sourceObserver?.onStreamState(create(ClientRealtimeStreamStateV1Schema, {
+			state: ClientRealtimeStreamStateKindV1.CLIENT_REALTIME_STREAM_STATE_KIND_OPEN,
+		}))
+		await expect(subscription.ready).resolves.toBeUndefined()
 		const status = create(AttachmentPreviewStatusChangedV1Schema, {
 			runId,
 			state: AttachmentPreviewStateV1.READY,

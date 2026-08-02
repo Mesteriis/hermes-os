@@ -6,7 +6,7 @@ import test from 'node:test';
 const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
-test('attachment preview is a planned workflow and not a Communications facade', async () => {
+test('attachment preview is an implemented workflow and not a Communications facade', async () => {
   const [inventorySource, policySource, adr, rendererAdmissionAdr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
@@ -33,7 +33,7 @@ test('attachment preview is a planned workflow and not a Communications facade',
     gate: 'attachment_preview_v1',
     role: 'workflow',
     owner: 'attachment_preview',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
   assert.equal(policy.implementation.currentSlice, 'attachment_preview_retained_evidence_replay_v1');
@@ -44,7 +44,9 @@ test('attachment preview is a planned workflow and not a Communications facade',
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
   assert.match(adr, /Следующий managed\s+authority gate[\s\S]*source-receipt mismatch/);
   assert.match(adr, /Generated Vue browser[\s\S]*workflow adapter реализован/);
-  assert.match(adr, /ADR-0376 требует explicit owner-authorized exact-byte evidence replay/);
+  assert.match(adr, /ADR-0376\/ADR-0377 реализуют explicit owner-authorized exact-byte/);
+  assert.match(adr, /replay\s+начинается только после доказанного SSE `OPEN`/);
+  assert.match(adr, /Inventory gate `attachment_preview_v1` имеет состояние\s+`implemented`/);
   assert.match(rendererAdmissionAdr, /availability является admission invariant/);
   assert.match(rendererAdmissionAdr, /environment test hook или fake outage не вводятся/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);

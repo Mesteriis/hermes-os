@@ -7,13 +7,14 @@ import {
 	type AttachmentPreviewStatusChangedV1,
 	type GetAttachmentPreviewResponseV1,
 } from '../../../gen/hermes/attachment_preview/v1/preview_pb'
-import type { BrowserGatewayRealtimeSubscription } from '../../../platform/gateway/browserGatewayRealtime'
 import {
 	getAttachmentPreviewStatus,
 	readAttachmentPreview,
 	startAttachmentPreview,
 	subscribeAttachmentPreviewStatus,
+	type AttachmentPreviewRealtimeSubscriptionV1,
 } from '../api/attachmentPreview'
+import { startAttachmentPreviewEvidenceReplay } from '../api/attachmentPreviewEvidenceReplay'
 import type {
 	AttachmentPreviewPanelModel,
 	AttachmentPreviewPanelStatus,
@@ -23,6 +24,7 @@ const ID_BYTES = 16
 
 export function useAttachmentPreview(
 	canPreview: () => boolean,
+	canReplayEvidence: () => boolean,
 	candidateAnchorId: () => Uint8Array | undefined,
 ): {
 	model: ComputedRef<AttachmentPreviewPanelModel>
@@ -37,19 +39,23 @@ export function useAttachmentPreview(
 	let generation = 0
 	let appliedStateRevision = 0n
 	let requestController: AbortController | undefined
-	let realtimeSubscription: BrowserGatewayRealtimeSubscription | undefined
+	let realtimeSubscription: AttachmentPreviewRealtimeSubscriptionV1 | undefined
 
 	const model = computed<AttachmentPreviewPanelModel>(() => {
 		const candidate = candidateAnchorId()
 		const visible = validId(candidate)
-		const available = canPreview()
+		const previewAvailable = canPreview()
+		const replayAvailable = canReplayEvidence()
+		const available = previewAvailable && replayAvailable
 		return {
 			visible,
 			available,
 			busy: ['starting', 'awaiting-evidence', 'rendering'].includes(status.value),
 			status: visible && !available ? 'unavailable' : status.value,
 			statusMessage: visible && !available
-				? 'Attachment Preview is not admitted for this runtime.'
+				? previewAvailable
+					? 'Retained evidence replay is not admitted for this runtime.'
+					: 'Attachment Preview is not admitted for this runtime.'
 				: statusMessage.value,
 			artifactText: artifactText.value,
 			artifactUrl: artifactUrl.value,
@@ -60,8 +66,8 @@ export function useAttachmentPreview(
 	})
 
 	watch(
-		[candidateAnchorId, canPreview],
-		([candidate, available]) => {
+		[candidateAnchorId, canPreview, canReplayEvidence],
+		([candidate, previewAvailable, replayAvailable]) => {
 			cancelCurrent()
 			resetArtifact()
 			if (!validId(candidate)) {
@@ -69,7 +75,7 @@ export function useAttachmentPreview(
 				statusMessage.value = ''
 				return
 			}
-			if (!available) {
+			if (!previewAvailable || !replayAvailable) {
 				status.value = 'unavailable'
 				return
 			}
@@ -85,7 +91,7 @@ export function useAttachmentPreview(
 
 	async function retry(): Promise<void> {
 		const candidate = candidateAnchorId()
-		if (!canPreview() || !validId(candidate)) return
+		if (!canPreview() || !canReplayEvidence() || !validId(candidate)) return
 		cancelCurrent()
 		resetArtifact()
 		await start(candidate)
@@ -98,18 +104,25 @@ export function useAttachmentPreview(
 		status.value = 'starting'
 		statusMessage.value = 'Submitting a bounded preview request…'
 		try {
-			const operationId = crypto.getRandomValues(new Uint8Array(ID_BYTES))
-			const runId = await startAttachmentPreview(anchorId, operationId, controller.signal)
+			const previewOperationId = crypto.getRandomValues(new Uint8Array(ID_BYTES))
+			const runId = await startAttachmentPreview(anchorId, previewOperationId, controller.signal)
 			if (currentGeneration !== generation) return
 			realtimeSubscription = subscribeAttachmentPreviewStatus(runId, {
 				onStatus: next => void handleRealtimeStatus(next, currentGeneration, controller.signal),
 				onUnavailable: () => failRealtime(currentGeneration),
 			})
+			await realtimeSubscription.ready
+			if (currentGeneration !== generation) return
+			const replayOperationId = crypto.getRandomValues(new Uint8Array(ID_BYTES))
+			await startAttachmentPreviewEvidenceReplay(anchorId, replayOperationId, controller.signal)
+			if (currentGeneration !== generation) return
 			const snapshot = await getAttachmentPreviewStatus(runId, controller.signal)
 			if (currentGeneration === generation) await applySnapshot(snapshot, currentGeneration, controller.signal)
 		} catch {
 			if (currentGeneration !== generation || controller.signal.aborted) return
-			fail('Attachment preview could not be started.')
+			fail(realtimeSubscription
+				? 'Retained attachment evidence could not be recovered.'
+				: 'Attachment preview could not be started.')
 		}
 	}
 

@@ -4,13 +4,15 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: planned. Решение уточняет ещё не admitted
-`attachment_preview_retained_evidence_replay_v1` gate до browser cutover.
-Существующий managed backend contour доказал exact-byte replay, но live browser
-не может завершить исторический Preview: frontend не имеет generated replay
-client, а public Start request требует producer registration, runtime/grant
-fences и owner-local outbox message IDs, которых provider-neutral client не
-владеет и не должен получать.
+Состояние реализации: implemented. Gate
+`attachment_preview_retained_evidence_replay_v1` admitted атомарно с
+provider-neutral revision 2: browser передаёт только operation и canonical
+attachment anchor, а Communications и Mail owner-locally выбирают и проверяют
+exact retained envelope. Generated Connect client, shared SSE handshake и
+one-use client Blob flow реализованы. Managed matrix доказывает owner/route/
+duplicate/conflict/outage/restart boundaries; live browser доказал
+`awaiting-evidence -> rendering -> ready` и чтение terminal artifact без
+polling, producer selection либо private bytes в realtime carrier.
 
 Зависит от:
 
@@ -172,8 +174,9 @@ Functional ownership остаётся раздельным:
    и читается только через `client_blob`;
 10. architecture, SRP, Cargo, unit, managed, frontend и full pre-push gates.
 
-До выполнения gate `attachment_preview_retained_evidence_replay_v1` и parent
-`attachment_preview_v1` остаются `planned`.
+Gate `attachment_preview_retained_evidence_replay_v1` и parent
+`attachment_preview_v1` имеют состояние `implemented` после полного
+repository pre-push gate.
 
 ## Отклонённые варианты
 

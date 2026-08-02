@@ -9,7 +9,10 @@ import {
 	type GetAttachmentPreviewResponseV1,
 } from '../../../gen/hermes/attachment_preview/v1/preview_pb'
 import { ReadAttachmentPreviewRequestV1Schema } from '../../../gen/hermes/attachment_preview/read/v1/read_pb'
-import type { ClientRealtimeEventV1 } from '../../../gen/hermes/gateway/v1/client_realtime_pb'
+import {
+	ClientRealtimeStreamStateKindV1,
+	type ClientRealtimeEventV1,
+} from '../../../gen/hermes/gateway/v1/client_realtime_pb'
 import { getAttachmentPreviewCommandClient } from '../../../platform/connect/attachmentPreviewCommandClient'
 import { getAttachmentPreviewQueryClient } from '../../../platform/connect/attachmentPreviewQueryClient'
 import { getAttachmentPreviewTicketClient } from '../../../platform/connect/attachmentPreviewTicketClient'
@@ -37,6 +40,10 @@ export type AttachmentPreviewArtifactV1 = {
 export type AttachmentPreviewRealtimeObserverV1 = {
 	onStatus(status: AttachmentPreviewStatusChangedV1): void
 	onUnavailable(): void
+}
+
+export type AttachmentPreviewRealtimeSubscriptionV1 = BrowserGatewayRealtimeSubscription & {
+	ready: Promise<void>
 }
 
 type AttachmentPreviewPorts = {
@@ -156,14 +163,45 @@ export function subscribeAttachmentPreviewStatus(
 	runId: Uint8Array,
 	observer: AttachmentPreviewRealtimeObserverV1,
 	hub: AttachmentPreviewRealtimePort = getBrowserGatewayRealtimeHub(),
-): BrowserGatewayRealtimeSubscription {
+): AttachmentPreviewRealtimeSubscriptionV1 {
 	validateId(runId, 'Attachment preview')
-	return hub.subscribe({
-		onEvent: event => deliverPreviewEvent(event, runId, observer),
-		onStreamState: () => undefined,
-		onReplayGap: () => observer.onUnavailable(),
-		onProtocolError: () => observer.onUnavailable(),
+	let resolveReady: (() => void) | undefined
+	let rejectReady: ((reason: Error) => void) | undefined
+	const ready = new Promise<void>((resolve, reject) => {
+		resolveReady = resolve
+		rejectReady = reject
 	})
+	let settled = false
+	const resolveStream = (): void => {
+		if (settled) return
+		settled = true
+		resolveReady?.()
+	}
+	const rejectStream = (): void => {
+		if (settled) return
+		settled = true
+		rejectReady?.(new Error('Attachment preview realtime is unavailable'))
+	}
+	const subscription = hub.subscribe({
+		onEvent: event => deliverPreviewEvent(event, runId, observer),
+		onStreamState: state => {
+			if (state.state === ClientRealtimeStreamStateKindV1.CLIENT_REALTIME_STREAM_STATE_KIND_OPEN) {
+				resolveStream()
+			} else if (state.state === ClientRealtimeStreamStateKindV1.CLIENT_REALTIME_STREAM_STATE_KIND_CLOSED) {
+				rejectStream()
+				observer.onUnavailable()
+			}
+		},
+		onReplayGap: () => {
+			rejectStream()
+			observer.onUnavailable()
+		},
+		onProtocolError: () => {
+			rejectStream()
+			observer.onUnavailable()
+		},
+	})
+	return { close: () => subscription.close(), ready }
 }
 
 function deliverPreviewEvent(
