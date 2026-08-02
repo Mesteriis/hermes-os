@@ -1,9 +1,11 @@
 use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
-pub const MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
+pub const MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1: u32 = 2;
 pub const MAIL_CONTACTS_SYNC_SCHEMA_V1: &[u8] =
     include_bytes!("../migrations/0001_mail_contacts_sync.sql");
+pub const MAIL_CONTACTS_SYNC_ORCHESTRATION_SCHEMA_V1: &[u8] =
+    include_bytes!("../migrations/0002_mail_contacts_sync_orchestration.sql");
 
 #[must_use]
 pub fn mail_contacts_sync_storage_bundle_v1() -> StorageBundleV1 {
@@ -12,12 +14,20 @@ pub fn mail_contacts_sync_storage_bundle_v1() -> StorageBundleV1 {
         revision: MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1,
         bundle_id: "mail_contacts_sync".to_owned(),
         owner_id: "mail_contacts_sync".to_owned(),
-        steps: vec![StorageMigrationStepV1 {
-            revision: MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1,
-            migration_id: "mail_contacts_sync_initial".to_owned(),
-            forward_sql_utf8: MAIL_CONTACTS_SYNC_SCHEMA_V1.to_vec(),
-            sha256: Sha256::digest(MAIL_CONTACTS_SYNC_SCHEMA_V1).to_vec(),
-        }],
+        steps: vec![
+            StorageMigrationStepV1 {
+                revision: 1,
+                migration_id: "mail_contacts_sync_initial".to_owned(),
+                forward_sql_utf8: MAIL_CONTACTS_SYNC_SCHEMA_V1.to_vec(),
+                sha256: Sha256::digest(MAIL_CONTACTS_SYNC_SCHEMA_V1).to_vec(),
+            },
+            StorageMigrationStepV1 {
+                revision: MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1,
+                migration_id: "mail_contacts_sync_orchestration".to_owned(),
+                forward_sql_utf8: MAIL_CONTACTS_SYNC_ORCHESTRATION_SCHEMA_V1.to_vec(),
+                sha256: Sha256::digest(MAIL_CONTACTS_SYNC_ORCHESTRATION_SCHEMA_V1).to_vec(),
+            },
+        ],
     }
 }
 
@@ -32,13 +42,20 @@ mod tests {
         let bundle = mail_contacts_sync_storage_bundle_v1();
         validate_storage_bundle(&bundle).expect("valid storage bundle");
         assert_eq!(bundle.owner_id, "mail_contacts_sync");
-        let sql = std::str::from_utf8(MAIL_CONTACTS_SYNC_SCHEMA_V1).expect("utf8");
+        assert_eq!(bundle.steps.len(), 2);
+        let sql = format!(
+            "{}\n{}",
+            std::str::from_utf8(MAIL_CONTACTS_SYNC_SCHEMA_V1).expect("utf8"),
+            std::str::from_utf8(MAIL_CONTACTS_SYNC_ORCHESTRATION_SCHEMA_V1).expect("utf8")
+        );
         for required in [
             "mail_contacts_sync_runs",
             "mail_contacts_sync_inbox",
             "mail_contacts_sync_outbox",
             "mail_contacts_sync_realtime",
             "continuation_cursor",
+            "mail_contacts_sync_pages",
+            "mail_contacts_sync_entries",
         ] {
             assert!(sql.contains(required), "{required}");
         }

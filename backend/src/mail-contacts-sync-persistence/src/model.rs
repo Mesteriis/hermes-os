@@ -68,6 +68,65 @@ pub enum MailContactsSyncInboxOutcomeV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailContactsSyncPersistenceOutcomeV1 {
+    Applied,
+    Duplicate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailContactsSyncEntryInputV1 {
+    pub logical_owner_id: String,
+    pub run_id: [u8; 16],
+    pub page_sequence: u64,
+    pub observation_message_id: [u8; 16],
+    pub observation_envelope_sha256: [u8; 32],
+    pub contact_command_id: [u8; 16],
+    pub entry_digest: [u8; 32],
+    pub contact_command: OutboxEnvelopeV1,
+    pub occurred_at_unix_millis: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailContactsSyncPageResultInputV1 {
+    pub logical_owner_id: String,
+    pub run_id: [u8; 16],
+    pub page_sequence: u64,
+    pub message_id: [u8; 16],
+    pub envelope_sha256: [u8; 32],
+    pub observed_entries: u32,
+    pub next_continuation_cursor: Option<Vec<u8>>,
+    pub occurred_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailContactsSyncContactOutcomeV1 {
+    Created,
+    Updated,
+    Unchanged,
+    Rejected,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailContactsSyncEntryOutcomeInputV1 {
+    pub logical_owner_id: String,
+    pub contact_command_id: [u8; 16],
+    pub message_id: [u8; 16],
+    pub envelope_sha256: [u8; 32],
+    pub outcome: MailContactsSyncContactOutcomeV1,
+    pub occurred_at_unix_millis: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailContactsSyncPageProgressV1 {
+    pub run_id: [u8; 16],
+    pub page_sequence: u64,
+    pub expected_entries: u32,
+    pub recorded_entries: u32,
+    pub accounted_entries: u32,
+    pub next_continuation_cursor: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailContactsSyncPersistenceErrorV1 {
     InvalidInput,
     InvalidRow,

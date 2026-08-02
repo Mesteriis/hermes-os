@@ -269,7 +269,7 @@ impl MailContactsSyncPersistenceV1 {
     }
 }
 
-async fn load_for_update(
+pub(crate) async fn load_for_update(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
     run_id: &[u8; 16],
@@ -284,7 +284,7 @@ async fn load_for_update(
         .and_then(persisted_from_row)
 }
 
-async fn insert_outbox(
+pub(crate) async fn insert_outbox(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
     envelope: &OutboxEnvelopeV1,
@@ -306,7 +306,7 @@ async fn insert_outbox(
     Ok(())
 }
 
-async fn insert_realtime(
+pub(crate) async fn insert_realtime(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
     run_id: &[u8; 16],
@@ -444,10 +444,10 @@ fn persisted_from_row(
 fn storage_error(_: sqlx::Error) -> MailContactsSyncPersistenceErrorV1 {
     MailContactsSyncPersistenceErrorV1::StorageUnavailable
 }
-fn signed(value: u64) -> Result<i64, MailContactsSyncPersistenceErrorV1> {
+pub(crate) fn signed(value: u64) -> Result<i64, MailContactsSyncPersistenceErrorV1> {
     i64::try_from(value).map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidInput)
 }
-const fn state_code(value: MailContactsSyncStateV1) -> i16 {
+pub(crate) const fn state_code(value: MailContactsSyncStateV1) -> i16 {
     match value {
         MailContactsSyncStateV1::Accepted => 1,
         MailContactsSyncStateV1::FetchingProviderPage => 2,
@@ -490,7 +490,7 @@ fn trigger_from_code(
         _ => Err(MailContactsSyncPersistenceErrorV1::InvalidRow),
     }
 }
-const fn rejection_code(value: MailContactsSyncRejectCodeV1) -> i16 {
+pub(crate) const fn rejection_code(value: MailContactsSyncRejectCodeV1) -> i16 {
     match value {
         MailContactsSyncRejectCodeV1::InvalidRequest => 1,
         MailContactsSyncRejectCodeV1::AccountUnavailable => 2,

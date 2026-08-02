@@ -56,6 +56,10 @@ const files = {
     'src/mail-contacts-sync-persistence/src/repository.rs',
     BACKEND_ROOT,
   ),
+  workflowOrchestration: new URL(
+    'src/mail-contacts-sync-persistence/src/orchestration.rs',
+    BACKEND_ROOT,
+  ),
   workflowRelay: new URL('src/mail-contacts-sync-persistence/src/relay.rs', BACKEND_ROOT),
   workflowRealtime: new URL(
     'src/mail-contacts-sync-persistence/src/realtime.rs',
@@ -63,6 +67,10 @@ const files = {
   ),
   workflowMigration: new URL(
     'src/mail-contacts-sync-persistence/migrations/0001_mail_contacts_sync.sql',
+    BACKEND_ROOT,
+  ),
+  workflowOrchestrationMigration: new URL(
+    'src/mail-contacts-sync-persistence/migrations/0002_mail_contacts_sync_orchestration.sql',
     BACKEND_ROOT,
   ),
 };
@@ -162,12 +170,14 @@ test('Mail provider contract and sync workflow foundation preserve owner boundar
 });
 
 test('sync persistence owns atomic state relay and SSE replay without foreign storage', async () => {
-  const [manifest, repository, relay, realtime, migration] = await Promise.all([
+  const [manifest, repository, orchestration, relay, realtime, migration, orchestrationMigration] = await Promise.all([
     readFile(files.workflowPersistenceManifest, 'utf8'),
     readFile(files.workflowPersistence, 'utf8'),
+    readFile(files.workflowOrchestration, 'utf8'),
     readFile(files.workflowRelay, 'utf8'),
     readFile(files.workflowRealtime, 'utf8'),
     readFile(files.workflowMigration, 'utf8'),
+    readFile(files.workflowOrchestrationMigration, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -181,6 +191,10 @@ test('sync persistence owns atomic state relay and SSE replay without foreign st
   assert.match(relay, /unpublished_commands/);
   assert.match(relay, /mark_command_published/);
   assert.match(realtime, /client_realtime_window/);
+  assert.match(orchestration, /accept_provider_entry/);
+  assert.match(orchestration, /accept_provider_page/);
+  assert.match(orchestration, /accept_contact_outcome/);
+  assert.match(orchestration, /account_pending_outcomes/);
   for (const table of [
     'mail_contacts_sync_runs',
     'mail_contacts_sync_inbox',
@@ -189,8 +203,11 @@ test('sync persistence owns atomic state relay and SSE replay without foreign st
   ]) {
     assert.match(migration, new RegExp(table));
   }
-  assert.doesNotMatch(migration, /hermes_data\.(?:contacts_|mail_accounts|communications_)/);
-  assert.doesNotMatch(`${repository}\n${relay}\n${realtime}`, /reqwest|oauth|provider sdk/i);
+  assert.match(orchestrationMigration, /mail_contacts_sync_pages/);
+  assert.match(orchestrationMigration, /mail_contacts_sync_entries/);
+  assert.match(orchestrationMigration, /outcome_accounted/);
+  assert.doesNotMatch(`${migration}\n${orchestrationMigration}`, /hermes_data\.(?:contacts_|mail_accounts|communications_)/);
+  assert.doesNotMatch(`${repository}\n${orchestration}\n${relay}\n${realtime}`, /reqwest|oauth|provider sdk/i);
 });
 
 test('staged Contacts slice keeps five functional build units isolated', async () => {
