@@ -20,8 +20,12 @@ revision 17. Integration build unit
 `hermes-mail-retained-evidence-replay-persistence` аналогично индексирует только
 собственный `mail_attachment_security_outbox`, проверяет exact scan-candidate
 contract и добавляет Mail storage successor revision 23. Producer-local publish
-adapters, workflow runtime и live conformance ещё не реализованы. Никакая
-SQL-правка publish state не считается реализацией этого решения.
+adapters получают разные owner-specific command/result contracts:
+`hermes-communications-retained-evidence-replay-contract` и
+`hermes-mail-retained-evidence-replay-contract`; их wire schemas не импортируют
+workflow protocol или реализацию другого owner. Producer adapters, workflow
+runtime и live conformance ещё не реализованы. Никакая SQL-правка publish state
+не считается реализацией этого решения.
 
 ## Контекст
 

@@ -3413,6 +3413,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-communications-retained-evidence-replay-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-communications-retained-evidence-replay-persistence"
 version = "0.1.0"
 dependencies = [
@@ -4041,6 +4052,17 @@ dependencies = [
  "sha2 0.11.0",
  "sqlx",
  "zeroize",
+]
+
+[[package]]
+name = "hermes-mail-retained-evidence-replay-contract"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
 ]
 
 [[package]]

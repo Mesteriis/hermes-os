@@ -154,3 +154,26 @@ test('Mail replay storage is an additive exact revision 23 successor', async () 
   assert.match(schema, /predecessor\.bundle_id != "mail_state"/);
   assert.match(schema, /predecessor\.steps\.push\(StorageMigrationStepV1/);
 });
+
+test('producer replay routes are separate owner-specific contract units', async () => {
+  const [communicationsManifest, communicationsContract, mailManifest, mailContract] =
+    await Promise.all([
+      read('src/communications-retained-evidence-replay-contract/Cargo.toml'),
+      read('src/communications-retained-evidence-replay-contract/src/lib.rs'),
+      read('src/mail-retained-evidence-replay-contract/Cargo.toml'),
+      read('src/mail-retained-evidence-replay-contract/src/lib.rs'),
+    ]);
+
+  assert.match(communicationsManifest, /role = "domain"/);
+  assert.match(communicationsManifest, /owner = "communications"/);
+  assert.doesNotMatch(communicationsManifest, /hermes-(?:mail|retained-evidence-replay-protocol)/);
+  assert.match(mailManifest, /role = "integration"/);
+  assert.match(mailManifest, /owner = "mail"/);
+  assert.doesNotMatch(mailManifest, /hermes-(?:communications|retained-evidence-replay-protocol)/);
+  assert.match(communicationsContract, /communications_retained_evidence_replay_command/);
+  assert.match(communicationsContract, /communications_retained_evidence_replay_result/);
+  assert.match(mailContract, /mail_retained_evidence_replay_command/);
+  assert.match(mailContract, /mail_retained_evidence_replay_result/);
+  assert.doesNotMatch(communicationsContract, /mail_/);
+  assert.doesNotMatch(mailContract, /communications_/);
+});

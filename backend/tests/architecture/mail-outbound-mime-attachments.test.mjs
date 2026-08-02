@@ -142,6 +142,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
       ...PROVIDER_DELIVERY_CONTRACT_PACKAGES,
       ...STAGED_OLLAMA_PACKAGES,
       'hermes-mail-retained-evidence-replay-persistence',
+      'hermes-mail-retained-evidence-replay-contract',
     ],
   );
   assert.deepEqual(

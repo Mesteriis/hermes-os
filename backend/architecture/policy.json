@@ -1392,6 +1392,18 @@
         "role": "integration",
         "owner": "mail",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-communications-retained-evidence-replay-contract",
+        "role": "domain",
+        "owner": "communications",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-mail-retained-evidence-replay-contract",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "contract"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1422,6 +1434,18 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-communications-retained-evidence-replay-contract": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-retained-evidence-replay-contract": [
+        {
+          "name": "hermes-runtime-protocol",
           "kind": "normal"
         }
       ],
@@ -4146,6 +4170,18 @@
         { "name": "prost-types", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
         { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-communications-retained-evidence-replay-contract": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-mail-retained-evidence-replay-contract": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-communication-summary-api": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -9561,6 +9597,14 @@
       "hermes-mail-retained-evidence-replay-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-communications-retained-evidence-replay-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-mail-retained-evidence-replay-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
       },
       "hermes-runtime-protocol": {
         "primaryKind": "lib",
