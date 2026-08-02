@@ -377,3 +377,23 @@ test('workflow command and result delivery preserves exact bytes and commit-befo
   assert.match(admission, /mail_replay_result_consume_request_v1/);
   assert.doesNotMatch(persistence, /communications_domain_outbox|mail_attachment_security_outbox/);
 });
+
+test('replay workflow is an admitted managed runtime with exact event grants', async () => {
+  const [managed, main] = await Promise.all([
+    read('src/attachment-preview-evidence-replay-runtime/src/managed_runtime.rs'),
+    read('src/attachment-preview-evidence-replay-runtime/src/main.rs'),
+  ]);
+
+  assert.match(main, /"serve-inherited" => serve_inherited/);
+  assert.match(main, /validate_managed_workflow_runtime_configuration/);
+  assert.match(main, /inherited_control_channel/);
+  assert.match(managed, /StorageVaultLeaseAdapterV1/);
+  assert.match(managed, /request_managed_runtime_event_access_v2/);
+  assert.match(managed, /if permits\.len\(\) != 2/);
+  assert.match(managed, /communications_replay_result_contract_reference_v1/);
+  assert.match(managed, /mail_replay_result_contract_reference_v1/);
+  assert.match(managed, /Operation::ClientDelivery/);
+  assert.match(managed, /dispatch_replay_client_request_v1/);
+  assert.match(managed, /relay_replay_commands_once_v1/);
+  assert.doesNotMatch(managed, /hermes_(?:communications_runtime|mail_runtime|kernel)/);
+});

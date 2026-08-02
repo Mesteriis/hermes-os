@@ -3551,6 +3551,8 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST
     { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-mail-retained-evidence-replay-contract', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
   ],
   'hermes-attachment-preview-evidence-replay-assembly': [
     { name: 'hermes-attachment-preview-evidence-replay-persistence', kind: 'normal' },
@@ -4775,8 +4777,11 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLI
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
   ],
   'hermes-attachment-preview-evidence-replay-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
   'hermes-attachment-preview-evidence-replay-assembly': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },

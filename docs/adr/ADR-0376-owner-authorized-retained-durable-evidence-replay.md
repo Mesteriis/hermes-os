@@ -6,7 +6,8 @@
 
 Состояние реализации: protocol, producer-local persistence, exact-byte adapters,
 durable delivery foundations и отдельный workflow API/core/persistence/runtime
-component/assembly contour implemented; managed gate planned.
+component/assembly contour implemented; workflow managed runtime implemented,
+ensemble and live gate pending.
 Диагностический browser gate Preview подтвердил, что generated Start/Get
 проходят через Core Gateway и один shared SSE stream, но source events старше
 bounded JetStream retention уже отсутствуют в broker. Отдельный workflow-owned
@@ -43,9 +44,12 @@ outbox/result inbox, authenticated client component, два exact publisher и �
 commit-before-Ack result consumer, descriptor и unsigned release assembly.
 Client payload не принимает owner/device claims: они выводятся из
 `ModuleClientRequestV1`. Workflow storage не читает Communications или Mail SQL.
-Producer components и workflow components ещё не подключены к managed process
-event loops/dev ensemble; runtime executable пока предоставляет только export
-surface, а live conformance не выполнен.
+Workflow executable реализует `serve-inherited`: проходит descriptor/settings
+authentication, получает process-bound Vault storage lease и exact Event Hub
+publish/subscribe permits, обслуживает authenticated client delivery, durable
+command outbox и два commit-before-Ack result inbox. Producer components ещё не
+подключены к их managed process event loops, workflow ещё не включён в dev
+release/ensemble, а live conformance не выполнен.
 Никакая SQL-правка исходного publish state не считается реализацией этого
 решения.
 

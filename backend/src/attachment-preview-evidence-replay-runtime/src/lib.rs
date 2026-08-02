@@ -4,6 +4,7 @@
 pub mod admission;
 pub mod client_port;
 mod contracts;
+pub mod managed_runtime;
 pub mod outbox;
 pub mod result_consumer;
 
