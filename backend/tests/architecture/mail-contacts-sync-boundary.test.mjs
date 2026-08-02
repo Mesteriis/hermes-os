@@ -36,6 +36,18 @@ const files = {
   assemblyManifest: new URL('src/contacts-assembly/Cargo.toml', BACKEND_ROOT),
   assembly: new URL('src/contacts-assembly/src/lib.rs', BACKEND_ROOT),
   developmentRelease: new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
+  mailContractManifest: new URL('src/mail-address-book-contract/Cargo.toml', BACKEND_ROOT),
+  mailContract: new URL(
+    'src/mail-address-book-contract/proto/hermes/mail/address_book/v1/address_book.proto',
+    BACKEND_ROOT,
+  ),
+  workflowApiManifest: new URL('src/mail-contacts-sync-api/Cargo.toml', BACKEND_ROOT),
+  workflowApi: new URL(
+    'src/mail-contacts-sync-api/proto/hermes/mail_contacts_sync/v1/sync.proto',
+    BACKEND_ROOT,
+  ),
+  workflowCoreManifest: new URL('src/mail-contacts-sync-core/Cargo.toml', BACKEND_ROOT),
+  workflowCore: new URL('src/mail-contacts-sync-core/src/lib.rs', BACKEND_ROOT),
 };
 
 test('mail contacts sync agreement keeps integration workflow and domain separate', async () => {
@@ -71,7 +83,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_runtime_assembly_v1',
+    'mail_contacts_sync_contract_core_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -79,6 +91,57 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
       'contacts.mail-identity.command.v1',
     ),
   );
+  assert(policy.implementation.ownerInventory.workflows.includes('mail_contacts_sync'));
+  assert(
+    policy.implementation.ownerInventory.businessCapabilities.includes(
+      'mail.address-book.provider.v1',
+    ),
+  );
+});
+
+test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {
+  const [
+    mailContractManifest,
+    mailContract,
+    workflowApiManifest,
+    workflowApi,
+    workflowCoreManifest,
+    workflowCore,
+  ] = await Promise.all([
+    readFile(files.mailContractManifest, 'utf8'),
+    readFile(files.mailContract, 'utf8'),
+    readFile(files.workflowApiManifest, 'utf8'),
+    readFile(files.workflowApi, 'utf8'),
+    readFile(files.workflowCoreManifest, 'utf8'),
+    readFile(files.workflowCore, 'utf8'),
+  ]);
+
+  assert.match(mailContractManifest, /role = "integration"/);
+  assert.match(mailContractManifest, /owner = "mail"/);
+  assert.doesNotMatch(mailContractManifest, /hermes-contacts|hermes-communications/);
+  assert.match(mailContract, /FetchMailAddressBookPageCommandV1/);
+  assert.match(mailContract, /MailAddressBookEntryObservedV1/);
+  assert.match(mailContract, /UpsertMailAddressBookEntryCommandV1/);
+  assert.match(mailContract, /expected_provider_etag/);
+  assert.match(mailContract, /outcome_unknown/);
+  assert.doesNotMatch(
+    mailContract,
+    /access_token|refresh_token|password|cookie|raw_json|raw_xml|map</,
+  );
+
+  for (const manifest of [workflowApiManifest, workflowCoreManifest]) {
+    assert.match(manifest, /role = "workflow"/);
+    assert.match(manifest, /owner = "mail_contacts_sync"/);
+    assert.doesNotMatch(manifest, /hermes-mail-(?:runtime|persistence)|hermes-contacts-(?:runtime|persistence)/);
+  }
+  assert.match(workflowApi, /rpc Start/);
+  assert.match(workflowApi, /rpc Get/);
+  assert.match(workflowApi, /MailContactsSyncStatusChangedV1/);
+  assert.doesNotMatch(workflowApi, /Poll|provider_entry_id|provider_etag|credential|map</);
+  assert.match(workflowCore, /MailContactsSyncStateV1/);
+  assert.match(workflowCore, /ReconcilingOutcome/);
+  assert.match(workflowCore, /MAIL_CONTACTS_SYNC_MAX_CURSOR_BYTES_V1/);
+  assert.doesNotMatch(workflowCore, /reqwest|sqlx|provider sdk|oauth|gateway|nats/i);
 });
 
 test('staged Contacts slice keeps five functional build units isolated', async () => {

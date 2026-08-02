@@ -4187,6 +4187,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-mail-address-book-contract"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-mail-api"
 version = "0.1.0"
 dependencies = [
@@ -4222,6 +4233,20 @@ dependencies = [
  "hermes-mail-imap",
  "prost 0.14.4",
 ]
+
+[[package]]
+name = "hermes-mail-contacts-sync-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-mail-contacts-sync-core"
+version = "0.1.0"
 
 [[package]]
 name = "hermes-mail-core"

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "contacts_mail_identity_command_runtime_assembly_v1",
+    "currentSlice": "mail_contacts_sync_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1500,6 +1500,24 @@
         "role": "workflow",
         "owner": "attachment_translation",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-mail-address-book-contract",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-mail-contacts-sync-api",
+        "role": "workflow",
+        "owner": "mail_contacts_sync",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-mail-contacts-sync-core",
+        "role": "workflow",
+        "owner": "mail_contacts_sync",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2392,6 +2410,9 @@
           "kind": "normal"
         }
       ],
+      "hermes-mail-address-book-contract": [],
+      "hermes-mail-contacts-sync-api": [],
+      "hermes-mail-contacts-sync-core": [],
       "hermes-tasks-persistence": [
         {
           "name": "hermes-storage-protocol",
@@ -8849,6 +8870,83 @@
           "features": []
         }
       ],
+      "hermes-mail-address-book-contract": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-mail-contacts-sync-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-mail-contacts-sync-core": [],
       "hermes-tasks-persistence": [
         {
           "name": "sha2",
@@ -13265,6 +13363,18 @@
         "primaryKind": "bin",
         "customBuildAllowed": false
       },
+      "hermes-mail-address-book-contract": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-mail-contacts-sync-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-mail-contacts-sync-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-tasks-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -13364,6 +13474,7 @@
         "communication_task_candidate_extraction",
         "communication_translation",
         "communications_export",
+        "mail_contacts_sync",
         "reviewed_note_candidate_promotion",
         "reviewed_task_candidate_promotion"
       ],
@@ -13501,12 +13612,14 @@
         "knowledge.reviewed-candidate.created.publisher.v1",
         "knowledge.reviewed-candidate.rejected.publisher.v1",
         "knowledge.storage.v1",
+        "mail.address-book.provider.v1",
         "mail.attachment-anchor.consume.v1",
         "mail.attachment-blob-admission.publish.v1",
         "mail.attachment-safety-state.consume.v1",
         "mail.attachment.scan-candidate.publish.v1",
         "mail.blob.v1",
         "mail.communication-observed.publish.v1",
+        "mail.contacts-sync.v1",
         "mail.delivery.query.v1",
         "mail.delivery.v1",
         "mail.gmail.credentials.v1",

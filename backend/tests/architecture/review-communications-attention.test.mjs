@@ -222,7 +222,7 @@ test('Review owner is admitted through signed Kernel Gateway and shared SSE conf
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_runtime_assembly_v1',
+    'mail_contacts_sync_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.domains, [
     'communications',

@@ -5,10 +5,14 @@
 Дата: 2026-08-02
 
 Состояние реализации: `contacts_mail_identity_command_v1` implemented;
-`mail_contacts_sync_v1` planned. Contacts command открыт только после exact
-five-unit inventory, disposable PostgreSQL и signed managed Vault/Storage/NATS
-conformance. Наличие legacy address-book service, Mail account UI или
-статических contracts не открывает workflow gate.
+`mail_contacts_sync_v1` planned. Для workflow реализован только foundation:
+отдельный Mail-owned provider contract, generated client API и pure lifecycle
+core. Persistence, runtime, assembly, Scheduler binding, реальные Google/CardDAV
+adapters и live/browser conformance ещё не реализованы, поэтому gate остаётся
+закрытым. Contacts command открыт только после exact five-unit inventory,
+disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
+legacy address-book service, Mail account UI или статических contracts не
+открывает workflow gate.
 
 Уточняет:
 

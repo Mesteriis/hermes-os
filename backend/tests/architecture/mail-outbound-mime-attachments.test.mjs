@@ -33,12 +33,14 @@ const STAGED_OLLAMA_PACKAGES = [
 ];
 
 const MAIL_CAPABILITIES = [
+  'mail.address-book.provider.v1',
   'mail.attachment-anchor.consume.v1',
   'mail.attachment-blob-admission.publish.v1',
   'mail.attachment-safety-state.consume.v1',
   'mail.attachment.scan-candidate.publish.v1',
   'mail.blob.v1',
   'mail.communication-observed.publish.v1',
+  'mail.contacts-sync.v1',
   'mail.delivery.query.v1',
   'mail.delivery.v1',
   'mail.gmail.credentials.v1',
@@ -111,7 +113,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_runtime_assembly_v1',
+    'mail_contacts_sync_contract_core_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',
@@ -136,6 +138,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     'communication_task_candidate_extraction',
     'communication_translation',
     'communications_export',
+    'mail_contacts_sync',
     'reviewed_note_candidate_promotion',
     'reviewed_task_candidate_promotion',
   ]);
@@ -154,6 +157,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
       ...STAGED_OLLAMA_PACKAGES,
       'hermes-mail-retained-evidence-replay-persistence',
       'hermes-mail-retained-evidence-replay-contract',
+      'hermes-mail-address-book-contract',
     ],
   );
   assert.deepEqual(

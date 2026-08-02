@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'contacts_mail_identity_command_runtime_assembly_v1',
+    'mail_contacts_sync_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
@@ -78,6 +78,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'communication_task_candidate_extraction',
       'communication_translation',
       'communications_export',
+      'mail_contacts_sync',
       'reviewed_note_candidate_promotion',
       'reviewed_task_candidate_promotion',
     ],
@@ -211,12 +212,14 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'knowledge.reviewed-candidate.created.publisher.v1',
       'knowledge.reviewed-candidate.rejected.publisher.v1',
       'knowledge.storage.v1',
+      'mail.address-book.provider.v1',
       'mail.attachment-anchor.consume.v1',
       'mail.attachment-blob-admission.publish.v1',
       'mail.attachment-safety-state.consume.v1',
       'mail.attachment.scan-candidate.publish.v1',
       'mail.blob.v1',
       'mail.communication-observed.publish.v1',
+      'mail.contacts-sync.v1',
       'mail.delivery.query.v1',
       'mail.delivery.v1',
       'mail.gmail.credentials.v1',
@@ -291,6 +294,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'hermes-ollama-ai-runtime',
       'hermes-mail-retained-evidence-replay-persistence',
       'hermes-mail-retained-evidence-replay-contract',
+      'hermes-mail-address-book-contract',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );
