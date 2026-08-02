@@ -3,13 +3,12 @@ use hermes_attachment_preview_evidence_replay_api::{
     ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_MODULE_ID_V1, ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_OWNER_V1,
     wire::{
         AttachmentPreviewEvidenceReplayErrorV1, AttachmentPreviewEvidenceReplayStateV1,
-        ReplayProducerSelectionV1 as WireProducerSelectionV1,
         StartAttachmentPreviewEvidenceReplayRequestV1,
         StartAttachmentPreviewEvidenceReplayResponseV1,
     },
 };
 use hermes_attachment_preview_evidence_replay_core::{
-    AuthenticatedReplayOperationRequestV1, ReplayProducerSelectionV1, ReplayProducerV1,
+    AuthenticatedReplayOperationRequestV1, ReplayProducerV1,
 };
 use hermes_attachment_preview_evidence_replay_persistence::{
     AttachmentPreviewEvidenceReplayPersistenceV1, ReplayCommandOutboxRecordV1,
@@ -144,21 +143,6 @@ fn authenticated_request(
             &module_request.logical_owner_id,
             &module_request.authenticated_device_id,
         ),
-        communications: selection(payload.communications?)?,
-        mail: selection(payload.mail?)?,
-    })
-}
-
-fn selection(value: WireProducerSelectionV1) -> Option<ReplayProducerSelectionV1> {
-    Some(ReplayProducerSelectionV1 {
-        producer_registration_id: value.producer_registration_id,
-        producer_runtime_generation: value.producer_runtime_generation,
-        producer_grant_epoch: value.producer_grant_epoch,
-        original_message_ids: value
-            .original_message_ids
-            .iter()
-            .map(|value| id16(value))
-            .collect::<Option<Vec<_>>>()?,
     })
 }
 
@@ -171,10 +155,7 @@ fn command_records(
             operation_id: request.operation_id.to_vec(),
             logical_owner_id: request.logical_owner_id.clone(),
             owner_device_actor_sha256: request.owner_device_actor_sha256.to_vec(),
-            producer_registration_id: request.communications.producer_registration_id.clone(),
-            producer_runtime_generation: request.communications.producer_runtime_generation,
-            producer_grant_epoch: request.communications.producer_grant_epoch,
-            original_message_ids: ids(&request.communications.original_message_ids),
+            attachment_anchor_id: request.attachment_anchor_id.to_vec(),
         },
         &CommunicationsReplayCommandEnvelopeContextV1 {
             runtime_instance_id: context.runtime_instance_id.clone(),
@@ -191,10 +172,7 @@ fn command_records(
             operation_id: request.operation_id.to_vec(),
             logical_owner_id: request.logical_owner_id.clone(),
             owner_device_actor_sha256: request.owner_device_actor_sha256.to_vec(),
-            producer_registration_id: request.mail.producer_registration_id.clone(),
-            producer_runtime_generation: request.mail.producer_runtime_generation,
-            producer_grant_epoch: request.mail.producer_grant_epoch,
-            original_message_ids: ids(&request.mail.original_message_ids),
+            attachment_anchor_id: request.attachment_anchor_id.to_vec(),
         },
         &MailReplayCommandEnvelopeContextV1 {
             runtime_instance_id: context.runtime_instance_id.clone(),
@@ -246,10 +224,6 @@ fn device_actor_sha256_v1(logical_owner_id: &str, authenticated_device_id: &str)
     digest.update([0]);
     digest.update(authenticated_device_id.as_bytes());
     digest.finalize().into()
-}
-
-fn ids(values: &[[u8; 16]]) -> Vec<Vec<u8>> {
-    values.iter().map(|value| value.to_vec()).collect()
 }
 
 fn id16(value: &[u8]) -> Option<[u8; 16]> {

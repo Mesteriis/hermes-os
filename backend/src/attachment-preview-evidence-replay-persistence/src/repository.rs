@@ -3,7 +3,7 @@ use hermes_attachment_preview_evidence_replay_api::wire::{
 };
 use hermes_attachment_preview_evidence_replay_core::{
     AuthenticatedReplayOperationRequestV1, ReplayFailureV1, ReplayOperationStateV1,
-    ReplayProducerOutcomeV1, ReplayProducerResultV1, ReplayProducerSelectionV1, ReplayProducerV1,
+    ReplayProducerOutcomeV1, ReplayProducerResultV1, ReplayProducerV1,
     accepted_replay_operation_v1, observe_producer_result_v1, plan_replay_operation_v1,
     replay_operation_status_v1,
 };
@@ -136,14 +136,12 @@ impl AttachmentPreviewEvidenceReplayPersistenceV1 {
             &mut transaction,
             request.operation_id,
             ReplayProducerV1::Communications,
-            &request.communications,
         )
         .await?;
         insert_producer(
             &mut transaction,
             request.operation_id,
             ReplayProducerV1::Mail,
-            &request.mail,
         )
         .await?;
         insert_command(
@@ -198,7 +196,7 @@ impl AttachmentPreviewEvidenceReplayPersistenceV1 {
         }
         let mut transaction = self.pool.begin().await.map_err(storage_unavailable)?;
         let rows = sqlx::query(
-            "SELECT message_id,envelope_sha256,exact_envelope_bytes,operation_id,producer FROM hermes_data.attachment_preview_evidence_replay_command_outbox WHERE published_at_unix_seconds IS NULL ORDER BY created_at_unix_seconds,message_id LIMIT $1",
+            "SELECT message_id,envelope_sha256,exact_envelope_bytes,operation_id,producer FROM hermes_data.attachment_preview_evidence_replay_anchor_command_outbox WHERE published_at_unix_seconds IS NULL ORDER BY created_at_unix_seconds,message_id LIMIT $1",
         )
         .bind(i64::from(limit))
         .fetch_all(&mut *transaction)
@@ -233,7 +231,7 @@ impl AttachmentPreviewEvidenceReplayPersistenceV1 {
             return Err(ReplayPersistenceErrorV1::InvalidInput);
         }
         let result = sqlx::query(
-            "UPDATE hermes_data.attachment_preview_evidence_replay_command_outbox SET published_at_unix_seconds=$1 WHERE message_id=$2 AND published_at_unix_seconds IS NULL",
+            "UPDATE hermes_data.attachment_preview_evidence_replay_anchor_command_outbox SET published_at_unix_seconds=$1 WHERE message_id=$2 AND published_at_unix_seconds IS NULL",
         )
         .bind(published_at_unix_seconds)
         .bind(message_id.as_slice())
@@ -244,7 +242,7 @@ impl AttachmentPreviewEvidenceReplayPersistenceV1 {
             return Ok(());
         }
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM hermes_data.attachment_preview_evidence_replay_command_outbox WHERE message_id=$1 AND published_at_unix_seconds IS NOT NULL)",
+            "SELECT EXISTS(SELECT 1 FROM hermes_data.attachment_preview_evidence_replay_anchor_command_outbox WHERE message_id=$1 AND published_at_unix_seconds IS NOT NULL)",
         )
         .bind(message_id.as_slice())
         .fetch_one(&self.pool)
@@ -357,15 +355,14 @@ async fn load_operation(
         return Ok(None);
     };
     let producers = load_producers(transaction, operation_id).await?;
-    let communications = producers
-        .iter()
-        .find(|value| value.producer == ReplayProducerV1::Communications)
-        .ok_or(ReplayPersistenceErrorV1::InvalidRow)?;
-    let mail = producers
-        .iter()
-        .find(|value| value.producer == ReplayProducerV1::Mail)
-        .ok_or(ReplayPersistenceErrorV1::InvalidRow)?;
-    if producers.len() != 2 {
+    if producers.len() != 2
+        || !producers
+            .iter()
+            .any(|value| value.producer == ReplayProducerV1::Communications)
+        || !producers
+            .iter()
+            .any(|value| value.producer == ReplayProducerV1::Mail)
+    {
         return Err(ReplayPersistenceErrorV1::InvalidRow);
     }
     let request = AuthenticatedReplayOperationRequestV1 {
@@ -376,8 +373,6 @@ async fn load_operation(
             row.try_get("owner_device_actor_sha256")
                 .map_err(invalid_row)?,
         )?,
-        communications: communications.selection.clone(),
-        mail: mail.selection.clone(),
     };
     let mut core_state = accepted_replay_operation_v1(request.clone())
         .map_err(|_| ReplayPersistenceErrorV1::InvalidRow)?;
@@ -420,7 +415,6 @@ async fn load_operation(
 
 struct LoadedProducerV1 {
     producer: ReplayProducerV1,
-    selection: ReplayProducerSelectionV1,
     result: Option<ReplayProducerResultV1>,
 }
 
@@ -429,7 +423,7 @@ async fn load_producers(
     operation_id: [u8; 16],
 ) -> Result<Vec<LoadedProducerV1>, ReplayPersistenceErrorV1> {
     let rows = sqlx::query(
-        "SELECT producer,producer_registration_id,producer_runtime_generation,producer_grant_epoch,outcome,failure FROM hermes_data.attachment_preview_evidence_replay_producers WHERE operation_id=$1 ORDER BY producer",
+        "SELECT producer,outcome,failure FROM hermes_data.attachment_preview_evidence_replay_anchor_producers WHERE operation_id=$1 ORDER BY producer",
     )
     .bind(operation_id.as_slice())
     .fetch_all(&mut **transaction)
@@ -439,7 +433,7 @@ async fn load_producers(
     for row in rows {
         let producer = producer_from_code(row.try_get("producer").map_err(invalid_row)?)?;
         let ids = sqlx::query_scalar::<_, Vec<u8>>(
-            "SELECT original_message_id FROM hermes_data.attachment_preview_evidence_replay_message_selection WHERE operation_id=$1 AND producer=$2 ORDER BY ordinal",
+            "SELECT original_message_id FROM hermes_data.attachment_preview_evidence_replay_anchor_result_messages WHERE operation_id=$1 AND producer=$2 ORDER BY ordinal",
         )
         .bind(operation_id.as_slice())
         .bind(producer_code(producer))
@@ -452,7 +446,7 @@ async fn load_producers(
         let outcome_code: i16 = row.try_get("outcome").map_err(invalid_row)?;
         let failure_code_value: i16 = row.try_get("failure").map_err(invalid_row)?;
         let result = if outcome_code == 0 {
-            if failure_code_value != 0 {
+            if failure_code_value != 0 || !ids.is_empty() {
                 return Err(ReplayPersistenceErrorV1::InvalidRow);
             }
             None
@@ -464,26 +458,7 @@ async fn load_producers(
                 failure: failure_from_code(failure_code_value)?,
             })
         };
-        values.push(LoadedProducerV1 {
-            producer,
-            selection: ReplayProducerSelectionV1 {
-                producer_registration_id: row
-                    .try_get("producer_registration_id")
-                    .map_err(invalid_row)?,
-                producer_runtime_generation: u64::try_from(
-                    row.try_get::<i64, _>("producer_runtime_generation")
-                        .map_err(invalid_row)?,
-                )
-                .map_err(invalid_row)?,
-                producer_grant_epoch: u64::try_from(
-                    row.try_get::<i64, _>("producer_grant_epoch")
-                        .map_err(invalid_row)?,
-                )
-                .map_err(invalid_row)?,
-                original_message_ids: ids,
-            },
-            result,
-        });
+        values.push(LoadedProducerV1 { producer, result });
     }
     Ok(values)
 }
@@ -492,31 +467,15 @@ async fn insert_producer(
     transaction: &mut Transaction<'_, Postgres>,
     operation_id: [u8; 16],
     producer: ReplayProducerV1,
-    selection: &ReplayProducerSelectionV1,
 ) -> Result<(), ReplayPersistenceErrorV1> {
     sqlx::query(
-        "INSERT INTO hermes_data.attachment_preview_evidence_replay_producers (operation_id,producer,producer_registration_id,producer_runtime_generation,producer_grant_epoch,outcome,failure) VALUES ($1,$2,$3,$4,$5,0,0)",
+        "INSERT INTO hermes_data.attachment_preview_evidence_replay_anchor_producers (operation_id,producer,outcome,failure) VALUES ($1,$2,0,0)",
     )
     .bind(operation_id.as_slice())
     .bind(producer_code(producer))
-    .bind(&selection.producer_registration_id)
-    .bind(i64::try_from(selection.producer_runtime_generation).map_err(invalid_input)?)
-    .bind(i64::try_from(selection.producer_grant_epoch).map_err(invalid_input)?)
     .execute(&mut **transaction)
     .await
     .map_err(storage_unavailable)?;
-    for (ordinal, message_id) in selection.original_message_ids.iter().enumerate() {
-        sqlx::query(
-            "INSERT INTO hermes_data.attachment_preview_evidence_replay_message_selection (operation_id,producer,ordinal,original_message_id) VALUES ($1,$2,$3,$4)",
-        )
-        .bind(operation_id.as_slice())
-        .bind(producer_code(producer))
-        .bind(i16::try_from(ordinal).map_err(invalid_input)?)
-        .bind(message_id.as_slice())
-        .execute(&mut **transaction)
-        .await
-        .map_err(storage_unavailable)?;
-    }
     Ok(())
 }
 
@@ -527,7 +486,7 @@ async fn insert_command(
     created_at_unix_seconds: i64,
 ) -> Result<(), ReplayPersistenceErrorV1> {
     sqlx::query(
-        "INSERT INTO hermes_data.attachment_preview_evidence_replay_command_outbox (message_id,envelope_sha256,exact_envelope_bytes,operation_id,producer,created_at_unix_seconds,published_at_unix_seconds) VALUES ($1,$2,$3,$4,$5,$6,NULL)",
+        "INSERT INTO hermes_data.attachment_preview_evidence_replay_anchor_command_outbox (message_id,envelope_sha256,exact_envelope_bytes,operation_id,producer,created_at_unix_seconds,published_at_unix_seconds) VALUES ($1,$2,$3,$4,$5,$6,NULL)",
     )
     .bind(command.message_id.as_slice())
     .bind(command.envelope_sha256.as_slice())
@@ -547,7 +506,7 @@ async fn load_command_message_id(
     producer: ReplayProducerV1,
 ) -> Result<[u8; 16], ReplayPersistenceErrorV1> {
     let value = sqlx::query_scalar::<_, Vec<u8>>(
-        "SELECT message_id FROM hermes_data.attachment_preview_evidence_replay_command_outbox WHERE operation_id=$1 AND producer=$2",
+        "SELECT message_id FROM hermes_data.attachment_preview_evidence_replay_anchor_command_outbox WHERE operation_id=$1 AND producer=$2",
     )
     .bind(operation_id.as_slice())
     .bind(producer_code(producer))
@@ -570,7 +529,7 @@ async fn inspect_result_inbox(
     record: &ReplayResultInboxRecordV1,
 ) -> Result<ResultInboxStateV1, ReplayPersistenceErrorV1> {
     let rows = sqlx::query(
-        "SELECT message_id,envelope_sha256,operation_id,producer FROM hermes_data.attachment_preview_evidence_replay_result_inbox WHERE message_id=$1 OR (operation_id=$2 AND producer=$3) FOR UPDATE",
+        "SELECT message_id,envelope_sha256,operation_id,producer FROM hermes_data.attachment_preview_evidence_replay_anchor_result_inbox WHERE message_id=$1 OR (operation_id=$2 AND producer=$3) FOR UPDATE",
     )
     .bind(record.message_id.as_slice())
     .bind(record.operation_id.as_slice())
@@ -603,7 +562,7 @@ async fn insert_result_inbox(
     accepted_at_unix_seconds: i64,
 ) -> Result<(), ReplayPersistenceErrorV1> {
     sqlx::query(
-        "INSERT INTO hermes_data.attachment_preview_evidence_replay_result_inbox (message_id,envelope_sha256,operation_id,producer,accepted_at_unix_seconds) VALUES ($1,$2,$3,$4,$5)",
+        "INSERT INTO hermes_data.attachment_preview_evidence_replay_anchor_result_inbox (message_id,envelope_sha256,operation_id,producer,accepted_at_unix_seconds) VALUES ($1,$2,$3,$4,$5)",
     )
     .bind(record.message_id.as_slice())
     .bind(record.envelope_sha256.as_slice())
@@ -622,7 +581,7 @@ async fn update_producer_result(
     result: &ReplayProducerResultV1,
 ) -> Result<(), ReplayPersistenceErrorV1> {
     let updated = sqlx::query(
-        "UPDATE hermes_data.attachment_preview_evidence_replay_producers SET outcome=$1,failure=$2 WHERE operation_id=$3 AND producer=$4 AND outcome=0 AND failure=0",
+        "UPDATE hermes_data.attachment_preview_evidence_replay_anchor_producers SET outcome=$1,failure=$2 WHERE operation_id=$3 AND producer=$4 AND outcome=0 AND failure=0",
     )
     .bind(outcome_code(result.outcome))
     .bind(failure_code(result.failure))
@@ -631,9 +590,22 @@ async fn update_producer_result(
     .execute(&mut **transaction)
     .await
     .map_err(storage_unavailable)?;
-    (updated.rows_affected() == 1)
-        .then_some(())
-        .ok_or(ReplayPersistenceErrorV1::Conflict)
+    if updated.rows_affected() != 1 {
+        return Err(ReplayPersistenceErrorV1::Conflict);
+    }
+    for (ordinal, message_id) in result.original_message_ids.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO hermes_data.attachment_preview_evidence_replay_anchor_result_messages (operation_id,producer,ordinal,original_message_id) VALUES ($1,$2,$3,$4)",
+        )
+        .bind(operation_id.as_slice())
+        .bind(producer_code(result.producer))
+        .bind(i16::try_from(ordinal).map_err(invalid_input)?)
+        .bind(message_id.as_slice())
+        .execute(&mut **transaction)
+        .await
+        .map_err(storage_unavailable)?;
+    }
+    Ok(())
 }
 
 fn verify_command_record(
@@ -796,15 +768,7 @@ mod tests {
             operation_id: request.operation_id.to_vec(),
             logical_owner_id: request.logical_owner_id.clone(),
             owner_device_actor_sha256: request.owner_device_actor_sha256.to_vec(),
-            producer_registration_id: request.communications.producer_registration_id.clone(),
-            producer_runtime_generation: request.communications.producer_runtime_generation,
-            producer_grant_epoch: request.communications.producer_grant_epoch,
-            original_message_ids: request
-                .communications
-                .original_message_ids
-                .iter()
-                .map(|id| id.to_vec())
-                .collect(),
+            attachment_anchor_id: request.attachment_anchor_id.to_vec(),
         };
         let outbox = build_communications_replay_command_outbox_v1(
             command,
@@ -838,16 +802,6 @@ mod tests {
             attachment_anchor_id: [2; 16],
             logical_owner_id: "owner-1".to_owned(),
             owner_device_actor_sha256: [9; 32],
-            communications: selection("communications-registration", [3; 16]),
-            mail: selection("mail-registration", [4; 16]),
-        }
-    }
-    fn selection(registration: &str, message_id: [u8; 16]) -> ReplayProducerSelectionV1 {
-        ReplayProducerSelectionV1 {
-            producer_registration_id: registration.to_owned(),
-            producer_runtime_generation: 7,
-            producer_grant_epoch: 9,
-            original_message_ids: vec![message_id],
         }
     }
 }

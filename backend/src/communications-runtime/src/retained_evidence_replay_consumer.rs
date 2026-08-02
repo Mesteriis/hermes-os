@@ -245,7 +245,7 @@ fn owner_mismatch_result(
     ReplayCommunicationsEvidenceResultV1 {
         operation_id: command.operation_id.clone(),
         outcome: ReplayCommunicationsEvidenceOutcomeV1::Rejected as i32,
-        original_message_ids: command.original_message_ids.clone(),
+        original_message_ids: Vec::new(),
         failure: ReplayCommunicationsEvidenceFailureV1::OwnerMismatch as i32,
     }
 }
@@ -258,14 +258,6 @@ fn terminal_result(
         CommunicationsRetainedEvidenceReplayErrorV1::InvalidCommand => (
             ReplayCommunicationsEvidenceOutcomeV1::Rejected,
             ReplayCommunicationsEvidenceFailureV1::WrongContract,
-        ),
-        CommunicationsRetainedEvidenceReplayErrorV1::StaleRuntimeFence => (
-            ReplayCommunicationsEvidenceOutcomeV1::Rejected,
-            ReplayCommunicationsEvidenceFailureV1::StaleRuntimeFence,
-        ),
-        CommunicationsRetainedEvidenceReplayErrorV1::StaleGrantFence => (
-            ReplayCommunicationsEvidenceOutcomeV1::Rejected,
-            ReplayCommunicationsEvidenceFailureV1::StaleGrantFence,
         ),
         CommunicationsRetainedEvidenceReplayErrorV1::Persistence(error) => match error {
             RetainedCommunicationsReplayErrorV1::NotFound => (
@@ -290,7 +282,7 @@ fn terminal_result(
     Some(ReplayCommunicationsEvidenceResultV1 {
         operation_id: command.operation_id.clone(),
         outcome: outcome as i32,
-        original_message_ids: command.original_message_ids.clone(),
+        original_message_ids: Vec::new(),
         failure: failure as i32,
     })
 }
@@ -333,23 +325,22 @@ mod tests {
             operation_id: vec![1; 16],
             logical_owner_id: "owner-1".to_owned(),
             owner_device_actor_sha256: vec![2; 32],
-            producer_registration_id: "communications-registration".to_owned(),
-            producer_runtime_generation: 7,
-            producer_grant_epoch: 9,
-            original_message_ids: vec![vec![3; 16]],
+            attachment_anchor_id: vec![3; 16],
         }
     }
 
     #[test]
-    fn stale_fences_are_terminal_but_transport_outage_is_retryable() {
-        let stale_runtime = terminal_result(
+    fn deterministic_failures_are_terminal_but_transport_outage_is_retryable() {
+        let not_found = terminal_result(
             &command(),
-            CommunicationsRetainedEvidenceReplayErrorV1::StaleRuntimeFence,
+            CommunicationsRetainedEvidenceReplayErrorV1::Persistence(
+                RetainedCommunicationsReplayErrorV1::NotFound,
+            ),
         )
         .expect("terminal");
         assert_eq!(
-            stale_runtime.failure,
-            ReplayCommunicationsEvidenceFailureV1::StaleRuntimeFence as i32
+            not_found.failure,
+            ReplayCommunicationsEvidenceFailureV1::NotFound as i32
         );
         assert!(
             terminal_result(

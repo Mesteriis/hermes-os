@@ -6,10 +6,8 @@ message ReplayCommunicationsEvidenceCommandV1 {
   bytes operation_id = 1;
   string logical_owner_id = 2;
   bytes owner_device_actor_sha256 = 3;
-  string producer_registration_id = 4;
-  uint64 producer_runtime_generation = 5;
-  uint64 producer_grant_epoch = 6;
-  repeated bytes original_message_ids = 7;
+  reserved 4 to 7;
+  bytes attachment_anchor_id = 8;
 }
 
 message ReplayCommunicationsEvidenceResultV1 {

@@ -326,10 +326,7 @@ mod tests {
             operation_id: vec![1; 16],
             logical_owner_id: "owner-1".to_owned(),
             owner_device_actor_sha256: vec![2; 32],
-            producer_registration_id: "communications-registration".to_owned(),
-            producer_runtime_generation: 7,
-            producer_grant_epoch: 9,
-            original_message_ids: vec![vec![3; 16]],
+            attachment_anchor_id: vec![3; 16],
         };
         let record = build_communications_replay_command_outbox_v1(
             command,

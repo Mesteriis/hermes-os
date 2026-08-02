@@ -9,19 +9,8 @@ message ReplayExactEvidenceCommandV1 {
   bytes operation_id = 2;
   string logical_owner_id = 3;
   bytes owner_device_actor_sha256 = 4;
-  string producer_registration_id = 5;
-  uint64 producer_runtime_generation = 6;
-  uint64 producer_grant_epoch = 7;
-  RetainedEvidenceContractRefV1 original_contract = 8;
-  repeated bytes original_message_ids = 9;
-}
-
-message RetainedEvidenceContractRefV1 {
-  string owner = 1;
-  string name = 2;
-  uint32 major = 3;
-  uint32 revision = 4;
-  bytes schema_sha256 = 5;
+  reserved 5 to 8;
+  bytes attachment_anchor_id = 9;
 }
 
 message ReplayExactEvidenceResultV1 {

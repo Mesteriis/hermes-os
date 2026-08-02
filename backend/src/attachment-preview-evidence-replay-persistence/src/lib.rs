@@ -16,7 +16,7 @@ pub use repository::{
     ReplayResultAcceptOutcomeV1, ReplayResultInboxRecordV1,
 };
 pub use schema::{
-    ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_SCHEMA_V1,
+    ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_SCHEMA_V1, ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_SCHEMA_V2,
     ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1,
     attachment_preview_evidence_replay_storage_bundle_v1,
 };
@@ -63,7 +63,7 @@ impl AttachmentPreviewEvidenceReplayPersistenceV1 {
 
     pub async fn verify_storage_ready(&self) -> Result<(), ReplayPersistenceErrorV1> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.attachment_preview_evidence_replay_operations, hermes_data.attachment_preview_evidence_replay_producers, hermes_data.attachment_preview_evidence_replay_message_selection, hermes_data.attachment_preview_evidence_replay_command_outbox, hermes_data.attachment_preview_evidence_replay_result_inbox LIMIT 0",
+            "SELECT 1 FROM hermes_data.attachment_preview_evidence_replay_operations, hermes_data.attachment_preview_evidence_replay_anchor_producers, hermes_data.attachment_preview_evidence_replay_anchor_result_messages, hermes_data.attachment_preview_evidence_replay_anchor_command_outbox, hermes_data.attachment_preview_evidence_replay_anchor_result_inbox LIMIT 0",
         )
         .execute(&self.pool)
         .await

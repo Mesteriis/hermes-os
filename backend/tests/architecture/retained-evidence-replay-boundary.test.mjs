@@ -35,7 +35,7 @@ test('retained evidence replay protocol is an isolated workflow contract', async
   );
 });
 
-test('replay selector is exact bounded and carries no generic query surface', async () => {
+test('replay request is provider-neutral and carries one exact attachment anchor', async () => {
   const proto = await read(
     'src/attachment-preview-evidence-replay-protocol/proto/hermes/events/replay/v1/retained_evidence_replay.proto',
   );
@@ -43,10 +43,11 @@ test('replay selector is exact bounded and carries no generic query surface', as
     'src/attachment-preview-evidence-replay-protocol/src/lib.rs',
   );
 
-  assert.match(proto, /string producer_registration_id = 5;/);
-  assert.match(proto, /uint64 producer_runtime_generation = 6;/);
-  assert.match(proto, /uint64 producer_grant_epoch = 7;/);
-  assert.match(proto, /repeated bytes original_message_ids = 9;/);
+  assert.match(proto, /reserved 5 to 8;/);
+  assert.match(proto, /bytes attachment_anchor_id = 9;/);
+  assert.doesNotMatch(proto, /producer_registration_id/);
+  assert.doesNotMatch(proto, /producer_runtime_generation/);
+  assert.doesNotMatch(proto, /producer_grant_epoch/);
   assert.match(implementation, /RETAINED_EVIDENCE_REPLAY_MAX_MESSAGES_V1: usize = 16/);
   assert.doesNotMatch(proto, /subject/);
   assert.doesNotMatch(proto, /predicate/);
@@ -184,9 +185,10 @@ test('producer adapters publish only verified original bytes with append-only au
     read('src/mail-runtime/src/retained_evidence_replay.rs'),
   ]);
   for (const adapter of [communications, mail]) {
-    assert.match(adapter, /producer_registration_id != context\.registration_id/);
-    assert.match(adapter, /producer_runtime_generation != context\.runtime_generation/);
-    assert.match(adapter, /producer_grant_epoch != context\.grant_epoch/);
+    assert.match(adapter, /producer_registration_id: context\.registration_id\.to_owned\(\)/);
+    assert.match(adapter, /producer_runtime_generation: context\.runtime_generation/);
+    assert.match(adapter, /producer_grant_epoch: context\.grant_epoch/);
+    assert.doesNotMatch(adapter, /command\.producer_(?:registration_id|runtime_generation|grant_epoch)/);
     assert.match(
       adapter,
       /publish_exact\(\s*original_contract_publish_permit,\s*retained\.record\.exact_bytes\(\),?\s*\)/,
@@ -196,8 +198,8 @@ test('producer adapters publish only verified original bytes with append-only au
     assert.match(adapter, /ReplayPhaseV1::PublishUnavailable/);
     assert.doesNotMatch(adapter, /mark_.*published|published_at|decode_envelope/);
   }
-  assert.match(communications, /retained_attachment_safety_event_by_message_id/);
-  assert.match(mail, /retained_scan_candidate_by_message_id/);
+  assert.match(communications, /retained_attachment_safety_event\(attachment_anchor_id\)/);
+  assert.match(mail, /retained_scan_candidate\(attachment_anchor_id\)/);
   assert.doesNotMatch(communications, /hermes_mail|mail_/);
   assert.doesNotMatch(mail, /hermes_communications|communications_/);
 });
@@ -400,7 +402,7 @@ test('replay coordination is a separate workflow with owner-local operation stor
       read('src/attachment-preview-evidence-replay-api/proto/hermes/attachment_preview_evidence_replay/v1/replay.proto'),
       read('src/attachment-preview-evidence-replay-core/Cargo.toml'),
       read('src/attachment-preview-evidence-replay-persistence/Cargo.toml'),
-      read('src/attachment-preview-evidence-replay-persistence/migrations/0001_attachment_preview_evidence_replay.sql'),
+      read('src/attachment-preview-evidence-replay-persistence/migrations/0002_provider_neutral_anchor_replay.sql'),
       read('src/attachment-preview-evidence-replay-runtime/Cargo.toml'),
       read('src/attachment-preview-evidence-replay-assembly/Cargo.toml'),
     ]);
@@ -411,10 +413,10 @@ test('replay coordination is a separate workflow with owner-local operation stor
     assert.doesNotMatch(manifest, /hermes-(?:communications-runtime|mail-runtime|kernel)/);
   }
   assert.doesNotMatch(api, /logical_owner_id|owner_device_actor|subject|predicate|payload_bytes|map</);
-  assert.match(api, /ReplayProducerSelectionV1 communications/);
-  assert.match(api, /ReplayProducerSelectionV1 mail/);
-  assert.match(migration, /attachment_preview_evidence_replay_command_outbox/);
-  assert.match(migration, /attachment_preview_evidence_replay_result_inbox/);
+  assert.match(api, /bytes attachment_anchor_id = 3/);
+  assert.doesNotMatch(api, /ReplayProducerSelectionV1|producer_registration_id|original_message_ids/);
+  assert.match(migration, /attachment_preview_evidence_replay_anchor_command_outbox/);
+  assert.match(migration, /attachment_preview_evidence_replay_anchor_result_inbox/);
   assert.doesNotMatch(migration, /communications_domain_outbox|mail_attachment_security_outbox/);
   assert.doesNotMatch(migration, /provider|subject|payload_bytes|blob/);
 });
@@ -509,8 +511,8 @@ test('managed recovery gate expires broker history and proves SSE plus client bl
   assert.match(managedFlow, /read_terminal_attachment_preview_sse_event_v1/);
   assert.match(managedFlow, /read_attachment_preview_blob_v1/);
   assert.match(managedFlow, /duplicate_operation_id/);
-  assert.match(managedFlow, /missing_mail/);
-  assert.match(managedFlow, /stale_mail/);
+  assert.match(managedFlow, /remove_retained_mail_replay_index_v1/);
+  assert.match(managedFlow, /restore_retained_mail_replay_index_v1/);
   assert.match(managedFlow, /set_authenticated_nats_container_running\(false\)/);
   assert.match(managedFlow, /reserve_attachment_preview_evidence_replay_successor_v1/);
   assert.match(managedFlow, /restart_mail_runtime_without_smtp_for_human_owner/);
@@ -518,7 +520,7 @@ test('managed recovery gate expires broker history and proves SSE plus client bl
   assert.match(managedFlow, /assert_replay_control_payload_is_private/);
   assert.match(persistenceFixture, /communications_retained_evidence_replay_index/);
   assert.match(persistenceFixture, /mail_retained_evidence_replay_index/);
-  assert.match(persistenceFixture, /attachment_preview_evidence_replay_result_inbox/);
+  assert.match(persistenceFixture, /attachment_preview_evidence_replay_anchor_result_inbox/);
   assert.match(communicationsSetup, /max_age = Duration::from_millis\(250\)/);
   assert.match(communicationsSetup, /update_stream\(expiring\.clone\(\)\)/);
   assert.match(communicationsSetup, /get_last_raw_message_by_subject/);

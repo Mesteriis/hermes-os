@@ -3,7 +3,7 @@ use hermes_attachment_preview_evidence_replay_api::wire::{
 };
 use hermes_attachment_preview_evidence_replay_core::{
     AuthenticatedReplayOperationRequestV1, ReplayFailureV1, ReplayProducerOutcomeV1,
-    ReplayProducerResultV1, ReplayProducerSelectionV1, ReplayProducerV1,
+    ReplayProducerResultV1, ReplayProducerV1,
 };
 use hermes_communications_retained_evidence_replay_contract::{
     COMMUNICATIONS_REPLAY_CAPABILITY_ID_V1, COMMUNICATIONS_REPLAY_SOURCE_MODULE_ID_V1,
@@ -50,12 +50,6 @@ pub(crate) fn request_fingerprint_v1(request: &AuthenticatedReplayOperationReque
     hash.update(request.attachment_anchor_id);
     update_text(&mut hash, &request.logical_owner_id);
     hash.update(request.owner_device_actor_sha256);
-    update_selection(
-        &mut hash,
-        ReplayProducerV1::Communications,
-        &request.communications,
-    );
-    update_selection(&mut hash, ReplayProducerV1::Mail, &request.mail);
     hash.finalize().into()
 }
 
@@ -65,7 +59,6 @@ pub(crate) fn decode_command_v1(
     request: &AuthenticatedReplayOperationRequestV1,
 ) -> Result<[u8; 16], ReplayPersistenceErrorV1> {
     let envelope = decode_envelope_v1(exact_bytes).map_err(|_| wrong_contract())?;
-    let selection = selection(request, producer);
     let (expected_contract, source_module, capability) = match producer {
         ReplayProducerV1::Communications => (
             communications_replay_command_contract_reference_v1(),
@@ -95,12 +88,8 @@ pub(crate) fn decode_command_v1(
                 &command.operation_id,
                 &command.logical_owner_id,
                 &command.owner_device_actor_sha256,
-                &command.producer_registration_id,
-                command.producer_runtime_generation,
-                command.producer_grant_epoch,
-                &command.original_message_ids,
+                &command.attachment_anchor_id,
                 request,
-                selection,
             )?;
         }
         ReplayProducerV1::Mail => {
@@ -111,12 +100,8 @@ pub(crate) fn decode_command_v1(
                 &command.operation_id,
                 &command.logical_owner_id,
                 &command.owner_device_actor_sha256,
-                &command.producer_registration_id,
-                command.producer_runtime_generation,
-                command.producer_grant_epoch,
-                &command.original_message_ids,
+                &command.attachment_anchor_id,
                 request,
-                selection,
             )?;
         }
     }
@@ -234,36 +219,18 @@ fn validate_result_envelope(
     exact.then_some(()).ok_or_else(wrong_contract)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn exact_command_payload(
     operation_id: &[u8],
     logical_owner_id: &str,
     owner_device_actor_sha256: &[u8],
-    producer_registration_id: &str,
-    producer_runtime_generation: u64,
-    producer_grant_epoch: u64,
-    original_message_ids: &[Vec<u8>],
+    attachment_anchor_id: &[u8],
     request: &AuthenticatedReplayOperationRequestV1,
-    selection: &ReplayProducerSelectionV1,
 ) -> Result<(), ReplayPersistenceErrorV1> {
     let exact = operation_id == request.operation_id
         && logical_owner_id == request.logical_owner_id
         && owner_device_actor_sha256 == request.owner_device_actor_sha256
-        && producer_registration_id == selection.producer_registration_id
-        && producer_runtime_generation == selection.producer_runtime_generation
-        && producer_grant_epoch == selection.producer_grant_epoch
-        && ids16(original_message_ids)? == selection.original_message_ids;
+        && attachment_anchor_id == request.attachment_anchor_id;
     exact.then_some(()).ok_or_else(wrong_contract)
-}
-
-fn selection(
-    request: &AuthenticatedReplayOperationRequestV1,
-    producer: ReplayProducerV1,
-) -> &ReplayProducerSelectionV1 {
-    match producer {
-        ReplayProducerV1::Communications => &request.communications,
-        ReplayProducerV1::Mail => &request.mail,
-    }
 }
 
 fn contract_matches(actual: Option<&ContractRefV1>, expected: &ContractReferenceV1) -> bool {
@@ -274,21 +241,6 @@ fn contract_matches(actual: Option<&ContractRefV1>, expected: &ContractReference
             && actual.revision == expected.revision
             && actual.schema_sha256 == expected.schema_sha256
     })
-}
-
-fn update_selection(
-    hash: &mut Sha256,
-    producer: ReplayProducerV1,
-    value: &ReplayProducerSelectionV1,
-) {
-    hash.update((producer as i16).to_be_bytes());
-    update_text(hash, &value.producer_registration_id);
-    hash.update(value.producer_runtime_generation.to_be_bytes());
-    hash.update(value.producer_grant_epoch.to_be_bytes());
-    hash.update((value.original_message_ids.len() as u64).to_be_bytes());
-    for message_id in &value.original_message_ids {
-        hash.update(message_id);
-    }
 }
 
 fn update_text(hash: &mut Sha256, value: &str) {
@@ -384,7 +336,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fingerprint_covers_owner_actor_anchor_fences_and_each_exact_message() {
+    fn fingerprint_covers_only_the_authenticated_provider_neutral_request() {
         let request = request();
         let baseline = request_fingerprint_v1(&request);
         for changed in [
@@ -393,10 +345,6 @@ mod tests {
             }),
             mutate(&request, |value| value.owner_device_actor_sha256 = [8; 32]),
             mutate(&request, |value| value.attachment_anchor_id = [7; 16]),
-            mutate(&request, |value| value.mail.producer_grant_epoch += 1),
-            mutate(&request, |value| {
-                value.communications.original_message_ids[0] = [6; 16]
-            }),
         ] {
             assert_ne!(baseline, request_fingerprint_v1(&changed));
         }
@@ -408,17 +356,6 @@ mod tests {
             attachment_anchor_id: [2; 16],
             logical_owner_id: "owner-1".to_owned(),
             owner_device_actor_sha256: [9; 32],
-            communications: selection("communications-registration", [3; 16]),
-            mail: selection("mail-registration", [4; 16]),
-        }
-    }
-
-    fn selection(registration: &str, message_id: [u8; 16]) -> ReplayProducerSelectionV1 {
-        ReplayProducerSelectionV1 {
-            producer_registration_id: registration.to_owned(),
-            producer_runtime_generation: 7,
-            producer_grant_epoch: 9,
-            original_message_ids: vec![message_id],
         }
     }
 

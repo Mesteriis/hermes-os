@@ -33,7 +33,7 @@ pub const MAIL_REPLAY_CAPABILITY_ID_V1: &str = "mail.retained-evidence-replay.v1
 pub const MAIL_REPLAY_COMMAND_CONTRACT_NAME_V1: &str = "mail_retained_evidence_replay_command";
 pub const MAIL_REPLAY_RESULT_CONTRACT_NAME_V1: &str = "mail_retained_evidence_replay_result";
 pub const MAIL_REPLAY_CONTRACT_MAJOR_V1: u32 = 1;
-pub const MAIL_REPLAY_CONTRACT_REVISION_V1: u32 = 1;
+pub const MAIL_REPLAY_CONTRACT_REVISION_V1: u32 = 2;
 pub const MAIL_REPLAY_MAX_IN_FLIGHT_V1: u32 = 8;
 pub const MAIL_REPLAY_MAX_MESSAGES_V1: usize = 16;
 
@@ -42,9 +42,7 @@ pub enum MailReplayValidationErrorV1 {
     InvalidOperation,
     InvalidOwner,
     InvalidActor,
-    InvalidProducer,
-    InvalidRuntimeFence,
-    InvalidGrantFence,
+    InvalidAttachmentAnchor,
     InvalidMessageSelection,
     InvalidResult,
 }
@@ -60,16 +58,8 @@ pub fn validate_mail_replay_command_v1(
     if !valid_sha256(&command.owner_device_actor_sha256) {
         return Err(MailReplayValidationErrorV1::InvalidActor);
     }
-    if !valid_identity(&command.producer_registration_id) {
-        return Err(MailReplayValidationErrorV1::InvalidProducer);
-    }
-    if command.producer_runtime_generation == 0 {
-        return Err(MailReplayValidationErrorV1::InvalidRuntimeFence);
-    }
-    if command.producer_grant_epoch == 0 {
-        return Err(MailReplayValidationErrorV1::InvalidGrantFence);
-    }
-    validate_message_ids(&command.original_message_ids)
+    validate_id16(&command.attachment_anchor_id)
+        .map_err(|_| MailReplayValidationErrorV1::InvalidAttachmentAnchor)
 }
 
 pub fn validate_mail_replay_result_v1(
@@ -77,21 +67,31 @@ pub fn validate_mail_replay_result_v1(
 ) -> Result<(), MailReplayValidationErrorV1> {
     validate_id16(&result.operation_id)
         .map_err(|_| MailReplayValidationErrorV1::InvalidOperation)?;
-    validate_message_ids(&result.original_message_ids)?;
     use wire::{ReplayMailEvidenceFailureV1 as Failure, ReplayMailEvidenceOutcomeV1 as Outcome};
     let outcome = Outcome::try_from(result.outcome)
         .map_err(|_| MailReplayValidationErrorV1::InvalidResult)?;
     let failure = Failure::try_from(result.failure)
         .map_err(|_| MailReplayValidationErrorV1::InvalidResult)?;
     match outcome {
-        Outcome::Published | Outcome::AlreadyPublished if failure == Failure::Unspecified => Ok(()),
-        Outcome::Rejected | Outcome::Unavailable if failure != Failure::Unspecified => Ok(()),
+        Outcome::Published | Outcome::AlreadyPublished if failure == Failure::Unspecified => {
+            validate_message_ids(&result.original_message_ids)
+        }
+        Outcome::Rejected | Outcome::Unavailable if failure != Failure::Unspecified => {
+            validate_optional_message_ids(&result.original_message_ids)
+        }
         _ => Err(MailReplayValidationErrorV1::InvalidResult),
     }
 }
 
 fn validate_message_ids(ids: &[Vec<u8>]) -> Result<(), MailReplayValidationErrorV1> {
-    if ids.is_empty() || ids.len() > MAIL_REPLAY_MAX_MESSAGES_V1 {
+    if ids.is_empty() {
+        return Err(MailReplayValidationErrorV1::InvalidMessageSelection);
+    }
+    validate_optional_message_ids(ids)
+}
+
+fn validate_optional_message_ids(ids: &[Vec<u8>]) -> Result<(), MailReplayValidationErrorV1> {
+    if ids.len() > MAIL_REPLAY_MAX_MESSAGES_V1 {
         return Err(MailReplayValidationErrorV1::InvalidMessageSelection);
     }
     let mut unique = HashSet::with_capacity(ids.len());

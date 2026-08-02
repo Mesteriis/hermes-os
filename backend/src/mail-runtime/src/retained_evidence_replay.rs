@@ -14,8 +14,6 @@ use hermes_mail_retained_evidence_replay_persistence::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailRetainedEvidenceReplayErrorV1 {
     InvalidCommand,
-    StaleRuntimeFence,
-    StaleGrantFence,
     Persistence(RetainedMailReplayErrorV1),
     PublishUnavailable,
 }
@@ -37,62 +35,53 @@ pub async fn replay_retained_mail_evidence_v1(
 ) -> Result<ReplayMailEvidenceResultV1, MailRetainedEvidenceReplayErrorV1> {
     validate_mail_replay_command_v1(command)
         .map_err(|_| MailRetainedEvidenceReplayErrorV1::InvalidCommand)?;
-    if command.producer_registration_id != context.registration_id
-        || command.producer_runtime_generation != context.runtime_generation
-    {
-        return Err(MailRetainedEvidenceReplayErrorV1::StaleRuntimeFence);
-    }
-    if command.producer_grant_epoch != context.grant_epoch {
-        return Err(MailRetainedEvidenceReplayErrorV1::StaleGrantFence);
-    }
     let operation_id = id16(&command.operation_id)?;
     let actor_sha256 = sha256(&command.owner_device_actor_sha256)?;
-    for selected in &command.original_message_ids {
-        let message_id = id16(selected)?;
-        let retained = persistence
-            .retained_scan_candidate_by_message_id(message_id)
-            .await
-            .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
-        let audit = |phase| RetainedMailReplayAuditV1 {
-            operation_id,
-            logical_owner_id: command.logical_owner_id.clone(),
-            owner_device_actor_sha256: actor_sha256,
-            producer_registration_id: context.registration_id.to_owned(),
-            producer_runtime_generation: context.runtime_generation,
-            producer_grant_epoch: context.grant_epoch,
-            logical_attempt: context.logical_attempt,
-            original_message_id: message_id,
-            original_envelope_sha256: *retained.record.envelope_sha256(),
-            phase,
-            recorded_at_unix_seconds: context.recorded_at_unix_seconds,
-        };
+    let attachment_anchor_id = id16(&command.attachment_anchor_id)?;
+    let retained = persistence
+        .retained_scan_candidate(attachment_anchor_id)
+        .await
+        .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
+    let message_id = *retained.record.message_id();
+    let audit = |phase| RetainedMailReplayAuditV1 {
+        operation_id,
+        logical_owner_id: command.logical_owner_id.clone(),
+        owner_device_actor_sha256: actor_sha256,
+        producer_registration_id: context.registration_id.to_owned(),
+        producer_runtime_generation: context.runtime_generation,
+        producer_grant_epoch: context.grant_epoch,
+        logical_attempt: context.logical_attempt,
+        original_message_id: message_id,
+        original_envelope_sha256: *retained.record.envelope_sha256(),
+        phase,
+        recorded_at_unix_seconds: context.recorded_at_unix_seconds,
+    };
+    persistence
+        .append_audit(&audit(RetainedMailReplayPhaseV1::Authorized))
+        .await
+        .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
+    if connection
+        .publish_exact(
+            original_contract_publish_permit,
+            retained.record.exact_bytes(),
+        )
+        .await
+        .is_err()
+    {
         persistence
-            .append_audit(&audit(RetainedMailReplayPhaseV1::Authorized))
+            .append_audit(&audit(RetainedMailReplayPhaseV1::PublishUnavailable))
             .await
             .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
-        if connection
-            .publish_exact(
-                original_contract_publish_permit,
-                retained.record.exact_bytes(),
-            )
-            .await
-            .is_err()
-        {
-            persistence
-                .append_audit(&audit(RetainedMailReplayPhaseV1::PublishUnavailable))
-                .await
-                .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
-            return Err(MailRetainedEvidenceReplayErrorV1::PublishUnavailable);
-        }
-        persistence
-            .append_audit(&audit(RetainedMailReplayPhaseV1::Published))
-            .await
-            .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
+        return Err(MailRetainedEvidenceReplayErrorV1::PublishUnavailable);
     }
+    persistence
+        .append_audit(&audit(RetainedMailReplayPhaseV1::Published))
+        .await
+        .map_err(MailRetainedEvidenceReplayErrorV1::Persistence)?;
     Ok(ReplayMailEvidenceResultV1 {
         operation_id: command.operation_id.clone(),
         outcome: ReplayMailEvidenceOutcomeV1::Published as i32,
-        original_message_ids: command.original_message_ids.clone(),
+        original_message_ids: vec![message_id.to_vec()],
         failure: ReplayMailEvidenceFailureV1::Unspecified as i32,
     })
 }

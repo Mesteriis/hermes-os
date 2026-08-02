@@ -10,10 +10,16 @@ use sqlx::{
 };
 use zeroize::Zeroizing;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct RetainedPreviewEvidenceMessageIdsV1 {
-    pub(super) communications: [u8; 16],
-    pub(super) mail: [u8; 16],
+pub(super) struct RetainedMailReplayIndexRowV1 {
+    attachment_anchor_id: [u8; 16],
+    message_id: [u8; 16],
+    envelope_sha256: [u8; 32],
+    contract_owner: String,
+    contract_name: String,
+    contract_major: i32,
+    contract_revision: i32,
+    contract_schema_sha256: [u8; 32],
+    indexed_at_unix_seconds: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,9 +37,7 @@ pub(super) struct RetainedPreviewReplayDiagnosticsV1 {
     pub(super) mail_published_audits: i64,
 }
 
-pub(super) fn wait_for_retained_preview_evidence_message_ids_v1(
-    attachment_anchor_id: [u8; 16],
-) -> RetainedPreviewEvidenceMessageIdsV1 {
+pub(super) fn wait_for_retained_preview_evidence_indexes_v1(attachment_anchor_id: [u8; 16]) {
     let runtime = tokio::runtime::Runtime::new().expect("retained Preview diagnostics runtime");
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -53,16 +57,15 @@ pub(super) fn wait_for_retained_preview_evidence_message_ids_v1(
             .fetch_optional(&pool)
             .await
             .expect("read retained Mail evidence index");
-            match (communications, mail) {
-                (Some(communications), Some(mail)) => Some(RetainedPreviewEvidenceMessageIdsV1 {
-                    communications: id16(&communications, "message_id"),
-                    mail: id16(&mail, "message_id"),
-                }),
-                _ => None,
-            }
+            communications
+                .zip(mail)
+                .map(|(communications, mail)| {
+                    let _ = id16(&communications, "message_id");
+                    let _ = id16(&mail, "message_id");
+                })
         });
-        if let Some(result) = result {
-            return result;
+        if result.is_some() {
+            return;
         }
         assert!(
             Instant::now() < deadline,
@@ -91,21 +94,21 @@ pub(super) fn wait_for_retained_preview_replay_terminal_v1(
             .await
             .expect("read retained Preview replay operation");
             let producer_results: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_result_inbox WHERE operation_id=$1",
+                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_anchor_result_inbox WHERE operation_id=$1",
             )
             .bind(operation_id.as_slice())
             .fetch_one(&pool)
             .await
             .expect("count retained Preview replay producer results");
             let communications_results: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_result_inbox WHERE operation_id=$1 AND producer=1",
+                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_anchor_result_inbox WHERE operation_id=$1 AND producer=1",
             )
             .bind(operation_id.as_slice())
             .fetch_one(&pool)
             .await
             .expect("count retained Communications replay results");
             let mail_results: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_result_inbox WHERE operation_id=$1 AND producer=2",
+                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_anchor_result_inbox WHERE operation_id=$1 AND producer=2",
             )
             .bind(operation_id.as_slice())
             .fetch_one(&pool)
@@ -126,14 +129,14 @@ pub(super) fn wait_for_retained_preview_replay_terminal_v1(
             .await
             .expect("read retained Mail result publish state");
             let communications_failure: i16 = sqlx::query_scalar(
-                "SELECT failure FROM hermes_data.attachment_preview_evidence_replay_producers WHERE operation_id=$1 AND producer=1",
+                "SELECT failure FROM hermes_data.attachment_preview_evidence_replay_anchor_producers WHERE operation_id=$1 AND producer=1",
             )
             .bind(operation_id.as_slice())
             .fetch_one(&pool)
             .await
             .expect("read retained Communications replay failure");
             let mail_failure: i16 = sqlx::query_scalar(
-                "SELECT failure FROM hermes_data.attachment_preview_evidence_replay_producers WHERE operation_id=$1 AND producer=2",
+                "SELECT failure FROM hermes_data.attachment_preview_evidence_replay_anchor_producers WHERE operation_id=$1 AND producer=2",
             )
             .bind(operation_id.as_slice())
             .fetch_one(&pool)
@@ -180,11 +183,71 @@ pub(super) fn wait_for_retained_preview_replay_terminal_v1(
     }
 }
 
+pub(super) fn remove_retained_mail_replay_index_v1(
+    attachment_anchor_id: [u8; 16],
+) -> RetainedMailReplayIndexRowV1 {
+    let runtime = tokio::runtime::Runtime::new().expect("retained Preview fault runtime");
+    runtime.block_on(async {
+        let pool = retained_preview_diagnostics_pool_v1().await;
+        let row = sqlx::query(
+            "DELETE FROM hermes_data.mail_retained_evidence_replay_index WHERE attachment_anchor_id=$1 RETURNING attachment_anchor_id,message_id,envelope_sha256,contract_owner,contract_name,contract_major,contract_revision,contract_schema_sha256,indexed_at_unix_seconds",
+        )
+        .bind(attachment_anchor_id.as_slice())
+        .fetch_one(&pool)
+        .await
+        .expect("remove disposable retained Mail replay index row");
+        RetainedMailReplayIndexRowV1 {
+            attachment_anchor_id: id16(&row, "attachment_anchor_id"),
+            message_id: id16(&row, "message_id"),
+            envelope_sha256: id32(&row, "envelope_sha256"),
+            contract_owner: row.try_get("contract_owner").expect("contract owner"),
+            contract_name: row.try_get("contract_name").expect("contract name"),
+            contract_major: row.try_get("contract_major").expect("contract major"),
+            contract_revision: row
+                .try_get("contract_revision")
+                .expect("contract revision"),
+            contract_schema_sha256: id32(&row, "contract_schema_sha256"),
+            indexed_at_unix_seconds: row
+                .try_get("indexed_at_unix_seconds")
+                .expect("indexed time"),
+        }
+    })
+}
+
+pub(super) fn restore_retained_mail_replay_index_v1(row: RetainedMailReplayIndexRowV1) {
+    let runtime = tokio::runtime::Runtime::new().expect("retained Preview restore runtime");
+    runtime.block_on(async {
+        let pool = retained_preview_diagnostics_pool_v1().await;
+        sqlx::query(
+            "INSERT INTO hermes_data.mail_retained_evidence_replay_index (attachment_anchor_id,message_id,envelope_sha256,contract_owner,contract_name,contract_major,contract_revision,contract_schema_sha256,indexed_at_unix_seconds) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        )
+        .bind(row.attachment_anchor_id.as_slice())
+        .bind(row.message_id.as_slice())
+        .bind(row.envelope_sha256.as_slice())
+        .bind(row.contract_owner)
+        .bind(row.contract_name)
+        .bind(row.contract_major)
+        .bind(row.contract_revision)
+        .bind(row.contract_schema_sha256.as_slice())
+        .bind(row.indexed_at_unix_seconds)
+        .execute(&pool)
+        .await
+        .expect("restore disposable retained Mail replay index row");
+    });
+}
+
 fn id16(row: &sqlx::postgres::PgRow, column: &str) -> [u8; 16] {
     row.try_get::<Vec<u8>, _>(column)
         .expect("retained evidence message identifier")
         .try_into()
         .expect("retained evidence message identifier length")
+}
+
+fn id32(row: &sqlx::postgres::PgRow, column: &str) -> [u8; 32] {
+    row.try_get::<Vec<u8>, _>(column)
+        .expect("retained evidence SHA-256")
+        .try_into()
+        .expect("retained evidence SHA-256 length")
 }
 
 async fn retained_preview_diagnostics_pool_v1() -> sqlx::PgPool {

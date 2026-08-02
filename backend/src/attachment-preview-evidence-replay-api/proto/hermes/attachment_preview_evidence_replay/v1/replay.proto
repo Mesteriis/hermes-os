@@ -2,19 +2,11 @@ syntax = "proto3";
 
 package hermes.attachment_preview_evidence_replay.v1;
 
-message ReplayProducerSelectionV1 {
-  string producer_registration_id = 1;
-  uint64 producer_runtime_generation = 2;
-  uint64 producer_grant_epoch = 3;
-  repeated bytes original_message_ids = 4;
-}
-
 message StartAttachmentPreviewEvidenceReplayRequestV1 {
   uint32 protocol_major = 1;
   bytes operation_id = 2;
   bytes attachment_anchor_id = 3;
-  ReplayProducerSelectionV1 communications = 4;
-  ReplayProducerSelectionV1 mail = 5;
+  reserved 4, 5;
 }
 
 message StartAttachmentPreviewEvidenceReplayResponseV1 {

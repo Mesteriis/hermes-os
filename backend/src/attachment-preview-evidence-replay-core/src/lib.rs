@@ -17,21 +17,11 @@ pub enum ReplayProducerV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReplayProducerSelectionV1 {
-    pub producer_registration_id: String,
-    pub producer_runtime_generation: u64,
-    pub producer_grant_epoch: u64,
-    pub original_message_ids: Vec<[u8; 16]>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthenticatedReplayOperationRequestV1 {
     pub operation_id: [u8; 16],
     pub attachment_anchor_id: [u8; 16],
     pub logical_owner_id: String,
     pub owner_device_actor_sha256: [u8; 32],
-    pub communications: ReplayProducerSelectionV1,
-    pub mail: ReplayProducerSelectionV1,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,7 +30,7 @@ pub struct ReplayProducerCommandIntentV1 {
     pub logical_owner_id: String,
     pub owner_device_actor_sha256: [u8; 32],
     pub producer: ReplayProducerV1,
-    pub selection: ReplayProducerSelectionV1,
+    pub attachment_anchor_id: [u8; 16],
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -193,10 +183,7 @@ fn command_intent(
         logical_owner_id: request.logical_owner_id.clone(),
         owner_device_actor_sha256: request.owner_device_actor_sha256,
         producer,
-        selection: match producer {
-            ReplayProducerV1::Communications => request.communications.clone(),
-            ReplayProducerV1::Mail => request.mail.clone(),
-        },
+        attachment_anchor_id: request.attachment_anchor_id,
     }
 }
 
@@ -210,47 +197,31 @@ fn validate_request(
     {
         return Err(ReplayCoreErrorV1::InvalidRequest);
     }
-    validate_selection(&request.communications)?;
-    validate_selection(&request.mail)
-}
-
-fn validate_selection(selection: &ReplayProducerSelectionV1) -> Result<(), ReplayCoreErrorV1> {
-    if !valid_identity(&selection.producer_registration_id)
-        || selection.producer_runtime_generation == 0
-        || selection.producer_grant_epoch == 0
-        || selection.original_message_ids.is_empty()
-        || selection.original_message_ids.len()
-            > ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_MAX_MESSAGES_PER_PRODUCER_V1
-        || selection.original_message_ids.iter().any(|id| zero(id))
-        || selection
-            .original_message_ids
-            .iter()
-            .collect::<HashSet<_>>()
-            .len()
-            != selection.original_message_ids.len()
-    {
-        return Err(ReplayCoreErrorV1::InvalidRequest);
-    }
     Ok(())
 }
 
 fn validate_result(
-    state: &ReplayOperationStateV1,
+    _state: &ReplayOperationStateV1,
     result: &ReplayProducerResultV1,
 ) -> Result<(), ReplayCoreErrorV1> {
-    let expected = match result.producer {
-        ReplayProducerV1::Communications => &state.request.communications.original_message_ids,
-        ReplayProducerV1::Mail => &state.request.mail.original_message_ids,
-    };
+    let ids_valid = result.original_message_ids.len()
+        <= ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_MAX_MESSAGES_PER_PRODUCER_V1
+        && result.original_message_ids.iter().all(|id| !zero(id))
+        && result
+            .original_message_ids
+            .iter()
+            .collect::<HashSet<_>>()
+            .len()
+            == result.original_message_ids.len();
     let outcome_valid = match result.outcome {
         ReplayProducerOutcomeV1::Published | ReplayProducerOutcomeV1::AlreadyPublished => {
-            result.failure == ReplayFailureV1::None
+            result.failure == ReplayFailureV1::None && !result.original_message_ids.is_empty()
         }
         ReplayProducerOutcomeV1::Rejected | ReplayProducerOutcomeV1::Unavailable => {
             result.failure != ReplayFailureV1::None
         }
     };
-    if &result.original_message_ids != expected || !outcome_valid {
+    if !ids_valid || !outcome_valid {
         return Err(ReplayCoreErrorV1::InvalidResult);
     }
     Ok(())
@@ -279,9 +250,13 @@ mod tests {
         assert_eq!(plan.commands[0].producer, ReplayProducerV1::Communications);
         assert_eq!(plan.commands[1].producer, ReplayProducerV1::Mail);
         assert_eq!(plan.commands[0].logical_owner_id, request.logical_owner_id);
-        assert_ne!(
-            plan.commands[0].selection.producer_registration_id,
-            plan.commands[1].selection.producer_registration_id
+        assert_eq!(
+            plan.commands[0].attachment_anchor_id,
+            request.attachment_anchor_id
+        );
+        assert_eq!(
+            plan.commands[1].attachment_anchor_id,
+            request.attachment_anchor_id
         );
     }
 
@@ -335,17 +310,6 @@ mod tests {
             attachment_anchor_id: [2; 16],
             logical_owner_id: "owner-1".to_owned(),
             owner_device_actor_sha256: [9; 32],
-            communications: selection("communications-registration", [3; 16]),
-            mail: selection("mail-registration", [4; 16]),
-        }
-    }
-
-    fn selection(registration: &str, message_id: [u8; 16]) -> ReplayProducerSelectionV1 {
-        ReplayProducerSelectionV1 {
-            producer_registration_id: registration.to_owned(),
-            producer_runtime_generation: 7,
-            producer_grant_epoch: 9,
-            original_message_ids: vec![message_id],
         }
     }
 
