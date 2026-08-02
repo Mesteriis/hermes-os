@@ -28,6 +28,8 @@ use hermes_communications_ingress::admission::communication_observed_contract_re
 use hermes_communications_note_source_api::communication_note_source_prepare_contract_reference_v1;
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_communications_recipient_source_api::communication_recipient_source_prepare_contract_reference_v1;
+use hermes_communications_retained_evidence_replay_contract::communications_replay_command_contract_reference_v1;
+use hermes_communications_retained_evidence_replay_persistence::CommunicationsRetainedEvidenceReplayPersistenceV1;
 use hermes_communications_task_source_api::communication_task_source_prepare_contract_reference_v1;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
@@ -93,6 +95,13 @@ use crate::{
     recipient_source::{
         CommunicationsRecipientSourceDeliveryErrorV1, consume_next_recipient_source_prepare_v1,
     },
+    retained_evidence_replay_consumer::{
+        CommunicationsReplayCommandConsumeErrorV1, CommunicationsReplayConsumerContextV1,
+        consume_next_communications_replay_command_v1,
+    },
+    retained_evidence_replay_result::{
+        CommunicationsReplayResultRelayErrorV1, relay_communications_replay_result_once_v1,
+    },
     search_access::CommunicationsSearchAccessV1,
     search_worker::process_next_derived_index_job_v1,
     summary_source::{
@@ -121,6 +130,7 @@ pub struct CommunicationsEventRuntimeV1 {
     domain_publish_permit: RuntimePublishPermitV1,
     persistence: CommunicationsDurablePersistence,
     call_evidence_persistence: CommunicationsCallEvidencePersistenceV1,
+    replay_persistence: CommunicationsRetainedEvidenceReplayPersistenceV1,
     call_evidence_realtime: CallEvidenceClientRealtimePublisherV1,
     call_evidence_realtime_pending: bool,
     search_access: CommunicationsSearchAccessV1,
@@ -129,6 +139,8 @@ pub struct CommunicationsEventRuntimeV1 {
     runtime_generation: u64,
     logical_owner_id: String,
     logical_human_owner_id: String,
+    registration_id: String,
+    grant_epoch: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -151,6 +163,7 @@ struct CommunicationsSubscribePermitsV1 {
     note_source_prepare: RuntimeSubscribePermitV1,
     recipient_source_prepare: RuntimeSubscribePermitV1,
     task_source_prepare: RuntimeSubscribePermitV1,
+    replay_command: RuntimeSubscribePermitV1,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -168,6 +181,7 @@ enum CommunicationsConsumerV1 {
     NoteSourcePrepare,
     RecipientSourcePrepare,
     TaskSourcePrepare,
+    ReplayCommand,
 }
 
 impl CommunicationsConsumerV1 {
@@ -185,7 +199,8 @@ impl CommunicationsConsumerV1 {
             Self::ExplanationSourcePrepare => Self::NoteSourcePrepare,
             Self::NoteSourcePrepare => Self::RecipientSourcePrepare,
             Self::RecipientSourcePrepare => Self::TaskSourcePrepare,
-            Self::TaskSourcePrepare => Self::Observation,
+            Self::TaskSourcePrepare => Self::ReplayCommand,
+            Self::ReplayCommand => Self::Observation,
         }
     }
 }
@@ -213,6 +228,7 @@ impl CommunicationsSubscribePermitsV1 {
         let recipient_source_prepare =
             communication_recipient_source_prepare_contract_reference_v1();
         let task_source_prepare = communication_task_source_prepare_contract_reference_v1();
+        let replay_command = communications_replay_command_contract_reference_v1();
         let mut observation_permit = None;
         let mut call_evidence_permit = None;
         let mut attachment_blob_admission_permit = None;
@@ -226,6 +242,7 @@ impl CommunicationsSubscribePermitsV1 {
         let mut note_source_prepare_permit = None;
         let mut recipient_source_prepare_permit = None;
         let mut task_source_prepare_permit = None;
+        let mut replay_command_permit = None;
         for permit in permits {
             let Some(contract) = permit.contract() else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
@@ -256,6 +273,8 @@ impl CommunicationsSubscribePermitsV1 {
                 replace_once(&mut recipient_source_prepare_permit, permit)?;
             } else if exact_contract(contract, &task_source_prepare) {
                 replace_once(&mut task_source_prepare_permit, permit)?;
+            } else if exact_contract(contract, &replay_command) {
+                replace_once(&mut replay_command_permit, permit)?;
             } else {
                 return Err(CommunicationsEventRuntimeErrorV1::Admission);
             }
@@ -285,6 +304,8 @@ impl CommunicationsSubscribePermitsV1 {
             recipient_source_prepare: recipient_source_prepare_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
             task_source_prepare: task_source_prepare_permit
+                .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
+            replay_command: replay_command_permit
                 .ok_or(CommunicationsEventRuntimeErrorV1::Admission)?,
         })
     }
@@ -511,6 +532,14 @@ impl CommunicationsEventRuntimeV1 {
             .verify_storage_ready()
             .await
             .map_err(|_| unavailable_at("call_evidence_storage_readiness"))?;
+        let replay_persistence =
+            CommunicationsRetainedEvidenceReplayPersistenceV1::from_owner_local_pool(
+                persistence.owner_local_pool_handle(),
+            );
+        replay_persistence
+            .verify_storage_ready()
+            .await
+            .map_err(|_| unavailable_at("replay_storage_readiness"))?;
         let mut control_channel = leases.into_route_port().into_channel();
         let started_at_unix_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -551,6 +580,7 @@ impl CommunicationsEventRuntimeV1 {
             domain_publish_permit,
             persistence,
             call_evidence_persistence,
+            replay_persistence,
             call_evidence_realtime: CallEvidenceClientRealtimePublisherV1::default(),
             call_evidence_realtime_pending: true,
             search_access,
@@ -559,6 +589,8 @@ impl CommunicationsEventRuntimeV1 {
             runtime_generation: admission.runtime_generation,
             logical_owner_id: admission.logical_owner_id.clone(),
             logical_human_owner_id: admission.logical_human_owner_id.clone(),
+            registration_id: admission.registration_id.clone(),
+            grant_epoch: admission.grant_epoch,
         })
     }
 
@@ -1056,6 +1088,28 @@ impl CommunicationsEventRuntimeV1 {
                     .map_err(|_| CommunicationsDeliveryErrorV1::Unavailable)?;
                 result
             }
+            CommunicationsConsumerV1::ReplayCommand => {
+                let event_context = self.canonical_event_context()?;
+                consume_next_communications_replay_command_v1(
+                    &self.replay_persistence,
+                    &self.connection,
+                    &self.permits.replay_command,
+                    &self.domain_publish_permit,
+                    &CommunicationsReplayConsumerContextV1 {
+                        logical_owner_id: self.logical_human_owner_id.clone(),
+                        producer_registration_id: self.registration_id.clone(),
+                        runtime_instance_id: self.runtime_instance_id.clone(),
+                        runtime_generation: self.runtime_generation,
+                        grant_epoch: self.grant_epoch,
+                        execution_attempt: 1,
+                        completed_at_unix_seconds: event_context.recorded_at_unix_seconds,
+                        completed_at_nanos: event_context.recorded_at_nanos,
+                    },
+                )
+                .await
+                .map(|_| ())
+                .map_err(replay_command_error)
+            }
         }
     }
 
@@ -1202,6 +1256,43 @@ impl CommunicationsEventRuntimeV1 {
             published_at_unix_seconds,
         )
         .await
+    }
+
+    pub async fn relay_replay_result(
+        &self,
+        published_at_unix_seconds: i64,
+    ) -> Result<bool, CommunicationsReplayResultRelayErrorV1> {
+        relay_communications_replay_result_once_v1(
+            &self.replay_persistence,
+            &self.connection,
+            &self.domain_publish_permit,
+            published_at_unix_seconds,
+        )
+        .await
+    }
+}
+
+fn replay_command_error(
+    error: CommunicationsReplayCommandConsumeErrorV1,
+) -> CommunicationsDeliveryErrorV1 {
+    match error {
+        CommunicationsReplayCommandConsumeErrorV1::EventUnavailable
+        | CommunicationsReplayCommandConsumeErrorV1::ReplayRetryable => {
+            CommunicationsDeliveryErrorV1::Unavailable
+        }
+        CommunicationsReplayCommandConsumeErrorV1::Decode(_) => {
+            CommunicationsDeliveryErrorV1::InvalidEnvelope
+        }
+        CommunicationsReplayCommandConsumeErrorV1::Persistence(_) => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::PersistenceRejected,
+            )
+        }
+        CommunicationsReplayCommandConsumeErrorV1::ResultEnvelope => {
+            CommunicationsDeliveryErrorV1::Consume(
+                CommunicationsEventConsumeErrorV1::InvalidPayload,
+            )
+        }
     }
 }
 
@@ -1610,6 +1701,7 @@ mod tests {
         let eleventh = tenth.successor();
         let twelfth = eleventh.successor();
         let thirteenth = twelfth.successor();
+        let fourteenth = thirteenth.successor();
 
         assert_eq!(
             [
@@ -1626,7 +1718,8 @@ mod tests {
                 eleventh,
                 twelfth,
                 thirteenth,
-                thirteenth.successor()
+                fourteenth,
+                fourteenth.successor()
             ],
             [
                 CommunicationsConsumerV1::Observation,
@@ -1642,6 +1735,7 @@ mod tests {
                 CommunicationsConsumerV1::NoteSourcePrepare,
                 CommunicationsConsumerV1::RecipientSourcePrepare,
                 CommunicationsConsumerV1::TaskSourcePrepare,
+                CommunicationsConsumerV1::ReplayCommand,
                 CommunicationsConsumerV1::Observation,
             ]
         );

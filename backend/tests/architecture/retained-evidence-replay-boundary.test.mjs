@@ -184,9 +184,9 @@ test('producer adapters publish only verified original bytes with append-only au
     read('src/mail-runtime/src/retained_evidence_replay.rs'),
   ]);
   for (const adapter of [communications, mail]) {
-    assert.match(adapter, /producer_registration_id != current_registration_id/);
-    assert.match(adapter, /producer_runtime_generation != current_runtime_generation/);
-    assert.match(adapter, /producer_grant_epoch != current_grant_epoch/);
+    assert.match(adapter, /producer_registration_id != context\.registration_id/);
+    assert.match(adapter, /producer_runtime_generation != context\.runtime_generation/);
+    assert.match(adapter, /producer_grant_epoch != context\.grant_epoch/);
     assert.match(
       adapter,
       /publish_exact\(\s*original_contract_publish_permit,\s*retained\.record\.exact_bytes\(\),?\s*\)/,
@@ -379,9 +379,15 @@ test('workflow command and result delivery preserves exact bytes and commit-befo
 });
 
 test('replay workflow is an admitted managed runtime with exact event grants', async () => {
-  const [managed, main] = await Promise.all([
+  const [managed, main, communicationsAdmission, communicationsRuntime, mailAdmission, mailRuntime, developmentRelease, developmentAssembly] = await Promise.all([
     read('src/attachment-preview-evidence-replay-runtime/src/managed_runtime.rs'),
     read('src/attachment-preview-evidence-replay-runtime/src/main.rs'),
+    read('src/communications-runtime/src/admission.rs'),
+    read('src/communications-runtime/src/event_runtime.rs'),
+    read('src/mail-runtime/src/admission.rs'),
+    read('src/mail-runtime/src/managed.rs'),
+    read('scripts/materialize-dev-release.sh'),
+    read('development/assembly/src/main.rs'),
   ]);
 
   assert.match(main, /"serve-inherited" => serve_inherited/);
@@ -396,4 +402,15 @@ test('replay workflow is an admitted managed runtime with exact event grants', a
   assert.match(managed, /dispatch_replay_client_request_v1/);
   assert.match(managed, /relay_replay_commands_once_v1/);
   assert.doesNotMatch(managed, /hermes_(?:communications_runtime|mail_runtime|kernel)/);
+  assert.match(communicationsAdmission, /communications_replay_command_consume_request_v1/);
+  assert.match(communicationsAdmission, /communications_replay_result_publish_request_v1/);
+  assert.match(communicationsRuntime, /consume_next_communications_replay_command_v1/);
+  assert.match(communicationsRuntime, /relay_communications_replay_result_once_v1/);
+  assert.match(mailAdmission, /mail_replay_command_consume_request_v1/);
+  assert.match(mailAdmission, /mail_replay_result_publish_request_v1/);
+  assert.match(mailRuntime, /consume_next_mail_replay_command_v1/);
+  assert.match(mailRuntime, /relay_mail_replay_result_once_v1/);
+  assert.match(developmentRelease, /hermes-attachment-preview-evidence-replay-assembly/);
+  assert.match(developmentAssembly, /ModuleRuntimeKindV1::Workflow/);
+  assert.match(developmentAssembly, /ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_RUNTIME_ARTIFACT/);
 });

@@ -178,12 +178,21 @@ use hermes_mail_persistence::{
     MailQueuedMessageFlagCommandV1, MailQueuedMessageLocationCommandV1,
     MailQueuedMessagePermanentDeleteCommandV1, MailSyncRunStartOutcomeV1, initial_imap_message_id,
 };
+use hermes_mail_retained_evidence_replay_contract::mail_replay_command_contract_reference_v1;
+use hermes_mail_retained_evidence_replay_persistence::MailRetainedEvidenceReplayPersistenceV1;
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
 use crate::gmail_sync_worker::{
     CompletedGmailSyncProviderOperationV1, GmailSyncProviderCursorV1, GmailSyncProviderFailureV1,
     GmailSyncProviderOutcomeV1, GmailSyncProviderPageDeliveryV1, GmailSyncProviderPageV1,
     PreparedGmailSyncProviderOperationV1,
+};
+use crate::retained_evidence_replay_consumer::{
+    MailReplayCommandConsumeErrorV1, MailReplayConsumerContextV1,
+    consume_next_mail_replay_command_v1,
+};
+use crate::retained_evidence_replay_result::{
+    MailReplayResultRelayErrorV1, relay_mail_replay_result_once_v1,
 };
 
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(5);
@@ -211,6 +220,8 @@ pub struct MailAdmittedRuntime {
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     attachment_safety_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
+    replay_command_subscribe_permit: RuntimeSubscribePermitV1,
+    replay_persistence: MailRetainedEvidenceReplayPersistenceV1,
     attachment_blob_admission_publish_permitted: bool,
     attachment_security_scan_candidate_publish_permitted: bool,
     pub(crate) account: hermes_mail_api::MailAccountConfigurationV1,
@@ -224,6 +235,8 @@ pub struct MailAdmittedRuntime {
     pub(crate) runtime_instance_id: String,
     pub(crate) runtime_generation: u64,
     logical_owner_id: String,
+    module_registration_id: String,
+    grant_epoch: u64,
 }
 
 struct MailRuntimeAccountSlotV1 {
@@ -629,6 +642,13 @@ pub async fn open_admitted_runtime_catalog(
         }
         mail_event_hub_error("connect")
     })?;
+    let replay_persistence = MailRetainedEvidenceReplayPersistenceV1::from_owner_local_pool(
+        durable.owner_local_pool_handle(),
+    );
+    replay_persistence
+        .verify_storage_ready()
+        .await
+        .map_err(|_| MailBootstrapError::Persistence)?;
     control_channel
         .signal_ready(ManagedRuntimeReadyRequestV1 {
             registration_id,
@@ -665,6 +685,8 @@ pub async fn open_admitted_runtime_catalog(
         attachment_anchor_subscribe_permit: subscribe_permits.anchor,
         attachment_safety_subscribe_permit: subscribe_permits.safety,
         delivery_intent_subscribe_permit: subscribe_permits.delivery_intent,
+        replay_command_subscribe_permit: subscribe_permits.replay_command,
+        replay_persistence,
         attachment_blob_admission_publish_permitted,
         attachment_security_scan_candidate_publish_permitted,
         account,
@@ -678,6 +700,8 @@ pub async fn open_admitted_runtime_catalog(
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
         logical_owner_id: admission.logical_owner_id.clone(),
+        module_registration_id: admission.module_registration_id.clone(),
+        grant_epoch: admission.grant_epoch,
     })
 }
 
@@ -2321,6 +2345,49 @@ impl MailAdmittedRuntime {
         .map_err(|_| MailDeliveryIntentOutboxRelayErrorV1::Unavailable)?
     }
 
+    pub async fn try_consume_replay_command(
+        &self,
+        consumed_at_unix_seconds: i64,
+    ) -> Result<bool, MailReplayCommandConsumeErrorV1> {
+        match tokio::time::timeout(
+            Duration::from_millis(25),
+            consume_next_mail_replay_command_v1(
+                &self.replay_persistence,
+                &self.event_connection,
+                &self.replay_command_subscribe_permit,
+                &self.event_publish_permit,
+                &MailReplayConsumerContextV1 {
+                    logical_owner_id: self.logical_owner_id.clone(),
+                    producer_registration_id: self.module_registration_id.clone(),
+                    runtime_instance_id: self.runtime_instance_id.clone(),
+                    runtime_generation: self.runtime_generation,
+                    grant_epoch: self.grant_epoch,
+                    execution_attempt: 1,
+                    completed_at_unix_seconds: consumed_at_unix_seconds,
+                    completed_at_nanos: 0,
+                },
+            ),
+        )
+        .await
+        {
+            Ok(result) => result.map(|_| true),
+            Err(_) => Ok(false),
+        }
+    }
+
+    pub async fn relay_replay_result(
+        &self,
+        published_at_unix_seconds: i64,
+    ) -> Result<bool, MailReplayResultRelayErrorV1> {
+        relay_mail_replay_result_once_v1(
+            &self.replay_persistence,
+            &self.event_connection,
+            &self.event_publish_permit,
+            published_at_unix_seconds,
+        )
+        .await
+    }
+
     pub async fn relay_attachment_security_outbox(
         &self,
         published_at_unix_seconds: i64,
@@ -3772,6 +3839,7 @@ struct MailEventSubscribePermitsV1 {
     anchor: Option<RuntimeSubscribePermitV1>,
     safety: Option<RuntimeSubscribePermitV1>,
     delivery_intent: RuntimeSubscribePermitV1,
+    replay_command: RuntimeSubscribePermitV1,
 }
 
 fn bind_event_subscribe_permits(
@@ -3783,9 +3851,11 @@ fn bind_event_subscribe_permits(
         communication_attachment_safety_state_changed_contract_reference_v1();
     let expected_delivery_intent =
         hermes_mail_delivery_intent_contract::mail_delivery_intent_execute_contract_reference_v1();
+    let expected_replay_command = mail_replay_command_contract_reference_v1();
     let mut anchor = None;
     let mut safety = None;
     let mut delivery_intent = None;
+    let mut replay_command = None;
     for permit in permits {
         let Some(contract) = permit.contract() else {
             return Err(MailBootstrapError::EventHub);
@@ -3802,6 +3872,10 @@ fn bind_event_subscribe_permits(
             if delivery_intent.replace(permit).is_some() {
                 return Err(MailBootstrapError::EventHub);
             }
+        } else if exact_runtime_contract(contract, &expected_replay_command) {
+            if replay_command.replace(permit).is_some() {
+                return Err(MailBootstrapError::EventHub);
+            }
         } else {
             return Err(MailBootstrapError::EventHub);
         }
@@ -3810,6 +3884,7 @@ fn bind_event_subscribe_permits(
         anchor,
         safety,
         delivery_intent: delivery_intent.ok_or(MailBootstrapError::EventHub)?,
+        replay_command: replay_command.ok_or(MailBootstrapError::EventHub)?,
     })
 }
 

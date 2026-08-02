@@ -22,6 +22,9 @@ use hermes_mail_delivery_intent_contract::{
     mail_delivery_intent_rejected_publish_request_v1,
     mail_delivery_intent_succeeded_publish_request_v1,
 };
+use hermes_mail_retained_evidence_replay_contract::{
+    mail_replay_command_consume_request_v1, mail_replay_result_publish_request_v1,
+};
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
     CapabilityRequestV1, ClientRpcRouteV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
@@ -65,6 +68,7 @@ pub const MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID: &str = "mail.smtp.creden
 pub const MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID: &str =
     "mail.smtp.credential-provisioning.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
+pub const MAIL_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID: &str = "mail.retained-evidence-replay.v1";
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID: &str = "mail.attachment.content.v1";
 pub const MAIL_STORAGE_CONNECTION_BUDGET: u32 = 4;
@@ -135,6 +139,7 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::GmailOAuthRefresh),
         mail_client_capability_v1(MailClientContractV1::GmailOAuthStart),
         mail_client_capability_v1(MailClientContractV1::OperationalQuery),
+        mail_retained_evidence_replay_capability_v1(),
         mail_provider_credential_lifecycle_capability_v1(
             MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
             "mail_smtp_password",
@@ -154,6 +159,20 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::Sync),
         mail_settings_configuration_catalog_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn mail_retained_evidence_replay_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            mail_replay_command_consume_request_v1(),
+            mail_replay_result_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
 }
 
 fn mail_delivery_intent_capability_v1() -> CapabilityDescriptorV1 {
@@ -536,6 +555,7 @@ mod tests {
                 MailClientContractV1::GmailOAuthRefresh.capability_id(),
                 MailClientContractV1::GmailOAuthStart.capability_id(),
                 MailClientContractV1::OperationalQuery.capability_id(),
+                MAIL_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID,
                 MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,

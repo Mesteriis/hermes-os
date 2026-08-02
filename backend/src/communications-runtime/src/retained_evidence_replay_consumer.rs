@@ -25,7 +25,8 @@ use hermes_runtime_protocol::v1::ContractReferenceV1;
 use prost::Message;
 
 use crate::retained_evidence_replay::{
-    CommunicationsRetainedEvidenceReplayErrorV1, replay_retained_communications_evidence_v1,
+    CommunicationsReplayExecutionContextV1, CommunicationsRetainedEvidenceReplayErrorV1,
+    replay_retained_communications_evidence_v1,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,11 +134,13 @@ pub async fn accept_communications_replay_command_v1(
         connection,
         original_contract_publish_permit,
         &decoded.command,
-        &context.producer_registration_id,
-        context.runtime_generation,
-        context.grant_epoch,
-        context.execution_attempt,
-        context.completed_at_unix_seconds,
+        &CommunicationsReplayExecutionContextV1 {
+            registration_id: &context.producer_registration_id,
+            runtime_generation: context.runtime_generation,
+            grant_epoch: context.grant_epoch,
+            logical_attempt: context.execution_attempt,
+            recorded_at_unix_seconds: context.completed_at_unix_seconds,
+        },
     )
     .await
     {

@@ -307,6 +307,14 @@ impl MailDurablePersistence {
         Self { pool }
     }
 
+    /// Shares the already budgeted Mail-owned pool with a separately admitted
+    /// integration persistence build unit. The runtime remains the only
+    /// composition root; persistence packages do not import each other.
+    #[must_use]
+    pub fn owner_local_pool_handle(&self) -> PgPool {
+        self.pool.clone()
+    }
+
     pub async fn initialize(&self) -> Result<(), MailDurablePersistenceError> {
         sqlx::raw_sql(MAIL_SCHEMA_V1)
             .execute(&self.pool)

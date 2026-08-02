@@ -82,6 +82,10 @@ use hermes_communications_recipient_source_api::{
     communication_recipient_source_rejected_contract_reference_v1,
     communication_recipient_source_rejected_publish_request_v1,
 };
+use hermes_communications_retained_evidence_replay_contract::{
+    communications_replay_command_consume_request_v1,
+    communications_replay_result_publish_request_v1,
+};
 use hermes_communications_saved_query_api::{
     COMMUNICATIONS_SAVED_SEARCH_SCHEMA_SHA256, SAVED_SEARCH_CONNECT_PATH_V1,
     SAVED_SEARCH_CONTRACT_MAJOR_V1, SAVED_SEARCH_CONTRACT_NAME_V1,
@@ -140,6 +144,8 @@ pub const COMMUNICATIONS_TRANSLATION_SOURCE_BLOB_CAPABILITY_ID: &str =
     "communications.ai-translation-source.blob.v1";
 pub const COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID: &str =
     COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID_V1;
+pub const COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID: &str =
+    "communications.retained-evidence-replay.v1";
 pub const COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID: &str =
     "communications.recipient-source.blob.v1";
 pub const COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID: &str =
@@ -201,6 +207,7 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_query_capability_v1(),
         communications_recipient_source_blob_capability_v1(),
         communications_recipient_source_capability_v1(),
+        communications_retained_evidence_replay_capability_v1(),
         communications_saved_search_capability_v1(),
         communications_search_index_capability_v1(),
         communications_sender_insights_capability_v1(),
@@ -208,6 +215,20 @@ pub fn communications_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1>
         communications_task_source_blob_capability_v1(),
         communications_task_source_capability_v1(),
     ]
+}
+
+#[must_use]
+pub fn communications_retained_evidence_replay_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![
+            communications_replay_command_consume_request_v1(),
+            communications_replay_result_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -1161,6 +1182,7 @@ mod tests {
                 COMMUNICATIONS_QUERY_CAPABILITY_ID,
                 COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID,
                 COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID,
+                COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID,
                 COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
                 COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
                 COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID,

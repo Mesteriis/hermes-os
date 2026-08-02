@@ -20,25 +20,29 @@ pub enum CommunicationsRetainedEvidenceReplayErrorV1 {
     PublishUnavailable,
 }
 
+pub struct CommunicationsReplayExecutionContextV1<'a> {
+    pub registration_id: &'a str,
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub logical_attempt: u32,
+    pub recorded_at_unix_seconds: i64,
+}
+
 pub async fn replay_retained_communications_evidence_v1(
     persistence: &CommunicationsRetainedEvidenceReplayPersistenceV1,
     connection: &RuntimeJetStreamConnection,
     original_contract_publish_permit: &RuntimePublishPermitV1,
     command: &ReplayCommunicationsEvidenceCommandV1,
-    current_registration_id: &str,
-    current_runtime_generation: u64,
-    current_grant_epoch: u64,
-    logical_attempt: u32,
-    recorded_at_unix_seconds: i64,
+    context: &CommunicationsReplayExecutionContextV1<'_>,
 ) -> Result<ReplayCommunicationsEvidenceResultV1, CommunicationsRetainedEvidenceReplayErrorV1> {
     validate_communications_replay_command_v1(command)
         .map_err(|_| CommunicationsRetainedEvidenceReplayErrorV1::InvalidCommand)?;
-    if command.producer_registration_id != current_registration_id
-        || command.producer_runtime_generation != current_runtime_generation
+    if command.producer_registration_id != context.registration_id
+        || command.producer_runtime_generation != context.runtime_generation
     {
         return Err(CommunicationsRetainedEvidenceReplayErrorV1::StaleRuntimeFence);
     }
-    if command.producer_grant_epoch != current_grant_epoch {
+    if command.producer_grant_epoch != context.grant_epoch {
         return Err(CommunicationsRetainedEvidenceReplayErrorV1::StaleGrantFence);
     }
     let operation_id = id16(&command.operation_id)?;
@@ -53,14 +57,14 @@ pub async fn replay_retained_communications_evidence_v1(
             operation_id,
             logical_owner_id: command.logical_owner_id.clone(),
             owner_device_actor_sha256: actor_sha256,
-            producer_registration_id: current_registration_id.to_owned(),
-            producer_runtime_generation: current_runtime_generation,
-            producer_grant_epoch: current_grant_epoch,
-            logical_attempt,
+            producer_registration_id: context.registration_id.to_owned(),
+            producer_runtime_generation: context.runtime_generation,
+            producer_grant_epoch: context.grant_epoch,
+            logical_attempt: context.logical_attempt,
             original_message_id: message_id,
             original_envelope_sha256: *retained.record.envelope_sha256(),
             phase,
-            recorded_at_unix_seconds,
+            recorded_at_unix_seconds: context.recorded_at_unix_seconds,
         };
         persistence
             .append_audit(&audit(RetainedCommunicationsReplayPhaseV1::Authorized))

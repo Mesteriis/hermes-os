@@ -13,6 +13,7 @@ use hermes_communications_runtime::{
         CommunicationsEventRuntimeErrorV1, CommunicationsEventRuntimeV1,
         CommunicationsRuntimeAdmissionV1,
     },
+    retained_evidence_replay_result::CommunicationsReplayResultRelayErrorV1,
     storage_bundle::communications_runtime_storage_bundle_v1,
 };
 use hermes_runtime_protocol::{
@@ -169,6 +170,18 @@ where
                     eprintln!("developer_communications_runtime_outbox_terminal=true");
                 }
                 return Err("Communications runtime outbox relay failed".to_owned());
+            }
+        }
+        if let Err(error) = executor.block_on(runtime.relay_replay_result(now)) {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_communications_runtime_replay_result_error={error:?}");
+            }
+            match error {
+                CommunicationsReplayResultRelayErrorV1::EventUnavailable
+                | CommunicationsReplayResultRelayErrorV1::Persistence(
+                    hermes_communications_retained_evidence_replay_persistence::RetainedCommunicationsReplayErrorV1::StorageUnavailable,
+                ) => {}
+                _ => return Err("Communications replay result relay failed".to_owned()),
             }
         }
     }

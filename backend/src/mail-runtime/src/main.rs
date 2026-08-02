@@ -29,7 +29,10 @@ use hermes_mail_runtime::{
         CompletedGmailSyncProviderOperationV1, GmailSyncProviderPageDeliveryV1,
         execute_gmail_sync_provider_operation,
     },
-    managed, settings,
+    managed,
+    retained_evidence_replay_consumer::MailReplayCommandConsumeErrorV1,
+    retained_evidence_replay_result::MailReplayResultRelayErrorV1,
+    settings,
 };
 use hermes_runtime_protocol::{
     v1::ManagedIntegrationRuntimeConfigurationV1,
@@ -401,6 +404,18 @@ where
                 developer_diagnostic("developer_mail_attachment_safety_projection_failed");
                 "Mail runtime attachment safety projection failed".to_owned()
             })?;
+        match runtime.block_on(admitted.try_consume_replay_command(now)) {
+            Ok(_)
+            | Err(MailReplayCommandConsumeErrorV1::EventUnavailable)
+            | Err(MailReplayCommandConsumeErrorV1::ReplayRetryable)
+            | Err(MailReplayCommandConsumeErrorV1::Persistence(
+                hermes_mail_retained_evidence_replay_persistence::RetainedMailReplayErrorV1::StorageUnavailable,
+            )) => {}
+            Err(error) => {
+                developer_diagnostic(&format!("developer_mail_replay_command_error={error:?}"));
+                return Err("Mail replay command is invalid".to_owned());
+            }
+        }
         match runtime.block_on(admitted.relay_communications_outbox(now)) {
             Ok(_) => {}
             Err(MailCommunicationsOutboxRelayError::Unavailable) => {
@@ -428,6 +443,17 @@ where
                     "developer_mail_attachment_security_outbox_persistence_failed",
                 );
                 return Err("Mail runtime Attachment Security outbox persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.relay_replay_result(now)) {
+            Ok(_)
+            | Err(MailReplayResultRelayErrorV1::EventUnavailable)
+            | Err(MailReplayResultRelayErrorV1::Persistence(
+                hermes_mail_retained_evidence_replay_persistence::RetainedMailReplayErrorV1::StorageUnavailable,
+            )) => {}
+            Err(error) => {
+                developer_diagnostic(&format!("developer_mail_replay_result_error={error:?}"));
+                return Err("Mail replay result relay failed".to_owned());
             }
         }
         std::thread::sleep(RUNTIME_TICK_INTERVAL);
