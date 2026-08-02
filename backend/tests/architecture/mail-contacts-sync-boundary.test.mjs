@@ -68,6 +68,30 @@ const files = {
   googlePeople: new URL('src/mail-google-people/src/lib.rs', BACKEND_ROOT),
   cardDavManifest: new URL('src/mail-carddav/Cargo.toml', BACKEND_ROOT),
   cardDav: new URL('src/mail-carddav/src/lib.rs', BACKEND_ROOT),
+  mailPersistenceManifest: new URL(
+    'src/mail-address-book-persistence/Cargo.toml',
+    BACKEND_ROOT,
+  ),
+  mailPersistenceMigration: new URL(
+    'src/mail-address-book-persistence/migrations/0001_address_book_upsert.sql',
+    BACKEND_ROOT,
+  ),
+  mailPersistenceDelivery: new URL(
+    'src/mail-address-book-persistence/src/delivery.rs',
+    BACKEND_ROOT,
+  ),
+  mailPersistenceSchema: new URL(
+    'src/mail-address-book-persistence/src/schema.rs',
+    BACKEND_ROOT,
+  ),
+  mailRuntimeSettings: new URL('src/mail-runtime/src/settings.rs', BACKEND_ROOT),
+  mailRuntimeStorageBundle: new URL('src/mail-runtime/src/storage_bundle.rs', BACKEND_ROOT),
+  mailOAuthCore: new URL('src/mail-core/src/oauth.rs', BACKEND_ROOT),
+  mailOAuthPersistence: new URL('src/mail-persistence/src/oauth.rs', BACKEND_ROOT),
+  mailPortabilityProto: new URL(
+    'src/mail-api/proto/hermes/mail/portability/v1/portability.proto',
+    BACKEND_ROOT,
+  ),
   workflowApiManifest: new URL('src/mail-contacts-sync-api/Cargo.toml', BACKEND_ROOT),
   workflowApi: new URL(
     'src/mail-contacts-sync-api/proto/hermes/mail_contacts_sync/v1/sync.proto',
@@ -156,7 +180,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_provider_adapters_v1',
+    'mail_address_book_persistence_authority_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -260,6 +284,67 @@ test('Mail address-book providers are separate bounded integration adapters', as
   assert.match(cardDav, /supports_remote_write/);
   assert.match(cardDav, /take\(\(MAX_RESPONSE_BYTES \+ 1\) as u64\)/);
   assert.doesNotMatch(cardDav, /reqwest|sqlx|async_nats|hermes_contacts/i);
+});
+
+test('Mail owns address-book persistence settings and credential authority without Contacts storage', async () => {
+  const [
+    manifest,
+    migration,
+    delivery,
+    schema,
+    settings,
+    storageBundle,
+    oauthCore,
+    oauthPersistence,
+    portability,
+    policySource,
+  ] = await Promise.all([
+    readFile(files.mailPersistenceManifest, 'utf8'),
+    readFile(files.mailPersistenceMigration, 'utf8'),
+    readFile(files.mailPersistenceDelivery, 'utf8'),
+    readFile(files.mailPersistenceSchema, 'utf8'),
+    readFile(files.mailRuntimeSettings, 'utf8'),
+    readFile(files.mailRuntimeStorageBundle, 'utf8'),
+    readFile(files.mailOAuthCore, 'utf8'),
+    readFile(files.mailOAuthPersistence, 'utf8'),
+    readFile(files.mailPortabilityProto, 'utf8'),
+    readFile(files.policy, 'utf8'),
+  ]);
+  const policy = JSON.parse(policySource);
+  const descriptor = policy.implementation.productionPackages.find(
+    ({ name }) => name === 'hermes-mail-address-book-persistence',
+  );
+
+  assert.deepEqual(descriptor, {
+    name: 'hermes-mail-address-book-persistence',
+    role: 'integration',
+    owner: 'mail',
+    surface: 'persistence',
+  });
+  assert.match(manifest, /role = "integration"/);
+  assert.match(manifest, /owner = "mail"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.doesNotMatch(manifest, /hermes-contacts|hermes-mail-contacts-sync/);
+  assert.match(schema, /MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 26/);
+  assert.match(storageBundle, /append_mail_address_book_storage_v1/);
+  assert.match(migration, /mail_address_book_upsert_inbox/);
+  assert.match(migration, /mail_address_book_upsert_result_outbox/);
+  assert.match(migration, /contacts_write_authorized BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.doesNotMatch(migration, /CREATE TABLE hermes_data\.contacts_/);
+  assert.doesNotMatch(migration, /mail_contacts_sync_/);
+  assert.match(delivery, /mark_dispatch_started/);
+  assert.match(delivery, /uncertain_upserts/);
+  assert.match(delivery, /exact_envelope_bytes/);
+  assert.doesNotMatch(delivery, /SELECT[\s\S]*hermes_data\.contacts_/i);
+  assert.match(settings, /mail\.address_book\.provider/);
+  assert.match(settings, /MailAddressBookProviderV1::GooglePeople/);
+  assert.match(settings, /MailAddressBookProviderV1::IcloudCardDav/);
+  assert.doesNotMatch(settings, /ends_with\(|contains\("gmail|contains\("icloud/i);
+  assert.match(oauthCore, /GOOGLE_CONTACTS_WRITE_SCOPE_V1/);
+  assert.match(oauthCore, /gmail_oauth_scope_authorizes_contacts_write/);
+  assert.match(oauthPersistence, /contacts_write_authorized/);
+  assert.match(portability, /MailAddressBookProviderV1 address_book_provider/);
+  assert.match(portability, /optional string carddav_username/);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

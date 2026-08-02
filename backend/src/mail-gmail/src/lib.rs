@@ -22,11 +22,12 @@ const MAX_LABEL_IDS: usize = 512;
 const MAX_BEARER_TOKEN_BYTES: usize = 16 * 1024;
 const MAX_OAUTH_RESPONSE_BYTES: usize = 1024 * 1024;
 const GMAIL_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
-const GMAIL_OPERATIONAL_OAUTH_SCOPES: [&str; 4] = [
+const GMAIL_OPERATIONAL_OAUTH_SCOPES: [&str; 5] = [
     "openid",
     "email",
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/contacts",
 ];
 const GMAIL_PERMANENT_DELETE_OAUTH_SCOPES: [&str; 3] =
     ["openid", "email", "https://mail.google.com/"];
@@ -1048,6 +1049,7 @@ mod tests {
         assert!(url.contains("state=state-value"));
         assert!(url.contains("gmail.modify"));
         assert!(url.contains("gmail.send"));
+        assert!(url.contains("auth%2Fcontacts"));
         assert!(!url.contains("gmail.readonly"));
         assert!(!url.contains("client_secret"));
     }

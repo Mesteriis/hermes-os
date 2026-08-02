@@ -1296,6 +1296,16 @@ const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-carddav', role: 'integration', owner: 'mail', surface: 'implementation' },
 ];
 
+const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES =
+  MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_PRODUCTION_PACKAGES.flatMap((packageDescriptor) => (
+    packageDescriptor.name === 'hermes-mail-address-book-contract'
+      ? [
+          packageDescriptor,
+          { name: 'hermes-mail-address-book-persistence', role: 'integration', owner: 'mail', surface: 'persistence' },
+        ]
+      : [packageDescriptor]
+  ));
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3824,6 +3834,22 @@ const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-mail-carddav': [],
 };
 
+const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-address-book-persistence': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-mail-address-book-contract', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-mail-runtime': MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST[
+    'hermes-mail-runtime'
+  ].flatMap((dependency) => (
+    dependency.name === 'hermes-mail-persistence'
+      ? [dependency, { name: 'hermes-mail-address-book-persistence', kind: 'normal' }]
+      : [dependency]
+  )),
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5201,6 +5227,15 @@ const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-address-book-persistence': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -6095,6 +6130,14 @@ const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_CARGO_FEATURE_ALLOWLIST = {
     'conformance-test-support': [],
   },
   'hermes-mail-carddav': {
+    default: [],
+    'conformance-test-support': [],
+  },
+};
+
+const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_CARGO_FEATURE_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_CARGO_FEATURE_ALLOWLIST,
+  'hermes-mail-address-book-persistence': {
     default: [],
     'conformance-test-support': [],
   },
@@ -7951,6 +7994,17 @@ function expectedSlice(currentSlice) {
       packages: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'mail_address_book_persistence_authority_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_CARGO_FEATURE_ALLOWLIST,
+      packages: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

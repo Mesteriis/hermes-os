@@ -85,6 +85,7 @@ pub struct GmailOAuthCredentialBindingV1 {
     pub access_token_expires_at_unix_seconds: i64,
     pub scope_sha256: [u8; 32],
     pub permanent_delete_authorized: bool,
+    pub contacts_write_authorized: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -581,7 +582,7 @@ impl MailDurablePersistence {
             "SELECT access_token_record_id, access_token_revision, \
                     refresh_credential_record_id, refresh_credential_revision, \
                     access_token_expires_at_unix_seconds, scope_sha256 \
-                    , permanent_delete_authorized \
+                    , permanent_delete_authorized, contacts_write_authorized \
              FROM hermes_data.mail_gmail_oauth_credential_bindings WHERE connection_id = $1",
         )
         .bind(connection_id)
@@ -775,8 +776,8 @@ async fn upsert_binding(
          (connection_id, access_token_record_id, access_token_revision, \
           refresh_credential_record_id, refresh_credential_revision, \
           access_token_expires_at_unix_seconds, scope_sha256, \
-          permanent_delete_authorized, updated_at_unix_seconds) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+          permanent_delete_authorized, contacts_write_authorized, updated_at_unix_seconds) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
          ON CONFLICT (connection_id) DO UPDATE SET \
           access_token_record_id = EXCLUDED.access_token_record_id, \
           access_token_revision = EXCLUDED.access_token_revision, \
@@ -785,6 +786,7 @@ async fn upsert_binding(
           access_token_expires_at_unix_seconds = EXCLUDED.access_token_expires_at_unix_seconds, \
           scope_sha256 = EXCLUDED.scope_sha256, \
           permanent_delete_authorized = EXCLUDED.permanent_delete_authorized, \
+          contacts_write_authorized = EXCLUDED.contacts_write_authorized, \
           updated_at_unix_seconds = EXCLUDED.updated_at_unix_seconds",
     )
     .bind(connection_id)
@@ -801,6 +803,7 @@ async fn upsert_binding(
     .bind(binding.access_token_expires_at_unix_seconds)
     .bind(binding.scope_sha256.as_slice())
     .bind(binding.permanent_delete_authorized)
+    .bind(binding.contacts_write_authorized)
     .bind(updated_at_unix_seconds)
     .execute(&mut **transaction)
     .await
@@ -849,6 +852,9 @@ fn decode_binding(
                 .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
             permanent_delete_authorized: row
                 .try_get("permanent_delete_authorized")
+                .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
+            contacts_write_authorized: row
+                .try_get("contacts_write_authorized")
                 .map_err(|_| MailDurablePersistenceError::InvalidRow)?,
         };
     validate_binding(&binding)?;

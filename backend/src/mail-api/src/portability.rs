@@ -2,15 +2,16 @@
 
 use crate::{
     GmailApiEndpointV1, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
-    MailAccountConfigurationV1 as RuntimeMailAccountConfigurationV1, MailGmailConfigurationV1,
+    MailAccountConfigurationV1 as RuntimeMailAccountConfigurationV1,
+    MailAddressBookConfigurationV1, MailAddressBookProviderV1, MailGmailConfigurationV1,
     MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1,
     portability_wire_generated as wire, valid_account_configuration,
-    valid_gmail_oauth_configuration,
+    valid_address_book_configuration, valid_gmail_oauth_configuration,
 };
 
 pub const MAIL_ACCOUNT_EXPORT_MAJOR_V1: u32 = 1;
 pub const MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 1;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 2;
 const MAX_REGISTRATION_ID_BYTES: usize = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -35,7 +36,9 @@ pub fn validate_mail_account_export_v1(
         .as_ref()
         .ok_or(MailAccountExportValidationErrorV1::Invalid)?;
     let account = runtime_configuration(configuration)?;
+    let address_book = address_book_configuration(configuration)?;
     if !valid_account_configuration(&account)
+        || !valid_address_book_configuration(&address_book, &account.inbound)
         || !profile_matches(export.connector_profile, configuration)
         || !valid_readiness(export.readiness)
         || !valid_path_readiness(export.sync_readiness)
@@ -44,6 +47,28 @@ pub fn validate_mail_account_export_v1(
         return Err(MailAccountExportValidationErrorV1::Invalid);
     }
     Ok(())
+}
+
+fn address_book_configuration(
+    configuration: &wire::MailAccountConfigurationV1,
+) -> Result<MailAddressBookConfigurationV1, MailAccountExportValidationErrorV1> {
+    let provider =
+        match wire::MailAddressBookProviderV1::try_from(configuration.address_book_provider).ok() {
+            Some(wire::MailAddressBookProviderV1::MailAddressBookProviderNone) => {
+                MailAddressBookProviderV1::None
+            }
+            Some(wire::MailAddressBookProviderV1::MailAddressBookProviderGooglePeople) => {
+                MailAddressBookProviderV1::GooglePeople
+            }
+            Some(wire::MailAddressBookProviderV1::MailAddressBookProviderIcloudCardDav) => {
+                MailAddressBookProviderV1::IcloudCardDav
+            }
+            _ => return Err(MailAccountExportValidationErrorV1::Invalid),
+        };
+    Ok(MailAddressBookConfigurationV1 {
+        provider,
+        carddav_username: configuration.carddav_username.clone(),
+    })
 }
 
 fn runtime_configuration(
@@ -227,6 +252,9 @@ mod tests {
                     from_address: "owner@example.test".to_owned(),
                     ca_certificate_pem: None,
                 }),
+                address_book_provider: wire::MailAddressBookProviderV1::MailAddressBookProviderNone
+                    as i32,
+                carddav_username: None,
             }),
         }
     }

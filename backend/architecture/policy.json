@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_address_book_provider_adapters_v1",
+    "currentSlice": "mail_address_book_persistence_authority_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1514,6 +1514,12 @@
         "surface": "contract"
       },
       {
+        "name": "hermes-mail-address-book-persistence",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "persistence"
+      },
+      {
         "name": "hermes-mail-contacts-sync-api",
         "role": "workflow",
         "owner": "mail_contacts_sync",
@@ -2465,6 +2471,20 @@
         },
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-address-book-persistence": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-address-book-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -3501,6 +3521,10 @@
         },
         {
           "name": "hermes-mail-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-address-book-persistence",
           "kind": "normal"
         },
         {
@@ -9094,6 +9118,36 @@
           "features": []
         }
       ],
+      "hermes-mail-address-book-persistence": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-mail-contacts-sync-api": [
         {
           "name": "prost",
@@ -12788,6 +12842,10 @@
           "hermes-mail-imap/conformance-test-support"
         ]
       },
+      "hermes-mail-address-book-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-mail-google-people": {
         "default": [],
         "conformance-test-support": []
@@ -13725,6 +13783,10 @@
       "hermes-mail-address-book-contract": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-mail-address-book-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       },
       "hermes-mail-contacts-sync-api": {
         "primaryKind": "lib",

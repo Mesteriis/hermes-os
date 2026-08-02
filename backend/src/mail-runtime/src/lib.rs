@@ -21,7 +21,9 @@ pub mod retained_evidence_replay_result;
 pub mod settings;
 pub mod storage_bundle;
 
-use hermes_mail_api::{GmailOAuthConfigurationV1, MailAccountConfigurationV1};
+use hermes_mail_api::{
+    GmailOAuthConfigurationV1, MailAccountConfigurationV1, MailAddressBookConfigurationV1,
+};
 
 #[derive(Clone)]
 pub struct MailRuntimeAdmission {
@@ -35,5 +37,6 @@ pub struct MailRuntimeAdmission {
     pub vault_runtime_generation: u64,
     pub settings_revision: u64,
     pub account: MailAccountConfigurationV1,
+    pub address_book: MailAddressBookConfigurationV1,
     pub gmail_oauth: Option<GmailOAuthConfigurationV1>,
 }

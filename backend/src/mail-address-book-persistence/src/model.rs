@@ -1,0 +1,20 @@
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailAddressBookUpsertAdmissionV1 {
+    pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub command_id: [u8; 16],
+    pub run_id: [u8; 16],
+    pub logical_owner_id: String,
+    pub account_id: String,
+    pub contact_snapshot_reference_id: [u8; 16],
+    pub contact_snapshot_sha256: [u8; 32],
+    pub expected_contact_revision: u64,
+    pub contact_snapshot_declared_bytes: u64,
+    pub contact_snapshot_custody_source_proof: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingMailAddressBookUpsertV1 {
+    pub admission: MailAddressBookUpsertAdmissionV1,
+    pub execution_attempt: u32,
+}

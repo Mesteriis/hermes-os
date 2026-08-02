@@ -67,6 +67,13 @@ message MailGmailConfigurationV1 {
   MailHttpEndpointV1 oauth_token_endpoint = 7;
 }
 
+enum MailAddressBookProviderV1 {
+  MAIL_ADDRESS_BOOK_PROVIDER_UNSPECIFIED = 0;
+  MAIL_ADDRESS_BOOK_PROVIDER_NONE = 1;
+  MAIL_ADDRESS_BOOK_PROVIDER_GOOGLE_PEOPLE = 2;
+  MAIL_ADDRESS_BOOK_PROVIDER_ICLOUD_CARD_DAV = 3;
+}
+
 message MailAccountConfigurationV1 {
   string connection_id = 1;
   uint32 sync_window = 2;
@@ -76,6 +83,8 @@ message MailAccountConfigurationV1 {
     MailGmailConfigurationV1 gmail = 5;
   }
   optional MailSmtpConfigurationV1 smtp = 6;
+  MailAddressBookProviderV1 address_book_provider = 7;
+  optional string carddav_username = 8;
 }
 
 message MailAccountExportV1 {

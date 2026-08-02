@@ -187,6 +187,43 @@ pub struct MailAccountConfigurationV1 {
     pub smtp_endpoint: Option<SmtpEndpointV1>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailAddressBookProviderV1 {
+    None,
+    GooglePeople,
+    IcloudCardDav,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailAddressBookConfigurationV1 {
+    pub provider: MailAddressBookProviderV1,
+    pub carddav_username: Option<String>,
+}
+
+pub fn valid_address_book_configuration(
+    configuration: &MailAddressBookConfigurationV1,
+    inbound: &MailInboundTransportV1,
+) -> bool {
+    match configuration.provider {
+        MailAddressBookProviderV1::None => configuration.carddav_username.is_none(),
+        MailAddressBookProviderV1::GooglePeople => {
+            matches!(inbound, MailInboundTransportV1::Gmail(_))
+                && configuration.carddav_username.is_none()
+        }
+        MailAddressBookProviderV1::IcloudCardDav => {
+            matches!(inbound, MailInboundTransportV1::Imap(_))
+                && configuration
+                    .carddav_username
+                    .as_deref()
+                    .is_some_and(|value| {
+                        !value.trim().is_empty()
+                            && value.len() <= 256
+                            && !value.chars().any(char::is_control)
+                    })
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailInboundTransportV1 {
     Imap(MailImapConfigurationV1),
@@ -336,6 +373,7 @@ pub enum MailCredentialPurpose {
     GmailAccessToken,
     GmailRefreshCredential,
     SmtpPassword,
+    IcloudCardDavPassword,
 }
 
 impl MailCredentialPurpose {
@@ -345,6 +383,7 @@ impl MailCredentialPurpose {
             Self::GmailAccessToken => "mail_gmail_access_token",
             Self::GmailRefreshCredential => "mail_gmail_refresh_credential",
             Self::SmtpPassword => "mail_smtp_password",
+            Self::IcloudCardDavPassword => "mail_icloud_carddav_password",
         }
     }
 }

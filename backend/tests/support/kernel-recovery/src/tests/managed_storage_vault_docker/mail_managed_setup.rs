@@ -82,6 +82,7 @@ impl SeededGmailCredentialBindingV1 {
             access_token_expires_at_unix_seconds: i64::MAX,
             scope_sha256: Sha256::digest(b"managed-mail-gmail-delivery-scope").into(),
             permanent_delete_authorized: false,
+            contacts_write_authorized: false,
         }
     }
 }

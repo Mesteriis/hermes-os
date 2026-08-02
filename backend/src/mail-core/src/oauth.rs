@@ -6,6 +6,8 @@ const SETUP_ID_ENTROPY_BYTES: usize = 16;
 const STATE_ENTROPY_BYTES: usize = 32;
 const VERIFIER_ENTROPY_BYTES: usize = 32;
 
+pub const GOOGLE_CONTACTS_WRITE_SCOPE_V1: &str = "https://www.googleapis.com/auth/contacts";
+
 #[derive(Clone, Eq, PartialEq)]
 pub struct GmailOAuthAttemptMaterialV1 {
     pub setup_id: String,
@@ -81,6 +83,15 @@ pub fn gmail_oauth_scope_sha256(scope: Option<&str>) -> [u8; 32] {
     Sha256::digest(scope.unwrap_or_default().as_bytes()).into()
 }
 
+#[must_use]
+pub fn gmail_oauth_scope_authorizes_contacts_write(scope: Option<&str>) -> bool {
+    scope.is_some_and(|scope| {
+        scope
+            .split_ascii_whitespace()
+            .any(|granted| granted == GOOGLE_CONTACTS_WRITE_SCOPE_V1)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,5 +124,16 @@ mod tests {
             derive_gmail_oauth_attempt(&[1; 15], &[2; 32], &[3; 32]),
             Err(GmailOAuthPolicyErrorV1::InvalidEntropy)
         ));
+    }
+
+    #[test]
+    fn contacts_write_authority_requires_the_exact_scope_token() {
+        assert!(gmail_oauth_scope_authorizes_contacts_write(Some(
+            "openid https://www.googleapis.com/auth/contacts email"
+        )));
+        assert!(!gmail_oauth_scope_authorizes_contacts_write(Some(
+            "openid https://www.googleapis.com/auth/contacts.readonly email"
+        )));
+        assert!(!gmail_oauth_scope_authorizes_contacts_write(None));
     }
 }

@@ -4,7 +4,10 @@ mod envelope;
 
 pub use envelope::{
     MailAddressBookEnvelopeBuildErrorV1, MailAddressBookEnvelopeContextV1,
-    build_fetch_mail_address_book_page_command_v1, build_upsert_mail_address_book_entry_command_v1,
+    MailAddressBookResultEnvelopeContextV1, build_fetch_mail_address_book_page_command_v1,
+    build_mail_address_book_entry_upsert_rejected_result_v1,
+    build_mail_address_book_entry_upserted_result_v1,
+    build_upsert_mail_address_book_entry_command_v1,
 };
 
 use hermes_runtime_protocol::v1::{
@@ -14,6 +17,7 @@ use hermes_runtime_protocol::v1::{
 
 pub const PACKAGE: &str = "hermes-mail-address-book-contract";
 pub const MAIL_OWNER_ID_V1: &str = "mail";
+pub const MAIL_RUNTIME_MODULE_ID_V1: &str = "hermes-mail-runtime";
 pub const MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1: &str = "mail.address-book.provider.v1";
 pub const MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1: u32 = 1;
 pub const MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1: u32 = 2;
@@ -108,6 +112,50 @@ pub mod wire {
 }
 
 include!(concat!(env!("OUT_DIR"), "/mail_address_book_schema.rs"));
+
+pub fn validate_mail_address_book_entry_upserted_v1(
+    payload: &wire::MailAddressBookEntryUpsertedV1,
+) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
+    if valid_id16(&payload.command_id)
+        && valid_id16(&payload.run_id)
+        && valid_ascii(&payload.provider_entry_id, 512)
+        && valid_ascii(&payload.provider_etag, 512)
+        && payload.applied_contact_revision > 0
+    {
+        Ok(())
+    } else {
+        Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)
+    }
+}
+
+pub fn validate_mail_address_book_entry_upsert_rejected_v1(
+    payload: &wire::MailAddressBookEntryUpsertRejectedV1,
+) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
+    use wire::MailAddressBookRejectCodeV1;
+
+    let Ok(code) = MailAddressBookRejectCodeV1::try_from(payload.code) else {
+        return Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload);
+    };
+    let outcome_unknown =
+        code == MailAddressBookRejectCodeV1::MailAddressBookRejectCodeOutcomeUnknown;
+    if valid_id16(&payload.command_id)
+        && valid_id16(&payload.run_id)
+        && code != MailAddressBookRejectCodeV1::MailAddressBookRejectCodeUnspecified
+        && payload.outcome_unknown == outcome_unknown
+    {
+        Ok(())
+    } else {
+        Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)
+    }
+}
+
+fn valid_id16(value: &[u8]) -> bool {
+    value.len() == 16 && value.iter().any(|byte| *byte != 0)
+}
+
+fn valid_ascii(value: &str, max: usize) -> bool {
+    !value.is_empty() && value.len() <= max && value.is_ascii() && value.trim() == value
+}
 
 pub const MAIL_ADDRESS_BOOK_DESCRIPTOR_SET_V1: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/mail-address-book-v1.bin"));

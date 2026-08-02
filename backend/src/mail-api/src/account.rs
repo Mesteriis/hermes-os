@@ -9,12 +9,16 @@ pub enum MailCredentialPurposeV1 {
     SmtpPassword,
     GmailAccessToken,
     GmailRefreshCredential,
+    IcloudCardDavPassword,
 }
 
 impl MailCredentialPurposeV1 {
     #[must_use]
     pub const fn bindable_by_client(self) -> bool {
-        matches!(self, Self::ImapPassword | Self::SmtpPassword)
+        matches!(
+            self,
+            Self::ImapPassword | Self::SmtpPassword | Self::IcloudCardDavPassword
+        )
     }
 }
 

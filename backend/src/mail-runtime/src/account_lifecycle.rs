@@ -206,6 +206,10 @@ fn mutate_vault_credential(
             MailCredentialPurpose::GmailRefreshCredential,
             SecretClassV1::OAuthRefreshCredential,
         ),
+        hermes_mail_api::account::MailCredentialPurposeV1::IcloudCardDavPassword => (
+            MailCredentialPurpose::IcloudCardDavPassword,
+            SecretClassV1::ProviderCredential,
+        ),
     };
     let request = ManagedProviderCredentialRequestV1 {
         configuration_instance_id,

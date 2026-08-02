@@ -622,6 +622,7 @@ fn purpose_to_i16(purpose: MailCredentialPurposeV1) -> i16 {
         MailCredentialPurposeV1::SmtpPassword => 2,
         MailCredentialPurposeV1::GmailAccessToken => 3,
         MailCredentialPurposeV1::GmailRefreshCredential => 4,
+        MailCredentialPurposeV1::IcloudCardDavPassword => 5,
     }
 }
 
@@ -631,6 +632,7 @@ fn purpose_from_i16(purpose: i16) -> Result<MailCredentialPurposeV1, MailDurable
         2 => Ok(MailCredentialPurposeV1::SmtpPassword),
         3 => Ok(MailCredentialPurposeV1::GmailAccessToken),
         4 => Ok(MailCredentialPurposeV1::GmailRefreshCredential),
+        5 => Ok(MailCredentialPurposeV1::IcloudCardDavPassword),
         _ => Err(MailDurablePersistenceError::InvalidRow),
     }
 }

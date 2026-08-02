@@ -216,6 +216,7 @@ pub struct MailAdmittedRuntime {
     pub durable: MailDurablePersistence,
     imap_password: Option<Zeroizing<Vec<u8>>>,
     smtp_password: Option<Zeroizing<Vec<u8>>>,
+    carddav_password: Option<Zeroizing<Vec<u8>>>,
     account_lifecycle: MailAccountLifecycleCoordinatorV1,
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
@@ -227,6 +228,7 @@ pub struct MailAdmittedRuntime {
     attachment_blob_admission_publish_permitted: bool,
     attachment_security_scan_candidate_publish_permitted: bool,
     pub(crate) account: hermes_mail_api::MailAccountConfigurationV1,
+    pub(crate) address_book: hermes_mail_api::MailAddressBookConfigurationV1,
     pub(crate) configuration_instance_id: String,
     pub(crate) gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
     pub(crate) gmail_oauth_operation_in_flight: Option<String>,
@@ -245,8 +247,10 @@ pub struct MailAdmittedRuntime {
 struct MailRuntimeAccountSlotV1 {
     imap_password: Option<Zeroizing<Vec<u8>>>,
     smtp_password: Option<Zeroizing<Vec<u8>>>,
+    carddav_password: Option<Zeroizing<Vec<u8>>>,
     account_lifecycle: MailAccountLifecycleCoordinatorV1,
     account: hermes_mail_api::MailAccountConfigurationV1,
+    address_book: hermes_mail_api::MailAddressBookConfigurationV1,
     configuration_instance_id: String,
     gmail_oauth: Option<hermes_mail_api::GmailOAuthConfigurationV1>,
     gmail_oauth_operation_in_flight: Option<String>,
@@ -579,11 +583,29 @@ pub async fn open_admitted_runtime_catalog(
         } else {
             None
         };
+        let carddav_password = if matches!(
+            admission.address_book.provider,
+            hermes_mail_api::MailAddressBookProviderV1::IcloudCardDav
+        ) && !lifecycle_quiesced
+        {
+            activate_bound_account_credential(
+                &mut control_channel,
+                &provider_context,
+                &durable,
+                admission,
+                MailCredentialPurposeV1::IcloudCardDavPassword,
+            )
+            .await?
+        } else {
+            None
+        };
         account_slots.push(MailRuntimeAccountSlotV1 {
             imap_password,
             smtp_password,
+            carddav_password,
             account_lifecycle: MailAccountLifecycleCoordinatorV1::new(lifecycle_quiesced),
             account: admission.account.clone(),
+            address_book: admission.address_book.clone(),
             configuration_instance_id: admission.configuration_instance_id.clone(),
             gmail_oauth: admission.gmail_oauth.clone(),
             gmail_oauth_operation_in_flight: None,
@@ -670,8 +692,10 @@ pub async fn open_admitted_runtime_catalog(
     let MailRuntimeAccountSlotV1 {
         imap_password,
         smtp_password,
+        carddav_password,
         account_lifecycle,
         account,
+        address_book,
         configuration_instance_id,
         gmail_oauth,
         gmail_oauth_operation_in_flight,
@@ -684,6 +708,7 @@ pub async fn open_admitted_runtime_catalog(
         durable,
         imap_password,
         smtp_password,
+        carddav_password,
         account_lifecycle,
         event_connection,
         event_publish_permit,
@@ -695,6 +720,7 @@ pub async fn open_admitted_runtime_catalog(
         attachment_blob_admission_publish_permitted,
         attachment_security_scan_candidate_publish_permitted,
         account,
+        address_book,
         configuration_instance_id,
         gmail_oauth,
         gmail_oauth_operation_in_flight,
@@ -731,8 +757,10 @@ impl MailAdmittedRuntime {
         let MailRuntimeAccountSlotV1 {
             imap_password,
             smtp_password,
+            carddav_password,
             account_lifecycle,
             account,
+            address_book,
             configuration_instance_id,
             gmail_oauth,
             gmail_oauth_operation_in_flight,
@@ -743,8 +771,10 @@ impl MailAdmittedRuntime {
         let previous = MailRuntimeAccountSlotV1 {
             imap_password: std::mem::replace(&mut self.imap_password, imap_password),
             smtp_password: std::mem::replace(&mut self.smtp_password, smtp_password),
+            carddav_password: std::mem::replace(&mut self.carddav_password, carddav_password),
             account_lifecycle: std::mem::replace(&mut self.account_lifecycle, account_lifecycle),
             account: std::mem::replace(&mut self.account, account),
+            address_book: std::mem::replace(&mut self.address_book, address_book),
             configuration_instance_id: std::mem::replace(
                 &mut self.configuration_instance_id,
                 configuration_instance_id,
@@ -821,10 +851,16 @@ impl MailAdmittedRuntime {
             MailCredentialPurposeV1::SmtpPassword
                 if self.account.smtp_endpoint.is_some()
                     && matches!(&self.account.inbound, MailInboundTransportV1::Imap(_)) => {}
+            MailCredentialPurposeV1::IcloudCardDavPassword
+                if matches!(
+                    self.address_book.provider,
+                    hermes_mail_api::MailAddressBookProviderV1::IcloudCardDav
+                ) => {}
             MailCredentialPurposeV1::ImapPassword
             | MailCredentialPurposeV1::SmtpPassword
             | MailCredentialPurposeV1::GmailAccessToken
-            | MailCredentialPurposeV1::GmailRefreshCredential => {
+            | MailCredentialPurposeV1::GmailRefreshCredential
+            | MailCredentialPurposeV1::IcloudCardDavPassword => {
                 return Err(MailBootstrapError::Admission);
             }
         }
@@ -840,6 +876,7 @@ impl MailAdmittedRuntime {
         match request.purpose {
             MailCredentialPurposeV1::ImapPassword => self.imap_password = None,
             MailCredentialPurposeV1::SmtpPassword => self.smtp_password = None,
+            MailCredentialPurposeV1::IcloudCardDavPassword => self.carddav_password = None,
             MailCredentialPurposeV1::GmailAccessToken
             | MailCredentialPurposeV1::GmailRefreshCredential => {
                 return Err(MailBootstrapError::Admission);
@@ -942,6 +979,17 @@ impl MailAdmittedRuntime {
                         self.runtime_generation,
                     );
                     let mut bindings = vec![imap_binding];
+                    if matches!(
+                        self.address_book.provider,
+                        hermes_mail_api::MailAddressBookProviderV1::IcloudCardDav
+                    ) {
+                        bindings.push(basic_binding_status(
+                            persisted.iter().find(|binding| {
+                                binding.purpose == MailCredentialPurposeV1::IcloudCardDavPassword
+                            }),
+                            MailCredentialPurposeV1::IcloudCardDavPassword,
+                        ));
+                    }
                     if self.account.smtp_endpoint.is_some() {
                         let smtp_binding = basic_binding_status(
                             persisted.iter().find(|binding| {
@@ -4539,6 +4587,9 @@ async fn activate_bound_account_credential(
     let provider_purpose = match purpose {
         MailCredentialPurposeV1::ImapPassword => MailCredentialPurpose::ImapPassword,
         MailCredentialPurposeV1::SmtpPassword => MailCredentialPurpose::SmtpPassword,
+        MailCredentialPurposeV1::IcloudCardDavPassword => {
+            MailCredentialPurpose::IcloudCardDavPassword
+        }
         MailCredentialPurposeV1::GmailAccessToken
         | MailCredentialPurposeV1::GmailRefreshCredential => {
             return Err(MailBootstrapError::Admission);

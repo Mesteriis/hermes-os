@@ -156,6 +156,7 @@ where
                 vault_runtime_generation: storage.vault_runtime_generation,
                 settings_revision: snapshot.revision,
                 account: settings.account,
+                address_book: settings.address_book,
                 gmail_oauth: settings.gmail_oauth,
             })
         })

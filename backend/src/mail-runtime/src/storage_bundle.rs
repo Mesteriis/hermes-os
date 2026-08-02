@@ -1,5 +1,8 @@
 //! Exact Mail storage successor composed by the managed runtime.
 
+use hermes_mail_address_book_persistence::{
+    MailAddressBookSchemaErrorV1, append_mail_address_book_storage_v1,
+};
 use hermes_mail_persistence::mail_storage_bundle_v1;
 use hermes_mail_retained_evidence_replay_persistence::{
     MailRetainedEvidenceReplayDeliverySchemaErrorV1, MailRetainedEvidenceReplayScanSchemaErrorV1,
@@ -15,6 +18,7 @@ pub enum MailRuntimeStorageBundleErrorV1 {
     RetainedEvidenceReplay(MailRetainedEvidenceReplaySchemaErrorV1),
     RetainedEvidenceReplayDelivery(MailRetainedEvidenceReplayDeliverySchemaErrorV1),
     RetainedEvidenceReplayScan(MailRetainedEvidenceReplayScanSchemaErrorV1),
+    AddressBook(MailAddressBookSchemaErrorV1),
 }
 
 pub fn mail_runtime_storage_bundle_v1() -> Result<StorageBundleV1, MailRuntimeStorageBundleErrorV1>
@@ -23,6 +27,8 @@ pub fn mail_runtime_storage_bundle_v1() -> Result<StorageBundleV1, MailRuntimeSt
         .map_err(MailRuntimeStorageBundleErrorV1::RetainedEvidenceReplay)?;
     let bundle = append_mail_retained_evidence_replay_delivery_storage_v1(bundle)
         .map_err(MailRuntimeStorageBundleErrorV1::RetainedEvidenceReplayDelivery)?;
-    append_mail_retained_evidence_replay_scan_storage_v1(bundle)
-        .map_err(MailRuntimeStorageBundleErrorV1::RetainedEvidenceReplayScan)
+    let bundle = append_mail_retained_evidence_replay_scan_storage_v1(bundle)
+        .map_err(MailRuntimeStorageBundleErrorV1::RetainedEvidenceReplayScan)?;
+    append_mail_address_book_storage_v1(bundle)
+        .map_err(MailRuntimeStorageBundleErrorV1::AddressBook)
 }

@@ -83,6 +83,7 @@ members = [
   "src/contacts-runtime",
   "src/contacts-assembly",
   "src/mail-address-book-contract",
+  "src/mail-address-book-persistence",
   "src/mail-carddav",
   "src/mail-contacts-sync-api",
   "src/mail-contacts-sync-core",

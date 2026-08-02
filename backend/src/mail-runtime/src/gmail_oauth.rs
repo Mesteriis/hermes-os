@@ -6,7 +6,8 @@ use hermes_mail_api::{
     GmailOAuthOutcomeV1, GmailOAuthStartedV1, MailCredentialPurpose, MailInboundTransportV1,
 };
 use hermes_mail_core::oauth::{
-    derive_gmail_oauth_attempt, gmail_oauth_authorization_code_sha256, gmail_oauth_scope_sha256,
+    derive_gmail_oauth_attempt, gmail_oauth_authorization_code_sha256,
+    gmail_oauth_scope_authorizes_contacts_write, gmail_oauth_scope_sha256,
     gmail_oauth_state_sha256,
 };
 use hermes_mail_gmail::{
@@ -414,12 +415,15 @@ impl MailAdmittedRuntime {
                     .gmail_oauth_credential_binding(&queued.connection_id)
                     .await
                     .map_err(map_dispatch_persistence_error)?;
+                let contacts_write_authorized =
+                    gmail_oauth_scope_authorizes_contacts_write(token.scope.as_deref());
                 let binding = self
                     .store_oauth_token_pair(
                         &queued.operation_id,
                         existing.as_ref(),
                         token,
                         authority == GmailOAuthAuthorityV1::PermanentDelete,
+                        contacts_write_authorized,
                         completed_at_unix_seconds,
                     )
                     .await;
@@ -464,6 +468,7 @@ impl MailAdmittedRuntime {
         existing: Option<&GmailOAuthCredentialBindingV1>,
         token: GmailOAuthTokenResponseV1,
         permanent_delete_authorized: bool,
+        contacts_write_authorized: bool,
         completed_at_unix_seconds: i64,
     ) -> Result<GmailOAuthCredentialBindingV1, MailGmailOAuthDispatchErrorV1> {
         let access_token_expires_at_unix_seconds =
@@ -538,13 +543,12 @@ impl MailAdmittedRuntime {
             .await
             .map_err(map_dispatch_persistence_error)?;
         Ok(oauth_binding(
-            access_record_id,
-            access_revision,
-            refresh_record_id,
-            refresh_revision,
+            (access_record_id, access_revision),
+            (refresh_record_id, refresh_revision),
             access_token_expires_at_unix_seconds,
             gmail_oauth_scope_sha256(token.scope.as_deref()),
             permanent_delete_authorized,
+            contacts_write_authorized,
         ))
     }
 
@@ -597,10 +601,8 @@ impl MailAdmittedRuntime {
             ),
         };
         Ok(oauth_binding(
-            access_record_id,
-            access_revision,
-            refresh_record_id,
-            refresh_revision,
+            (access_record_id, access_revision),
+            (refresh_record_id, refresh_revision),
             access_token_expires_at_unix_seconds,
             token
                 .scope
@@ -612,6 +614,11 @@ impl MailAdmittedRuntime {
                 .as_deref()
                 .map(|scope| gmail_scope_authorizes(GmailOAuthAuthorityV1::PermanentDelete, scope))
                 .unwrap_or(current.permanent_delete_authorized),
+            token
+                .scope
+                .as_deref()
+                .map(|scope| gmail_oauth_scope_authorizes_contacts_write(Some(scope)))
+                .unwrap_or(current.contacts_write_authorized),
         ))
     }
 
@@ -736,22 +743,22 @@ pub async fn execute_gmail_oauth_provider_operation(
 }
 
 fn oauth_binding(
-    access_token_record_id: [u8; 16],
-    access_token_revision: u64,
-    refresh_credential_record_id: [u8; 16],
-    refresh_credential_revision: u64,
+    access: ([u8; 16], u64),
+    refresh: ([u8; 16], u64),
     access_token_expires_at_unix_seconds: i64,
     scope_sha256: [u8; 32],
     permanent_delete_authorized: bool,
+    contacts_write_authorized: bool,
 ) -> GmailOAuthCredentialBindingV1 {
     GmailOAuthCredentialBindingV1 {
-        access_token_record_id,
-        access_token_revision,
-        refresh_credential_record_id,
-        refresh_credential_revision,
+        access_token_record_id: access.0,
+        access_token_revision: access.1,
+        refresh_credential_record_id: refresh.0,
+        refresh_credential_revision: refresh.1,
         access_token_expires_at_unix_seconds,
         scope_sha256,
         permanent_delete_authorized,
+        contacts_write_authorized,
     }
 }
 

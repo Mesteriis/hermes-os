@@ -2,19 +2,21 @@
 
 use hermes_mail_api::{
     GmailApiEndpointV1, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
-    MailAccountConfigurationV1, MailGmailConfigurationV1, MailImapConfigurationV1,
-    MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
-    valid_gmail_oauth_configuration,
+    MailAccountConfigurationV1, MailAddressBookConfigurationV1, MailAddressBookProviderV1,
+    MailGmailConfigurationV1, MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1,
+    valid_account_configuration, valid_address_book_configuration, valid_gmail_oauth_configuration,
 };
 pub use hermes_mail_api::{MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2};
 use hermes_runtime_protocol::v1::{
     SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1, SettingMutationAuthorityV1,
-    SettingTargetScopeV1, SettingValueTypeV1, SettingsSchemaV1, SettingsSnapshotV1,
+    SettingTargetScopeV1, SettingValueTypeV1, SettingValueV1, SettingsSchemaV1, SettingsSnapshotV1,
     setting_value_v1::Value,
 };
 use prost::Message;
 
 const CONNECTION_ID: &str = "mail.connection_id";
+const ADDRESS_BOOK_PROVIDER: &str = "mail.address_book.provider";
+const ADDRESS_BOOK_CARDDAV_USERNAME: &str = "mail.address_book.carddav_username";
 const IMAP_HOST: &str = "mail.imap.host";
 const IMAP_PORT: &str = "mail.imap.port";
 const IMAP_USERNAME: &str = "mail.imap.username";
@@ -65,6 +67,12 @@ pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
         major: MAIL_SETTINGS_SCHEMA_MAJOR_V2,
         revision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
         definitions: vec![
+            definition(
+                ADDRESS_BOOK_CARDDAV_USERNAME,
+                SettingValueTypeV1::String,
+                "CardDAV username",
+            ),
+            string_definition_with_default(ADDRESS_BOOK_PROVIDER, "Address-book provider", "none"),
             definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
             definition(GMAIL_API_HOST, SettingValueTypeV1::String, "Gmail API host"),
             definition(
@@ -194,8 +202,21 @@ fn definition(
     }
 }
 
+fn string_definition_with_default(
+    setting_id: &str,
+    display_name: &str,
+    default_value: &str,
+) -> SettingDefinitionV1 {
+    let mut definition = definition(setting_id, SettingValueTypeV1::String, display_name);
+    definition.default_value = Some(SettingValueV1 {
+        value: Some(Value::StringValue(default_value.to_owned())),
+    });
+    definition
+}
+
 pub struct MailRuntimeSettingsV1 {
     pub account: MailAccountConfigurationV1,
+    pub address_book: MailAddressBookConfigurationV1,
     pub gmail_oauth: Option<GmailOAuthConfigurationV1>,
 }
 
@@ -257,8 +278,33 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
         MailInboundTransportV1::Gmail(_) => optional_gmail_oauth_configuration(snapshot)?,
         MailInboundTransportV1::Imap(_) => None,
     };
+    let address_book = match optional_string(snapshot, ADDRESS_BOOK_PROVIDER)?.as_deref() {
+        None | Some("none") => {
+            absent(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?;
+            MailAddressBookConfigurationV1 {
+                provider: MailAddressBookProviderV1::None,
+                carddav_username: None,
+            }
+        }
+        Some("google_people") => {
+            absent(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?;
+            MailAddressBookConfigurationV1 {
+                provider: MailAddressBookProviderV1::GooglePeople,
+                carddav_username: None,
+            }
+        }
+        Some("icloud_carddav") => MailAddressBookConfigurationV1 {
+            provider: MailAddressBookProviderV1::IcloudCardDav,
+            carddav_username: Some(required_string(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?),
+        },
+        _ => return Err(invalid_settings()),
+    };
+    if !valid_address_book_configuration(&address_book, &account.inbound) {
+        return Err(invalid_settings());
+    }
     Ok(MailRuntimeSettingsV1 {
         account,
+        address_book,
         gmail_oauth,
     })
 }
@@ -414,7 +460,7 @@ mod tests {
                 && definition.client_visibility == SettingClientVisibilityV1::Editable as i32
                 && definition.fresh_owner_proof_required
         }));
-        assert_eq!(schema.definitions.len(), 28);
+        assert_eq!(schema.definitions.len(), 30);
     }
 
     #[test]

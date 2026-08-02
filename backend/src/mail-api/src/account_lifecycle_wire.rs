@@ -164,6 +164,9 @@ fn purpose_to_wire(purpose: MailCredentialPurposeV1) -> i32 {
         MailCredentialPurposeV1::GmailRefreshCredential => {
             Purpose::MailLifecycleCredentialPurposeGmailRefreshCredential as i32
         }
+        MailCredentialPurposeV1::IcloudCardDavPassword => {
+            Purpose::MailLifecycleCredentialPurposeIcloudCarddavPassword as i32
+        }
     }
 }
 
@@ -181,6 +184,9 @@ fn purpose_from_wire(purpose: i32) -> Result<MailCredentialPurposeV1, MailClient
         }
         Purpose::MailLifecycleCredentialPurposeGmailRefreshCredential => {
             Ok(MailCredentialPurposeV1::GmailRefreshCredential)
+        }
+        Purpose::MailLifecycleCredentialPurposeIcloudCarddavPassword => {
+            Ok(MailCredentialPurposeV1::IcloudCardDavPassword)
         }
         Purpose::MailLifecycleCredentialPurposeUnspecified => {
             Err(MailClientWireErrorV1::InvalidPayload)

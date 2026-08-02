@@ -219,6 +219,9 @@ pub(crate) const fn purpose_to_wire(purpose: MailCredentialPurposeV1) -> i32 {
         MailCredentialPurposeV1::GmailRefreshCredential => {
             Purpose::MailCredentialPurposeGmailRefreshCredential as i32
         }
+        MailCredentialPurposeV1::IcloudCardDavPassword => {
+            Purpose::MailCredentialPurposeIcloudCarddavPassword as i32
+        }
     }
 }
 
@@ -234,6 +237,9 @@ pub(crate) fn purpose_from_wire(
         }
         Purpose::MailCredentialPurposeGmailRefreshCredential => {
             Ok(MailCredentialPurposeV1::GmailRefreshCredential)
+        }
+        Purpose::MailCredentialPurposeIcloudCarddavPassword => {
+            Ok(MailCredentialPurposeV1::IcloudCardDavPassword)
         }
         Purpose::MailCredentialPurposeUnspecified => Err(MailClientWireErrorV1::InvalidPayload),
     }
