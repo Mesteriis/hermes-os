@@ -17,6 +17,7 @@ const props = defineProps<{
 	canReadSenderInsights: boolean
 }>()
 const emit = defineEmits<{
+	canonicalAttachmentSelected: [attachmentAnchorId: Uint8Array | undefined]
 	canonicalMessageSelected: [messageId: Uint8Array]
 }>()
 const surface = useCanonicalCommunicationsPage()
@@ -40,6 +41,7 @@ onMounted(() => {
 function openMessage(messageKey: string): void {
 	const messageId = surface.selectMessage(messageKey)
 	if (messageId) {
+		emit('canonicalAttachmentSelected', undefined)
 		emit('canonicalMessageSelected', new Uint8Array(messageId))
 		void detail.open(messageId)
 		void content.open(messageId)
@@ -49,6 +51,7 @@ function openMessage(messageKey: string): void {
 function openSavedSearchMessage(messageKey: string): void {
 	const messageId = savedSearches.selectMessage(messageKey)
 	if (messageId) {
+		emit('canonicalAttachmentSelected', undefined)
 		emit('canonicalMessageSelected', new Uint8Array(messageId))
 		void detail.open(messageId)
 		void content.open(messageId)
@@ -56,10 +59,16 @@ function openSavedSearchMessage(messageKey: string): void {
 }
 
 function closeMessage(): void {
+	emit('canonicalAttachmentSelected', undefined)
 	detail.close()
 	content.close()
 	surface.clearSelectedMessage()
 	savedSearches.clearSelectedMessage()
+}
+
+function selectAttachment(attachmentKey: string): void {
+	const attachmentAnchorId = detail.attachmentAnchorIdForKey(attachmentKey)
+	if (attachmentAnchorId) emit('canonicalAttachmentSelected', attachmentAnchorId)
 }
 </script>
 
@@ -104,6 +113,7 @@ function closeMessage(): void {
 			@load-more-evidence="detail.loadMoreEvidence"
 			@load-more-participants="detail.loadMoreParticipants"
 			@load-more-references="detail.loadMoreReferences"
+			@select-attachment="selectAttachment"
 		/>
 		<CanonicalCommunicationContent :model="content.model.value" />
 	</div>

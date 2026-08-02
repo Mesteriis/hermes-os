@@ -669,6 +669,13 @@
       "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
     },
     {
+      "gate": "attachment_preview_retained_evidence_replay_v1",
+      "role": "workflow",
+      "owner": "attachment_preview_evidence_replay",
+      "state": "planned",
+      "dependsOn": ["communications_canonical_read_v2", "attachment_security_engine_v1"]
+    },
+    {
       "gate": "attachment_archive_inspection_v1",
       "role": "engine",
       "owner": "attachment_archive_inspection",

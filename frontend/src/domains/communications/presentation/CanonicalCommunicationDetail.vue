@@ -10,6 +10,7 @@ const emit = defineEmits<{
 	loadMoreEvidence: []
 	loadMoreParticipants: []
 	loadMoreReferences: []
+	selectAttachment: [attachmentKey: string]
 }>()
 </script>
 
@@ -67,9 +68,16 @@ const emit = defineEmits<{
 					<h3>Attachments <span>{{ model.attachments.length }}</span></h3>
 					<ul>
 						<li v-for="row in model.attachments" :key="row.key">
-							<strong>{{ row.primaryLabel }}</strong>
-							<span>{{ row.secondaryLabel }}</span>
-							<small>{{ row.metaLabel }}</small>
+							<button
+								type="button"
+								:disabled="!row.previewEligible"
+								@click="emit('selectAttachment', row.key)"
+							>
+								<strong>{{ row.primaryLabel }}</strong>
+								<span>{{ row.secondaryLabel }}</span>
+								<small>{{ row.metaLabel }}</small>
+								<em>{{ row.previewLabel }}</em>
+							</button>
 						</li>
 					</ul>
 					<button

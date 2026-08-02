@@ -315,10 +315,10 @@ assembly_status="$(
 )"
 case "$assembly_status" in
 	development_assembly=missing)
-	printf '%s\n' 'Admitting the exact Communications and provider module plan...'
+	printf '%s\n' 'Admitting the exact clean-room development module plan...'
 	;;
 	development_assembly=stale)
-	printf '%s\n' 'Refreshing the exact Communications and provider module plan...'
+	printf '%s\n' 'Refreshing the exact clean-room development module plan...'
 	;;
 	development_assembly=current) ;;
 	*) fail "development assembly state is unavailable" ;;

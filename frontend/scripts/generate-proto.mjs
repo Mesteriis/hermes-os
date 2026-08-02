@@ -37,6 +37,13 @@ const communicationsExportProtoRoot = join(
   'communications-export-api',
   'proto'
 )
+const attachmentPreviewProtoRoot = join(
+  repoRoot,
+  'backend',
+  'src',
+  'attachment-preview-api',
+  'proto'
+)
 const mailProtoRoot = join(repoRoot, 'backend', 'src', 'mail-api', 'proto')
 const telegramProtoRoot = join(repoRoot, 'backend', 'src', 'telegram-api', 'proto')
 const telegramAutomationProtoRoot = join(repoRoot, 'backend', 'src', 'telegram-automation-api', 'proto')
@@ -91,6 +98,21 @@ const protoFiles = [
     'v1',
     'export.proto'
   ),
+  join(
+    attachmentPreviewProtoRoot,
+    'hermes',
+    'attachment_preview',
+    'v1',
+    'preview.proto'
+  ),
+  join(
+    attachmentPreviewProtoRoot,
+    'hermes',
+    'attachment_preview',
+    'read',
+    'v1',
+    'read.proto'
+  ),
   join(mailProtoRoot, 'hermes', 'mail', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'account', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'account_lifecycle', 'v1', 'client.proto'),
@@ -130,6 +152,7 @@ const result = spawnSync(
     `-I${communicationsSavedSearchProtoRoot}`,
     `-I${communicationsSenderInsightsProtoRoot}`,
     `-I${communicationsExportProtoRoot}`,
+    `-I${attachmentPreviewProtoRoot}`,
     `-I${mailProtoRoot}`,
     `-I${telegramProtoRoot}`,
     `-I${telegramAutomationProtoRoot}`,

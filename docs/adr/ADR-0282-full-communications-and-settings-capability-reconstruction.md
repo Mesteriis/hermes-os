@@ -441,6 +441,7 @@ runtime не является domain, а app composition не становитс
 | Note extraction | `communication_note_candidate_extraction` workflow plus target command | `communication_note_candidate_extraction_v1` |
 | Attachment text extraction | Blob, Attachment Security and explicit content workflow | `attachment_text_extraction_v1` |
 | Attachment preview | Blob, Attachment Security and explicit preview workflow | `attachment_preview_v1` |
+| Retained attachment evidence replay | Explicit owner-authorized producer replay workflow; no Kernel/outbox facade | `attachment_preview_retained_evidence_replay_v1` |
 | Attachment archive inspection | Dedicated bounded engine | `attachment_archive_inspection_v1` |
 | Attachment translation | `attachment_translation` workflow | `attachment_translation_v1` |
 | Provider actions | Exact integration | integration command gate |

@@ -101,7 +101,9 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.doesNotMatch(authenticatedCompose, /(?:^|\s)(?:0\.0\.0\.0|::):.*3310/m);
   assert.match(assembly, /provision-platform/);
   assert.match(assembly, /start-ensemble/);
-  assert.match(assembly, /Admitting the exact Communications and provider module plan/);
+  assert.match(assembly, /Admitting the exact clean-room development module plan/);
+  assert.match(developmentAssembly, /attachment_preview\.runtime\.v1/);
+  assert.match(developmentAssembly, /attachment_preview\.storage\.v1/);
   assert.match(assembly, /development_assembly=stale/);
   assert.match(assembly, /--distribution-generation "\$distribution_generation"/);
   assert.match(assembly, /--browser-gateway-listen-address "\$gateway_address"/);

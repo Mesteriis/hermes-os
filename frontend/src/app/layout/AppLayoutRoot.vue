@@ -14,6 +14,7 @@ import WhatsAppOperationalRoute from '../../integrations/whatsapp/views/WhatsApp
 import MailOperationalRoute from '../../integrations/mail/views/MailOperationalRoute.vue'
 import ZulipOperationalRoute from '../../integrations/zulip/views/ZulipOperationalRoute.vue'
 import CommunicationsEvidenceExportWorkflow from '../../workflows/communications-export/CommunicationsEvidenceExportWorkflow.vue'
+import AttachmentPreviewWorkflow from '../../workflows/attachment-preview/AttachmentPreviewWorkflow.vue'
 import {
 	providerAccountIdFromRoute,
 	providerAccountNavigationLevel,
@@ -58,7 +59,11 @@ const communicationsSenderInsightsAvailable = computed(() =>
 const communicationsExportAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'communications.export.v1'),
 )
+const attachmentPreviewAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'attachment_preview.client.v1'),
+)
 const currentCanonicalMessageId = ref<Uint8Array>()
+const currentAttachmentAnchorId = ref<Uint8Array>()
 const telegramCommandAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'telegram.command.v1'),
 )
@@ -208,7 +213,12 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					<CanonicalCommunicationsRoute
 						:can-manage-saved-searches="communicationsSavedSearchAvailable"
 						:can-read-sender-insights="communicationsSenderInsightsAvailable"
+						@canonical-attachment-selected="currentAttachmentAnchorId = $event"
 						@canonical-message-selected="currentCanonicalMessageId = $event"
+					/>
+					<AttachmentPreviewWorkflow
+						:can-preview="attachmentPreviewAvailable"
+						:candidate-attachment-anchor-id="currentAttachmentAnchorId"
 					/>
 					<CommunicationsEvidenceExportWorkflow
 						:can-export="communicationsExportAvailable"

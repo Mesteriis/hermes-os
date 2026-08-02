@@ -85,7 +85,7 @@ test('client system status uses the shared typed Gateway realtime boundary', asy
   assert.match(kernelReconciler, /client_system_status\(store, supervisor, true\)/);
   assert.match(frontendDecoder, /hermes\.gateway\.system-status/);
   assert.match(frontendDecoder, /platform\.system_status\.changed/);
-  assert.match(navigationQuery, /new BrowserGatewayRealtime\(\)\.subscribe/);
+  assert.match(navigationQuery, /getBrowserGatewayRealtimeHub\(\)\.subscribe/);
   assert.doesNotMatch(navigationQuery, /BOOTSTRAP_REFRESH_MS|setInterval/);
   assert.doesNotMatch(
     `${gatewayRealtime}\n${kernelReconciler}`,

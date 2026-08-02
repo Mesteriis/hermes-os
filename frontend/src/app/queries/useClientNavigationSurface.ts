@@ -19,9 +19,9 @@ import {
 	type ClientBootstrapSnapshot,
 } from '../../platform/gateway/clientBootstrap'
 import {
-	BrowserGatewayRealtime,
 	type BrowserGatewayRealtimeSubscription,
 } from '../../platform/gateway/browserGatewayRealtime'
+import { getBrowserGatewayRealtimeHub } from '../../platform/gateway/browserGatewayRealtimeHub'
 import { applyClientSystemStatusEvent } from '../../platform/gateway/browserGatewaySystemStatus'
 import {
 	isUiThemeFamily,
@@ -134,7 +134,7 @@ export function useClientNavigationSurface() {
 
 	function openRealtime(): void {
 		realtimeSubscription?.close()
-		realtimeSubscription = new BrowserGatewayRealtime().subscribe({
+		realtimeSubscription = getBrowserGatewayRealtimeHub().subscribe({
 			onEvent: (event) => {
 				try {
 					const updated = applyClientSystemStatusEvent(bootstrap.value, event)

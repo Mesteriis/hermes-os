@@ -87,6 +87,13 @@ export function useCanonicalCommunicationDetail() {
 		resetRows()
 	}
 
+	function attachmentAnchorIdForKey(attachmentKey: string): Uint8Array | undefined {
+		const attachment = attachments.value.find(
+			(candidate) => bytesKey(candidate.attachmentAnchorId) === attachmentKey,
+		)
+		return attachment ? new Uint8Array(attachment.attachmentAnchorId) : undefined
+	}
+
 	async function loadMoreParticipants(): Promise<void> {
 		const current = message.value
 		if (!current || participantCursor.value.byteLength === 0) return
@@ -190,6 +197,7 @@ export function useCanonicalCommunicationDetail() {
 	}
 
 	return {
+		attachmentAnchorIdForKey,
 		close,
 		loadMoreAttachments,
 		loadMoreEvidence,

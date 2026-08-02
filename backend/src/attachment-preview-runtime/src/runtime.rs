@@ -28,12 +28,16 @@ use hermes_events_jetstream::{
     RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
     request_managed_runtime_event_access_v2,
 };
+use hermes_runtime_protocol::validation::managed_control::MANAGED_CONTROL_CORRELATION_ID_BYTES;
 use hermes_runtime_protocol::{
-    managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
+    managed_control::{
+        ManagedControlChannelV2, ManagedControlRequestDispatcherV2, ManagedControlTransportErrorV2,
+    },
     v1::{
         ContractReferenceV1, ManagedRuntimeClientDeliveryResponseV1,
         ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
-        ManagedStorageRuntimeConfigurationV1, managed_runtime_control_request_v1::Operation,
+        ManagedStorageRuntimeConfigurationV1, ModuleClientResponseV1,
+        managed_runtime_control_request_v1::Operation,
         managed_runtime_control_response_v1::Result as ControlResult,
     },
     validation::module_client::{
@@ -86,6 +90,59 @@ pub struct AttachmentPreviewManagedRuntimeV1 {
     runtime_instance_id: String,
     runtime_generation: u64,
     grant_epoch: u64,
+}
+
+struct AttachmentPreviewNestedRequestDispatcherV1<'a> {
+    persistence: &'a AttachmentPreviewPersistenceV1,
+    runtime_generation: u64,
+    grant_epoch: u64,
+}
+
+impl ManagedControlRequestDispatcherV2<UnixStream>
+    for AttachmentPreviewNestedRequestDispatcherV1<'_>
+{
+    fn dispatch_request(
+        &mut self,
+        channel: &mut ManagedControlChannelV2<UnixStream>,
+        correlation_id: [u8; MANAGED_CONTROL_CORRELATION_ID_BYTES],
+        request: hermes_runtime_protocol::v1::ManagedRuntimeControlRequestV1,
+    ) -> Result<(), ManagedControlTransportErrorV2> {
+        let response = match request.operation {
+            Some(Operation::ClientDelivery(delivery)) => match delivery.request {
+                Some(request) if validate_module_client_request_v1(&request).is_ok() => {
+                    let response = current_runtime_time_v1()
+                        .ok()
+                        .map(|(now_unix_millis, _)| {
+                            tokio::task::block_in_place(|| {
+                                tokio::runtime::Handle::current().block_on(
+                                    dispatch_attachment_preview_client_request_v1(
+                                        self.persistence,
+                                        self.runtime_generation,
+                                        self.grant_epoch,
+                                        &request,
+                                        now_unix_millis,
+                                    ),
+                                )
+                            })
+                        })
+                        .unwrap_or_else(|| client_unavailable_response_v1(request.request_id));
+                    client_delivery_response_v1(response)
+                }
+                Some(request) => {
+                    client_delivery_response_v1(client_rejected_response_v1(request.request_id))
+                }
+                None => ManagedRuntimeControlResponseV1 {
+                    result: None,
+                    error_code: "managed_runtime_control_invalid_client_delivery".to_owned(),
+                },
+            },
+            _ => ManagedRuntimeControlResponseV1 {
+                result: None,
+                error_code: "managed_runtime_control_unexpected_request".to_owned(),
+            },
+        };
+        channel.write_response(correlation_id, response)
+    }
 }
 
 impl AttachmentPreviewManagedRuntimeV1 {
@@ -519,7 +576,11 @@ impl AttachmentPreviewManagedRuntimeV1 {
             .inner_mut()
             .set_nonblocking(false)
             .map_err(|_| AttachmentPreviewRuntimeErrorV1::Unavailable)?;
-        let mut dispatcher = RejectManagedControlRequestsV2;
+        let mut dispatcher = AttachmentPreviewNestedRequestDispatcherV1 {
+            persistence: &self.persistence,
+            runtime_generation: self.runtime_generation,
+            grant_epoch: self.grant_epoch,
+        };
         let result = self
             .client_realtime
             .publish_pending(
@@ -551,6 +612,36 @@ impl AttachmentPreviewManagedRuntimeV1 {
             )
             .map_err(|_| AttachmentPreviewRuntimeErrorV1::Unavailable)?;
         Ok(true)
+    }
+}
+
+fn client_delivery_response_v1(
+    response: ModuleClientResponseV1,
+) -> ManagedRuntimeControlResponseV1 {
+    ManagedRuntimeControlResponseV1 {
+        result: Some(ControlResult::ClientDelivery(
+            ManagedRuntimeClientDeliveryResponseV1 {
+                response: Some(response),
+            },
+        )),
+        error_code: String::new(),
+    }
+}
+
+fn client_rejected_response_v1(request_id: u64) -> ModuleClientResponseV1 {
+    client_error_response_v1(request_id, "REJECTED")
+}
+
+fn client_unavailable_response_v1(request_id: u64) -> ModuleClientResponseV1 {
+    client_error_response_v1(request_id, "UNAVAILABLE")
+}
+
+fn client_error_response_v1(request_id: u64, error_code: &str) -> ModuleClientResponseV1 {
+    ModuleClientResponseV1 {
+        protocol_major: 1,
+        request_id,
+        response_payload: Vec::new(),
+        error_code: error_code.to_owned(),
     }
 }
 

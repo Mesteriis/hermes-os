@@ -20,7 +20,7 @@ export type CanonicalCommunicationDetailModel = {
 	lifecycleLabel: string
 	observedRangeLabel: string
 	participants: readonly CanonicalDetailRow[]
-	attachments: readonly CanonicalDetailRow[]
+	attachments: readonly CanonicalAttachmentDetailRow[]
 	references: readonly CanonicalDetailRow[]
 	evidence: readonly CanonicalDetailRow[]
 	hasMoreParticipants: boolean
@@ -36,6 +36,13 @@ export type CanonicalDetailRow = {
 	secondaryLabel: string
 	metaLabel: string
 }
+
+export type CanonicalAttachmentDetailRow = CanonicalDetailRow & {
+	previewEligible: boolean
+	previewLabel: 'Preview' | 'Unavailable'
+}
+
+const ATTACHMENT_SAFETY_STATE_SAFE_FOR_DELIVERY_V1 = 5
 
 export function buildCanonicalCommunicationDetailModel(input: {
 	status: CanonicalCommunicationDetailStatus
@@ -84,6 +91,10 @@ export function buildCanonicalCommunicationDetailModel(input: {
 				? `${attachment.mediaType || 'Unknown media'} · ${attachment.declaredBytes} bytes`
 				: 'Descriptor unavailable',
 			metaLabel: `State ${attachment.state}`,
+			previewEligible: attachment.state === ATTACHMENT_SAFETY_STATE_SAFE_FOR_DELIVERY_V1,
+			previewLabel: attachment.state === ATTACHMENT_SAFETY_STATE_SAFE_FOR_DELIVERY_V1
+				? 'Preview'
+				: 'Unavailable',
 		})),
 		references: input.references.map((reference) => ({
 			key: `${bytesKey(reference.evidenceId)}-${reference.kind}`,

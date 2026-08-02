@@ -95,6 +95,24 @@
 	background: var(--h-color-surface-muted);
 }
 
+.canonical-communication-detail li > button {
+	display: grid;
+	width: 100%;
+	height: auto;
+	padding: var(--h-space-2);
+	text-align: left;
+	background: transparent;
+	cursor: pointer;
+}
+
+.canonical-communication-detail li > button em {
+	justify-self: end;
+	color: var(--h-color-accent);
+	font-size: var(--h-font-size-xs);
+	font-style: normal;
+	font-weight: 700;
+}
+
 @media (max-width: 720px) {
 	.canonical-communication-detail {
 		margin: 0 var(--h-space-3) var(--h-space-3);

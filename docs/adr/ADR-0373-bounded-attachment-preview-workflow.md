@@ -69,8 +69,16 @@ managed readiness, отсутствие owner health endpoint и отсутст�
 capability/signal у Preview. Authenticated managed Gateway gate теперь также
 доказывает exact same-origin SSE continuation через browser-defined
 `Last-Event-ID`: после известного cursor возвращается новый terminal Preview
-event без повтора старого cursor или private source bytes. Generated browser
-workflow adapter и live browser evidence ещё не реализованы.
+event без повтора старого cursor или private source bytes. Generated Vue browser
+workflow adapter реализован: app-level composition передаёт только canonical
+attachment anchor, generated Start/Get/IssueRead и exact `client_blob` используют
+Core Gateway, а navigation и Preview разделяют один replayable SSE hub без
+polling. Live browser подтвердил accepted Start и отсутствие повторяющегося
+connection polling. Terminal artifact gate для исторических attachments пока не
+закрыт: bounded JetStream retention истёк до admission Preview consumer, поэтому
+ADR-0376 требует explicit owner-authorized exact-byte evidence replay.
+Rejected/non-safe attachments теперь не запускают workflow и отображаются
+disabled `Unavailable`.
 Inventory gate `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

@@ -707,3 +707,8 @@ renderer выбирается по bytes/magic, private content выдаётся
 через exact `client_blob`, а text/image/PDF/DOCX/media adapters, persistence,
 runtime и assembly остаются отдельными build units. Gate остаётся `planned` до
 полного managed/live evidence.
+ADR-0376 фиксирует explicit owner-authorized replay для canonical durable bytes,
+которые пережили bounded JetStream retention. Replay остаётся producer-local,
+публикует те же bytes/message ID, не сбрасывает outbox state и не создаёт Kernel
+facade. Исторический Preview закрывается отдельным workflow gate только после
+двух producer-owned replay operations и terminal browser SSE/client_blob proof.

@@ -36,14 +36,15 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_sse_cursor_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_retained_evidence_replay_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
   assert.match(adr, /Следующий managed\s+authority gate[\s\S]*source-receipt mismatch/);
-  assert.match(adr, /Privacy-negative gate[\s\S]*Last-Event-ID[\s\S]*live browser evidence ещё не реализованы/);
+  assert.match(adr, /Generated Vue browser[\s\S]*workflow adapter реализован/);
+  assert.match(adr, /ADR-0376 требует explicit owner-authorized exact-byte evidence replay/);
   assert.match(rendererAdmissionAdr, /availability является admission invariant/);
   assert.match(rendererAdmissionAdr, /environment test hook или fake outage не вводятся/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
@@ -97,6 +98,74 @@ test('public Preview contract separates status ticket and private client blob by
     controlProto,
     /\b(?:provider|account_id|filename|filesystem|source_path|data_url|map)\b/,
   );
+});
+
+test('Preview generated browser adapter is app-composed and shares one replayable SSE stream', async () => {
+  const [generator, app, route, api, controller, presentation, realtimeHub, navigation] =
+    await Promise.all([
+      readFile(new URL('frontend/scripts/generate-proto.mjs', REPOSITORY_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/app/layout/AppLayoutRoot.vue', REPOSITORY_ROOT), 'utf8'),
+      readFile(
+        new URL(
+          'frontend/src/domains/communications/views/CanonicalCommunicationsRoute.vue',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'frontend/src/workflows/attachment-preview/api/attachmentPreview.ts',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'frontend/src/workflows/attachment-preview/queries/useAttachmentPreview.ts',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'frontend/src/workflows/attachment-preview/presentation/AttachmentPreviewPanel.vue',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'frontend/src/platform/gateway/browserGatewayRealtimeHub.ts',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+      readFile(
+        new URL(
+          'frontend/src/app/queries/useClientNavigationSurface.ts',
+          REPOSITORY_ROOT,
+        ),
+        'utf8',
+      ),
+    ]);
+
+  assert.match(generator, /attachment-preview-api/);
+  assert.match(generator, /attachment_preview[\s\S]*preview\.proto/);
+  assert.match(app, /AttachmentPreviewWorkflow/);
+  assert.match(app, /attachment_preview\.client\.v1/);
+  assert.match(route, /canonicalAttachmentSelected/);
+  assert.doesNotMatch(route, /workflows\/attachment-preview|attachmentPreviewClient/);
+  assert.match(api, /getAttachmentPreviewCommandClient/);
+  assert.match(api, /getAttachmentPreviewQueryClient/);
+  assert.match(api, /getAttachmentPreviewTicketClient/);
+  assert.match(api, /getBrowserGatewayRealtimeHub/);
+  assert.match(api, /BrowserGatewayFetch/);
+  assert.doesNotMatch(api, /domains\/communications|integrations\/(?:mail|telegram|whatsapp|zulip)/);
+  assert.match(controller, /subscribeAttachmentPreviewStatus/);
+  assert.doesNotMatch(controller, /setInterval\(|setTimeout\(|poll/i);
+  assert.match(realtimeHub, /sharedHub/);
+  assert.match(navigation, /getBrowserGatewayRealtimeHub\(\)\.subscribe/);
+  assert.doesNotMatch(presentation, /fetch\(|v-html|connect\//);
 });
 
 test('Preview logs errors health and telemetry expose only fixed-shape technical state', async () => {
@@ -487,6 +556,12 @@ test('managed Preview runtime composes public contracts without owning assembly 
   assert.match(admission, /ATTACHMENT_PREVIEW_MAX_VIDEO_BYTES_V1/);
   assert.match(runtime, /receive_runtime_pull_delivery/);
   assert.match(runtime, /dispatch_attachment_preview_client_request_v1/);
+  assert.match(runtime, /AttachmentPreviewNestedRequestDispatcherV1/);
+  assert.match(
+    runtime,
+    /publish_pending\([\s\S]*&mut dispatcher[\s\S]*\)\.await/,
+  );
+  assert.doesNotMatch(runtime, /RejectManagedControlRequestsV2/);
   assert.match(runtime, /attachment_preview_renderer_identity_v1/);
   assert.match(clientPort, /ModuleClientBlobAuthorizationV1/);
   assert.match(clientPort, /redeem_read_ticket/);
@@ -519,10 +594,10 @@ test('Preview release assembly is a separate unsigned workflow build unit', asyn
 });
 
 test('development release builds and signs the exact Preview assembly fragment', async () => {
-  const release = await readFile(
-    new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT),
-    'utf8',
-  );
+  const [release, developmentAssembly] = await Promise.all([
+    readFile(new URL('scripts/materialize-dev-release.sh', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('development/assembly/src/main.rs', BACKEND_ROOT), 'utf8'),
+  ]);
 
   assert.match(release, /--package hermes-attachment-preview-runtime/);
   assert.match(release, /--package hermes-attachment-preview-assembly/);
@@ -537,6 +612,12 @@ test('development release builds and signs the exact Preview assembly fragment',
   assert.doesNotMatch(
     release,
     /attachment_preview_assembly=.*(?:communications|attachment-security)/,
+  );
+  assert.match(developmentAssembly, /ATTACHMENT_PREVIEW_RUNTIME_ARTIFACT/);
+  assert.match(developmentAssembly, /ATTACHMENT_PREVIEW_STORAGE_ARTIFACT/);
+  assert.match(
+    developmentAssembly,
+    /runtime_artifact_id: ATTACHMENT_PREVIEW_RUNTIME_ARTIFACT[\s\S]*runtime_kind: ModuleRuntimeKindV1::Workflow/,
   );
 });
 

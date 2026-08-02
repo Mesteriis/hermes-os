@@ -180,7 +180,7 @@ test('summary runtime and assembly expose only exact event request and release b
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_preview_sse_cursor_v1',
+    'attachment_preview_retained_evidence_replay_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages
