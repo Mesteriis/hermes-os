@@ -7,9 +7,18 @@ use sha2::{Digest, Sha256};
 pub const MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1: u32 = 23;
 pub const MAIL_RETAINED_EVIDENCE_REPLAY_SCHEMA_V1: &[u8] =
     include_bytes!("../migrations/0001_retained_evidence_replay.sql");
+pub const MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_STORAGE_BUNDLE_REVISION_V1: u32 = 24;
+pub const MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_SCHEMA_V1: &[u8] =
+    include_bytes!("../migrations/0002_retained_evidence_replay_delivery.sql");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailRetainedEvidenceReplaySchemaErrorV1 {
+    InvalidPredecessor,
+    InvalidSuccessor,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailRetainedEvidenceReplayDeliverySchemaErrorV1 {
     InvalidPredecessor,
     InvalidSuccessor,
 }
@@ -36,6 +45,31 @@ pub fn append_mail_retained_evidence_replay_storage_v1(
     validate_storage_bundle(&predecessor)
         .map(|()| predecessor)
         .map_err(|_| MailRetainedEvidenceReplaySchemaErrorV1::InvalidSuccessor)
+}
+
+pub fn append_mail_retained_evidence_replay_delivery_storage_v1(
+    mut predecessor: StorageBundleV1,
+) -> Result<StorageBundleV1, MailRetainedEvidenceReplayDeliverySchemaErrorV1> {
+    if predecessor.major != 1
+        || predecessor.revision
+            != MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_STORAGE_BUNDLE_REVISION_V1 - 1
+        || predecessor.bundle_id != "mail_state"
+        || predecessor.owner_id != "mail"
+        || predecessor.steps.last().map(|step| step.revision) != Some(predecessor.revision)
+        || validate_storage_bundle(&predecessor).is_err()
+    {
+        return Err(MailRetainedEvidenceReplayDeliverySchemaErrorV1::InvalidPredecessor);
+    }
+    predecessor.steps.push(StorageMigrationStepV1 {
+        revision: MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_STORAGE_BUNDLE_REVISION_V1,
+        migration_id: "mail_retained_evidence_replay_delivery".to_owned(),
+        forward_sql_utf8: MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_SCHEMA_V1.to_vec(),
+        sha256: Sha256::digest(MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_SCHEMA_V1).to_vec(),
+    });
+    predecessor.revision = MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_STORAGE_BUNDLE_REVISION_V1;
+    validate_storage_bundle(&predecessor)
+        .map(|()| predecessor)
+        .map_err(|_| MailRetainedEvidenceReplayDeliverySchemaErrorV1::InvalidSuccessor)
 }
 
 #[cfg(test)]
@@ -84,5 +118,28 @@ mod tests {
             append_mail_retained_evidence_replay_storage_v1(predecessor("communications")),
             Err(MailRetainedEvidenceReplaySchemaErrorV1::InvalidPredecessor)
         );
+    }
+
+    #[test]
+    fn appends_owner_local_command_inbox_and_result_outbox() {
+        let predecessor = append_mail_retained_evidence_replay_storage_v1(predecessor("mail"))
+            .expect("replay predecessor");
+        let bundle = append_mail_retained_evidence_replay_delivery_storage_v1(predecessor)
+            .expect("delivery successor");
+        assert_eq!(bundle.revision, 24);
+        let sql = String::from_utf8(
+            bundle
+                .steps
+                .last()
+                .expect("delivery step")
+                .forward_sql_utf8
+                .clone(),
+        )
+        .expect("utf8");
+        assert!(sql.contains("mail_retained_evidence_replay_command_inbox"));
+        assert!(sql.contains("mail_retained_evidence_replay_result_outbox"));
+        assert!(sql.contains("exact_envelope_bytes"));
+        assert!(!sql.contains("communications_"));
+        assert!(!sql.contains("UPDATE hermes_data.mail_attachment_security_outbox"));
     }
 }

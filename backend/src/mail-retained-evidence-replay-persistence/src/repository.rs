@@ -50,7 +50,7 @@ pub enum RetainedMailReplayErrorV1 {
 
 #[derive(Clone)]
 pub struct MailRetainedEvidenceReplayPersistenceV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl MailRetainedEvidenceReplayPersistenceV1 {

@@ -49,7 +49,7 @@ pub enum RetainedCommunicationsReplayErrorV1 {
 
 #[derive(Clone)]
 pub struct CommunicationsRetainedEvidenceReplayPersistenceV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl CommunicationsRetainedEvidenceReplayPersistenceV1 {

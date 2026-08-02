@@ -3428,6 +3428,7 @@ name = "hermes-communications-retained-evidence-replay-persistence"
 version = "0.1.0"
 dependencies = [
  "hermes-communications-attachment-contract",
+ "hermes-communications-retained-evidence-replay-contract",
  "hermes-events-protocol",
  "hermes-storage-protocol",
  "prost 0.14.4",
@@ -4072,6 +4073,7 @@ version = "0.1.0"
 dependencies = [
  "hermes-attachment-security-contract",
  "hermes-events-protocol",
+ "hermes-mail-retained-evidence-replay-contract",
  "hermes-storage-protocol",
  "prost 0.14.4",
  "prost-types 0.14.4",

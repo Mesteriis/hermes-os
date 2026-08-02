@@ -14,8 +14,10 @@ surface = "persistence"
 
 [dependencies]
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }
+hermes-communications-retained-evidence-replay-contract = { path = "../communications-retained-evidence-replay-contract" }
 hermes-events-protocol = { path = "../platform/events" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
+prost = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }
 sqlx = { version = "=0.9.0", default-features = false, features = ["postgres", "runtime-tokio", "tls-rustls-ring"] }
 

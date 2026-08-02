@@ -4,8 +4,8 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: protocol and producer-local persistence foundations
-implemented, gate planned.
+Состояние реализации: protocol, producer-local persistence, exact-byte adapters
+и durable delivery foundations implemented; gate planned.
 Диагностический browser gate Preview подтвердил, что generated Start/Get
 проходят через Core Gateway и один shared SSE stream, но source events старше
 bounded JetStream retention уже отсутствуют в broker. Отдельный workflow-owned
@@ -20,12 +20,19 @@ revision 17. Integration build unit
 `hermes-mail-retained-evidence-replay-persistence` аналогично индексирует только
 собственный `mail_attachment_security_outbox`, проверяет exact scan-candidate
 contract и добавляет Mail storage successor revision 23. Producer-local publish
-adapters получают разные owner-specific command/result contracts:
+adapters реализованы поверх разных owner-specific command/result contracts:
 `hermes-communications-retained-evidence-replay-contract` и
 `hermes-mail-retained-evidence-replay-contract`; их wire schemas не импортируют
-workflow protocol или реализацию другого owner. Producer adapters, workflow
-runtime и live conformance ещё не реализованы. Никакая SQL-правка publish state
-не считается реализацией этого решения.
+workflow protocol или реализацию другого owner. Оба adapters сверяют exact
+registration/runtime/grant fences, получают original owner-local bytes,
+фиксируют append-only audit и публикуют их без decode/re-encode и без изменения
+исходного outbox publish state. Additive Communications revision 18 и Mail
+revision 24 добавляют раздельные owner-local command inbox и terminal result
+outbox: command ID/hash conflict проверяется до исполнения, а completed state и
+exact result bytes сохраняются атомарно. Durable command consumers, result
+relays, workflow runtime/assembly и live conformance ещё не реализованы.
+Никакая SQL-правка исходного publish state не считается реализацией этого
+решения.
 
 ## Контекст
 

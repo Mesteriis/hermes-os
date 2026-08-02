@@ -201,3 +201,67 @@ test('producer adapters publish only verified original bytes with append-only au
   assert.doesNotMatch(communications, /hermes_mail|mail_/);
   assert.doesNotMatch(mail, /hermes_communications|communications_/);
 });
+
+test('producer replay delivery is durable owner-local and never rewrites source evidence', async () => {
+  const [communicationsDelivery, communicationsMigration, communicationsBundle,
+    mailDelivery, mailMigration, mailBundle] = await Promise.all([
+    read('src/communications-retained-evidence-replay-persistence/src/delivery.rs'),
+    read(
+      'src/communications-retained-evidence-replay-persistence/migrations/0002_retained_evidence_replay_delivery.sql',
+    ),
+    read('src/communications-runtime/src/storage_bundle.rs'),
+    read('src/mail-retained-evidence-replay-persistence/src/delivery.rs'),
+    read(
+      'src/mail-retained-evidence-replay-persistence/migrations/0002_retained_evidence_replay_delivery.sql',
+    ),
+    read('src/mail-runtime/src/storage_bundle.rs'),
+  ]);
+
+  for (const [delivery, migration] of [
+    [communicationsDelivery, communicationsMigration],
+    [mailDelivery, mailMigration],
+  ]) {
+    assert.match(delivery, /command_message_id: \[u8; 16\]/);
+    assert.match(delivery, /command_envelope_sha256: \[u8; 32\]/);
+    assert.match(delivery, /operation_id: \[u8; 16\]/);
+    assert.match(delivery, /FOR UPDATE/);
+    assert.match(delivery, /OutboxRecordV1::accept/);
+    assert.match(delivery, /decode_envelope_v1/);
+    assert.match(delivery, /SET state = 1/);
+    assert.match(delivery, /published_at_unix_seconds IS NULL/);
+    assert.match(migration, /command_inbox/);
+    assert.match(migration, /result_outbox/);
+    assert.match(migration, /exact_envelope_bytes/);
+    assert.doesNotMatch(migration, /UPDATE hermes_data/);
+    assert.doesNotMatch(delivery, /domain_outbox|attachment_security_outbox/);
+  }
+
+  assert.match(
+    communicationsBundle,
+    /append_communications_retained_evidence_replay_delivery_storage_v1/,
+  );
+  assert.match(mailBundle, /append_mail_retained_evidence_replay_delivery_storage_v1/);
+  assert.doesNotMatch(communicationsDelivery, /hermes_mail|mail_/);
+  assert.doesNotMatch(mailDelivery, /hermes_communications|communications_/);
+});
+
+test('replay delivery migrations are additive exact successor revisions', async () => {
+  const [communicationsSchema, mailSchema] = await Promise.all([
+    read('src/communications-retained-evidence-replay-persistence/src/schema.rs'),
+    read('src/mail-retained-evidence-replay-persistence/src/schema.rs'),
+  ]);
+
+  assert.match(
+    communicationsSchema,
+    /COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_DELIVERY_STORAGE_BUNDLE_REVISION_V1: u32 = 18/,
+  );
+  assert.match(
+    mailSchema,
+    /MAIL_RETAINED_EVIDENCE_REPLAY_DELIVERY_STORAGE_BUNDLE_REVISION_V1: u32 = 24/,
+  );
+  assert.match(
+    communicationsSchema,
+    /append_communications_retained_evidence_replay_delivery_storage_v1/,
+  );
+  assert.match(mailSchema, /append_mail_retained_evidence_replay_delivery_storage_v1/);
+});
