@@ -718,3 +718,7 @@ canonical attachment anchor. Exact durable message выбирают и ауди�
 Communications и Mail в собственных replay indexes после двух typed event
 commands; Kernel/Gateway/Event Hub не получают business selection, frontend не
 получает provider registrations и продолжает terminal lifecycle через один SSE.
+ADR-0378 выделяет attachment translation в отдельный workflow owner. Source
+Text Extraction передаётся только exact durable events и target-bound Blob,
+AI Engine получает distinct attachment-translation use-case contract, а
+Communications, provider integration, Kernel и Gateway не становятся facade.

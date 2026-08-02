@@ -687,7 +687,13 @@
       "role": "workflow",
       "owner": "attachment_translation",
       "state": "planned",
-      "dependsOn": ["attachment_text_extraction_v1"]
+      "dependsOn": [
+        "attachment_text_extraction_v1",
+        "ai_inference_v1",
+        "ollama_ai_provider_v1",
+        "capability_routed_module_request_rpc_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "communications_call_evidence_v1",

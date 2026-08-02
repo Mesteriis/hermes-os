@@ -1,0 +1,259 @@
+# ADR-0378: Bounded attachment translation workflow
+
+Статус: Принято
+
+Дата: 2026-08-02
+
+Состояние реализации: запланировано. Этот ADR фиксирует owner, build units,
+event-only source handoff и admission evidence для `attachment_translation_v1`.
+До реализации всех phase gates inventory state остаётся `planned`; наличие
+контрактов, skeleton runtime или canned translation не является переносом.
+
+Уточняет:
+
+- [ADR-0201](ADR-0201-core-module-communication-and-nats.md);
+- [ADR-0204](ADR-0204-bundled-integration-plugins-and-provider-neutral-context-boundary.md);
+- [ADR-0205](ADR-0205-core-gateway-and-client-transport.md);
+- [ADR-0212](ADR-0212-crate-topology-and-compile-isolation.md);
+- [ADR-0213](ADR-0213-code-ownership-and-module-autonomy.md);
+- [ADR-0220](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
+- [ADR-0226](ADR-0226-ai-context-acquisition-through-use-case-workflows.md);
+- [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
+- [ADR-0356](ADR-0356-renewable-blob-authority-for-durable-ai-workflows.md);
+- [ADR-0360](ADR-0360-current-custodian-target-bound-blob-redelegation.md);
+- [ADR-0363](ADR-0363-communication-translation-workflow-and-ai-contracts.md);
+- [ADR-0371](ADR-0371-bounded-attachment-text-extraction-workflow.md).
+
+## Контекст
+
+Historical frontend предлагал attachment translation как режим общего
+translation handler. Такой surface скрывал четыре разных authority:
+
+- Communications или provider integration владеет исходным attachment evidence;
+- Attachment Security допускает обработку immutable bytes;
+- Attachment Text Extraction владеет derived textual artifact;
+- AI Engine и concrete provider выполняют inference.
+
+Clean-room уже разделяет этих owners. `attachment_text_extraction_v1` создаёт
+bounded derived text после safety и custody checks, а
+`communication_translation_v1` переводит только один canonical communication
+evidence item. Ни один из них не является facade для attachment translation.
+
+Прямой вызов Text Extraction query/read API из нового workflow нарушил бы
+event-only owner boundary и связал бы две independently restartable runtime.
+Передача client content ticket также неверна: ticket session-bound и имеет
+client audience, тогда как durable workflow требует target-bound Blob custody.
+
+## Решение
+
+### Owner и scope
+
+`attachment_translation_v1` принадлежит отдельному workflow owner
+`attachment_translation`.
+
+В scope V1 входят:
+
+- перевод одного уже извлечённого attachment text artifact;
+- exact target languages `english`, `russian` и `spanish`;
+- bounded translated UTF-8 candidate;
+- detected source language, completeness и confidence;
+- durable lifecycle, idempotency, restart и replay;
+- private result read через one-use client Blob ticket.
+
+Не входят:
+
+- extraction, OCR, archive traversal или preview rendering;
+- изменение canonical attachment или Communications evidence;
+- thread/batch translation;
+- caller-selected provider, model, endpoint, prompt или arbitrary options;
+- recording, transcription, summary или task/note promotion.
+
+### Build units и SRP
+
+Workflow вводит шесть отдельных Cargo packages:
+
+```text
+hermes-attachment-translation-api
+hermes-attachment-translation-ingress
+hermes-attachment-translation-core
+hermes-attachment-translation-persistence
+hermes-attachment-translation-runtime
+hermes-attachment-translation-assembly
+```
+
+Причины изменения разделены функционально:
+
+- `api` — generated client Start/Get/Read и status/result schemas;
+- `ingress` — exact durable source request/prepared/rejected schemas;
+- `core` — pure validation, idempotency fingerprint и lifecycle;
+- `persistence` — owner-local runs, inbox/outbox, jobs и realtime sequence;
+- `runtime` — event orchestration, Blob custody и AI request routing;
+- `assembly` — unsigned descriptor, settings, Storage bundle и release fragment.
+
+Attachment Text Extraction получает зависимость только на public
+`hermes-attachment-translation-ingress`. Attachment Translation runtime не
+импортирует Text Extraction, Communications, Attachment Security, AI Engine,
+Ollama, Blob, Kernel или Gateway implementation/storage packages.
+
+`attachment_translation` является workflow, не domain и не integration.
+Ollama остаётся integration, AI остаётся engine, а Text Extraction остаётся
+отдельным workflow owner.
+
+### Client contract
+
+Client command принимает:
+
+```protobuf
+message StartAttachmentTranslationRequestV1 {
+  uint32 protocol_major = 1;
+  bytes operation_id = 2;
+  bytes source_extraction_run_id = 3;
+  uint64 expected_source_revision = 4;
+  AttachmentTranslationLanguageV1 target_language = 5;
+}
+```
+
+`source_extraction_run_id` является provider-neutral identity готового
+Text Extraction run. Provider/account/file path/name/content type в контракте
+запрещены. Start возвращает durable receipt; accepted не означает completion.
+Get и replayable SSE содержат только identity, state, revision, language,
+bounded size/digest metadata и typed error. Source или translated text в них
+запрещены.
+
+Terminal result читается отдельным `ReadTranslation` через target-bound Blob и
+one-use client ticket с platform response ceiling. Result является candidate и
+не mutates source evidence.
+
+### Event-only source handoff
+
+```text
+Authenticated client Start
+↓ client_rpc
+Attachment Translation workflow
+↓ attachment_translation.source.requested.v1
+Attachment Text Extraction owner consumer
+↓ current-run/revision/custody validation
+Blob custody redelegation to attachment_translation audience
+↓ attachment_translation.source.prepared.v1 | source.rejected.v1
+Attachment Translation workflow
+↓ ai.attachment-translation.request.v1
+AI Engine
+↓ ai.provider.translate.v1
+configured local provider integration
+```
+
+Source request содержит logical owner, workflow/run identity, exact extraction
+run identity/revision и target capability. Он не содержит text, Blob authority,
+provider identity или caller-selected audience. Text Extraction owner сам
+выбирает current derived artifact и получает новый target-bound Blob receipt.
+
+Workflow не вызывает Attachment Text Extraction RPC и не читает его storage.
+Text Extraction не вызывает Attachment Translation runtime. Оба обмениваются
+только exact `DurableEnvelopeV1` events с inbox ID/hash verification и durable
+Ack после committed mutation.
+
+### AI contract
+
+AI Engine получает distinct capability
+`ai.attachment-translation.request.v1` и generated
+`AttachmentTranslationInferenceRequestV1`. Это отдельный use-case contract, а
+не mode в `CommunicationTranslationInferenceRequestV1`.
+
+Request содержит authenticated owner context, `AiContextReceiptV1`, exact
+source Blob receipt, target language и fixed output budget. AI Engine может
+переиспользовать provider-facing `ai.provider.translate.v1`, поскольку
+provider adapter выполняет один exact translation operation, но caller не
+выбирает provider/model/endpoint/prompt.
+
+AI persistence хранит receipts, lifecycle и translated candidate. Private
+source material материализуется только через Blob authority текущего audience.
+Ollama или другой provider не импортирует Attachment Translation workflow.
+
+### Persistence и recovery
+
+Workflow state machine:
+
+```text
+accepted
+→ awaiting_source
+→ awaiting_inference
+→ materializing_result
+→ ready | rejected
+```
+
+Owner-local persistence ключуется `(logical_owner_id, operation_id)` и хранит
+request fingerprint. Exact duplicate возвращает тот же receipt/result; тот же
+operation ID с другим payload отклоняется.
+
+Persistence хранит только identities, revisions, receipts, digests, lifecycle,
+typed failures, inbox/outbox bytes и realtime metadata. Source text и translated
+text не попадают в SQL workflow owner: translated private bytes хранятся в Blob
+и читаются через bounded ticket. Raw provider response также запрещён.
+
+Recovery выбирает только non-terminal runs current logical owner и повторяет
+только idempotent external steps. Runtime generation, grant epoch, Storage
+binding, source custody и AI route проверяются перед каждым external action.
+Restart, revoke или stale generation инвалидируют старые authorities и не могут
+продолжить run.
+
+### Kernel и Gateway boundary
+
+Новые Kernel API не вводятся. Используются существующие signed managed workflow
+admission, owner-local Storage binding, capability-routed client/request RPC,
+NATS durable events/Ack, target-bound Blob custody и shared replayable client
+SSE.
+
+Kernel и Gateway не компилируют Attachment Translation schema, не читают
+private content, не выбирают AI provider и не становятся workflow facade.
+
+## Phase gate
+
+`attachment_translation_v1` становится `implemented` только атомарно после:
+
+1. шести отдельных workflow units и compile-isolation checks;
+2. generated Start/Get/Read/realtime contracts без provider/model/prompt;
+3. exact event-only Text Extraction source request/prepared/rejected flow;
+4. target-bound Blob redelegation и stale source/revision/custody negatives;
+5. distinct AI Engine attachment-translation contract;
+6. owner-local atomic persistence, inbox/outbox, replay и recovery;
+7. signed release admission runtime/storage artifacts;
+8. authenticated Gateway Start/Get/Read и replayable SSE;
+9. wrong-owner, conflict, unsupported language, oversize, provider failure,
+   restart, revoke, grant/generation fence и privacy negatives;
+10. managed positive contour через настоящий local AI provider process;
+11. architecture, Cargo boundaries, formatting, Clippy, workspace/integration,
+    frontend и full pre-push gates.
+
+До выполнения всех пунктов inventory state остаётся `planned`. Skeleton,
+identity translation, fixture/canned provider response, direct source RPC,
+client-ticket reuse или legacy REST facade не открывают gate.
+
+## Последствия
+
+- Attachment translation получает собственную lifecycle и persistence
+  authority без превращения Communications в AI facade.
+- Text Extraction остаётся source owner и не становится orchestration runtime.
+- AI use-case contracts остаются distinct, а concrete provider остаётся
+  integration.
+- Цена решения — отдельные event contracts и build units; это необходимо для
+  restart, privacy, grants и функционального SRP.
+
+## Отклонённые варианты
+
+### Добавить attachment mode в Communication Translation
+
+Смешивает canonical communication source и derived attachment artifact,
+разные custody proofs и разные причины изменения.
+
+### Читать Text Extraction через client RPC
+
+Создаёт synchronous workflow-to-workflow dependency и переиспользует
+client-scoped authority для durable orchestration.
+
+### Передать extracted text в durable event
+
+Размещает private content в NATS/outbox/inbox и нарушает privacy boundary.
+
+### Реализовать перевод внутри Text Extraction runtime
+
+Смешивает extraction/parser lifecycle с AI orchestration и provider policy.
