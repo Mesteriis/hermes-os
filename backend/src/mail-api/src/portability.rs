@@ -1,17 +1,19 @@
 //! Mail-owned validation for the non-secret portability contract.
 
 use crate::{
-    GmailApiEndpointV1, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
+    GOOGLE_PEOPLE_API_HOST_V1, GOOGLE_PEOPLE_API_PORT_V1, GmailApiEndpointV1,
+    GmailOAuthConfigurationV1, GmailOAuthEndpointV1, ICLOUD_CARDDAV_BASE_PATH_V1,
+    ICLOUD_CARDDAV_HOST_V1, ICLOUD_CARDDAV_PORT_V1,
     MailAccountConfigurationV1 as RuntimeMailAccountConfigurationV1,
-    MailAddressBookConfigurationV1, MailAddressBookProviderV1, MailGmailConfigurationV1,
-    MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1,
-    portability_wire_generated as wire, valid_account_configuration,
-    valid_address_book_configuration, valid_gmail_oauth_configuration,
+    MailAddressBookConfigurationV1, MailAddressBookProviderV1, MailAddressBookTlsEndpointV1,
+    MailCardDavEndpointV1, MailGmailConfigurationV1, MailImapConfigurationV1,
+    MailInboundTransportV1, SmtpEndpointV1, portability_wire_generated as wire,
+    valid_account_configuration, valid_address_book_configuration, valid_gmail_oauth_configuration,
 };
 
 pub const MAIL_ACCOUNT_EXPORT_MAJOR_V1: u32 = 1;
 pub const MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 2;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 3;
 const MAX_REGISTRATION_ID_BYTES: usize = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,6 +70,23 @@ fn address_book_configuration(
     Ok(MailAddressBookConfigurationV1 {
         provider,
         carddav_username: configuration.carddav_username.clone(),
+        google_people_endpoint: (provider == MailAddressBookProviderV1::GooglePeople).then(|| {
+            MailAddressBookTlsEndpointV1 {
+                host: GOOGLE_PEOPLE_API_HOST_V1.to_owned(),
+                port: GOOGLE_PEOPLE_API_PORT_V1,
+                ca_certificate_pem: None,
+            }
+        }),
+        carddav_endpoint: (provider == MailAddressBookProviderV1::IcloudCardDav).then(|| {
+            MailCardDavEndpointV1 {
+                tls: MailAddressBookTlsEndpointV1 {
+                    host: ICLOUD_CARDDAV_HOST_V1.to_owned(),
+                    port: ICLOUD_CARDDAV_PORT_V1,
+                    ca_certificate_pem: None,
+                },
+                base_path: ICLOUD_CARDDAV_BASE_PATH_V1.to_owned(),
+            }
+        }),
     })
 }
 

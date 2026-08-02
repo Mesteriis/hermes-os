@@ -129,6 +129,7 @@ hermes-knowledge-command-api = { path = "../../../src/knowledge-command-api" }
 hermes-knowledge-persistence = { path = "../../../src/knowledge-persistence" }
 hermes-knowledge-runtime = { path = "../../../src/knowledge-runtime" }
 hermes-mail-api = { path = "../../../src/mail-api" }
+hermes-mail-address-book-contract = { path = "../../../src/mail-address-book-contract" }
 hermes-mail-core = { path = "../../../src/mail-core" }
 hermes-mail-gmail = { path = "../../../src/mail-gmail", features = ["conformance-test-support"] }
 hermes-mail-persistence = { path = "../../../src/mail-persistence", features = ["conformance-test-support"] }

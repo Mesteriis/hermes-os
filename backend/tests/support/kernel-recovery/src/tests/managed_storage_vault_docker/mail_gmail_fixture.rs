@@ -54,6 +54,7 @@ pub(super) struct MailGmailFixture {
     ca_certificate_pem: String,
     accepted_mutations: Arc<AtomicUsize>,
     accepted_reads: Arc<AtomicUsize>,
+    accepted_people_reads: Arc<AtomicUsize>,
     last_request: Arc<Mutex<Option<GmailSentRequestV1>>>,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
@@ -81,10 +82,12 @@ impl MailGmailFixture {
         let port = listener.local_addr().expect("Gmail fixture address").port();
         let accepted_mutations = Arc::new(AtomicUsize::new(0));
         let accepted_reads = Arc::new(AtomicUsize::new(0));
+        let accepted_people_reads = Arc::new(AtomicUsize::new(0));
         let last_request = Arc::new(Mutex::new(None));
         let shutdown = Arc::new(AtomicBool::new(false));
         let worker_mutations = Arc::clone(&accepted_mutations);
         let worker_reads = Arc::clone(&accepted_reads);
+        let worker_people_reads = Arc::clone(&accepted_people_reads);
         let worker_request = Arc::clone(&last_request);
         let worker_shutdown = Arc::clone(&shutdown);
         let worker = thread::spawn(move || {
@@ -107,6 +110,7 @@ impl MailGmailFixture {
                             &mut stream,
                             &worker_mutations,
                             &worker_reads,
+                            &worker_people_reads,
                             &worker_request,
                         );
                     }
@@ -122,6 +126,7 @@ impl MailGmailFixture {
             ca_certificate_pem,
             accepted_mutations,
             accepted_reads,
+            accepted_people_reads,
             last_request,
             shutdown,
             worker: Some(worker),
@@ -142,6 +147,10 @@ impl MailGmailFixture {
 
     pub(super) fn accepted_reads(&self) -> usize {
         self.accepted_reads.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn accepted_people_reads(&self) -> usize {
+        self.accepted_people_reads.load(Ordering::SeqCst)
     }
 
     pub(super) fn last_request(&self) -> GmailSentRequestV1 {
@@ -169,6 +178,7 @@ fn serve_connection(
     stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
     accepted_mutations: &AtomicUsize,
     accepted_reads: &AtomicUsize,
+    accepted_people_reads: &AtomicUsize,
     last_request: &Mutex<Option<GmailSentRequestV1>>,
 ) {
     let request_line = read_line(stream);
@@ -199,7 +209,7 @@ fn serve_connection(
     }
     match method {
         "GET" => {
-            serve_get(stream, &path);
+            serve_get(stream, &path, &headers, accepted_people_reads);
             accepted_reads.fetch_add(1, Ordering::SeqCst);
         }
         "POST" => serve_send(stream, &path, &headers, accepted_mutations, last_request),
@@ -207,7 +217,12 @@ fn serve_connection(
     }
 }
 
-fn serve_get(stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>, path: &str) {
+fn serve_get(
+    stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
+    path: &str,
+    headers: &BTreeMap<String, String>,
+    accepted_people_reads: &AtomicUsize,
+) {
     let body = if path.starts_with("/gmail/v1/users/me/messages?") {
         serde_json::to_vec(&serde_json::json!({
             "messages": [{
@@ -238,6 +253,24 @@ fn serve_get(stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>, pa
             "historyId": "101"
         }))
         .expect("encode Gmail history response")
+    } else if path.starts_with("/v1/people/me/connections?") {
+        assert_eq!(
+            headers.get("authorization").map(String::as_str),
+            Some("Bearer managed-mail-gmail-access-token")
+        );
+        accepted_people_reads.fetch_add(1, Ordering::SeqCst);
+        serde_json::to_vec(&serde_json::json!({
+            "connections": [{
+                "resourceName": "people/managed-contact-1",
+                "etag": "managed-etag-1",
+                "metadata": {"deleted": false},
+                "names": [{"displayName": "Private Managed Contact"}],
+                "emailAddresses": [{"value": "private-managed-contact@example.test"}],
+                "phoneNumbers": [{"value": "+12025550125"}]
+            }],
+            "nextSyncToken": "sync-token-must-not-be-page-token"
+        }))
+        .expect("encode Google People response")
     } else {
         panic!("unsupported Gmail fixture GET path: {path}");
     };

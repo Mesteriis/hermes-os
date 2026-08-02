@@ -35,7 +35,7 @@ test('text extraction is an implemented workflow and not a Communications facade
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_provider_pagination_v1',
+    'mail_address_book_managed_provider_conformance_v1',
   );
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',

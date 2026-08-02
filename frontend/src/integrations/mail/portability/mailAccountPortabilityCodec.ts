@@ -28,10 +28,15 @@ import type {
 	OwnerSettingEntryV1,
 } from '../../../gen/hermes/gateway/v1/owner_module_settings_pb'
 import type { OwnerSettingInputV1 } from '../../../platform/settings'
+import {
+	mailAddressBookSettingsInputsV1,
+	readMailAddressBookPortabilityV1,
+	validMailAddressBookPortabilityV1,
+} from './mailAddressBookPortabilityCodec'
 
 export const MAIL_ACCOUNT_EXPORT_MAJOR_V1 = 1
 export const MAIL_SETTINGS_SCHEMA_MAJOR_V2 = 2
-export const MAIL_SETTINGS_SCHEMA_REVISION_V2 = 1
+export const MAIL_SETTINGS_SCHEMA_REVISION_V2 = 3
 
 const settingIds = {
 	connectionId: 'mail.connection_id',
@@ -79,6 +84,7 @@ export function buildMailAccountExportV1(
 	if (connectionId !== status.connectionId) throw invalidExport()
 	const inboundKind = values.string(settingIds.inboundKind)
 	const smtpEnabled = values.boolean(settingIds.smtpEnabled)
+	const addressBook = readMailAddressBookPortabilityV1(values, inboundKind)
 	const configuration = create(MailAccountConfigurationV1Schema, {
 		connectionId,
 		syncWindow: values.u32(settingIds.syncWindow),
@@ -131,6 +137,8 @@ export function buildMailAccountExportV1(
 				caCertificatePem: values.optionalString(settingIds.smtpCa),
 			})
 			: undefined,
+		addressBookProvider: addressBook.provider,
+		carddavUsername: addressBook.carddavUsername,
 	})
 	const exported = create(MailAccountExportV1Schema, {
 		major: MAIL_ACCOUNT_EXPORT_MAJOR_V1,
@@ -173,6 +181,7 @@ export function mailAccountExportSettingsInputs(
 	validateMailAccountExportV1(exported)
 	const configuration = exported.configuration!
 	const inputs: OwnerSettingInputV1[] = [
+		...mailAddressBookSettingsInputsV1(configuration),
 		stringInput(settingIds.connectionId, configuration.connectionId),
 		unsignedInput(settingIds.syncWindow, configuration.syncWindow),
 		unsignedInput(settingIds.syncWindows, configuration.syncWindows),
@@ -248,6 +257,7 @@ export function validateMailAccountExportV1(exported: MailAccountExportV1): void
 		|| configuration.syncWindow <= 0
 		|| configuration.syncWindows <= 0
 		|| configuration.inbound.case === undefined
+		|| !validMailAddressBookPortabilityV1(configuration)
 		|| exported.connectorProfile === MailExportConnectorProfileV1.MAIL_EXPORT_CONNECTOR_PROFILE_UNSPECIFIED
 		|| exported.readiness === MailExportAccountReadinessV1.MAIL_EXPORT_ACCOUNT_READINESS_UNSPECIFIED
 		|| exported.syncReadiness === MailExportProviderPathReadinessV1.MAIL_EXPORT_PROVIDER_PATH_READINESS_UNSPECIFIED

@@ -12,6 +12,7 @@ import {
 	OwnerSettingEntryV1Schema,
 	OwnerSettingValueV1Schema,
 } from '../../../gen/hermes/gateway/v1/owner_module_settings_pb'
+import { MailAddressBookProviderV1 } from '../../../gen/hermes/mail/portability/v1/portability_pb'
 import {
 	buildMailAccountExportV1,
 	mailAccountExportSettingsInputs,
@@ -24,9 +25,10 @@ describe('Mail account portability codec', () => {
 		const settings = create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema, {
 			registrationId: 'mail-registration',
 			schemaMajor: 2,
-			schemaRevision: 1,
+			schemaRevision: 3,
 			effectiveRevision: 7n,
 			values: [
+				stringSetting('mail.address_book.provider', 'none'),
 				stringSetting('mail.connection_id', 'mail-account'),
 				stringSetting('mail.inbound.kind', 'imap'),
 				stringSetting('mail.imap.host', 'imap.example.test'),
@@ -60,7 +62,7 @@ describe('Mail account portability codec', () => {
 			major: 1,
 			sourceRegistrationId: 'mail-registration',
 			settingsSchemaMajor: 2,
-			settingsSchemaRevision: 1,
+			settingsSchemaRevision: 3,
 			effectiveSettingsRevision: 7n,
 			configuration: {
 				connectionId: 'mail-account',
@@ -86,14 +88,63 @@ describe('Mail account portability codec', () => {
 		})
 	})
 
+	it('round-trips CardDAV authority without credential or custom endpoint data', () => {
+		const settings = create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema, {
+			registrationId: 'mail-registration',
+			schemaMajor: 2,
+			schemaRevision: 3,
+			effectiveRevision: 4n,
+			values: [
+				stringSetting('mail.address_book.provider', 'icloud_carddav'),
+				stringSetting('mail.address_book.carddav_username', 'owner@example.test'),
+				stringSetting('mail.address_book.carddav_host', 'contacts.icloud.com'),
+				unsignedSetting('mail.address_book.carddav_port', 443n),
+				stringSetting('mail.address_book.carddav_base_path', '/'),
+				stringSetting('mail.connection_id', 'mail-account'),
+				stringSetting('mail.inbound.kind', 'imap'),
+				stringSetting('mail.imap.host', 'imap.example.test'),
+				unsignedSetting('mail.imap.port', 993n),
+				stringSetting('mail.imap.username', 'owner@example.test'),
+				unsignedSetting('mail.sync.window', 100n),
+				unsignedSetting('mail.sync.windows', 2n),
+				booleanSetting('mail.smtp.enabled', false),
+			],
+		})
+		const status = create(MailAccountStatusV1Schema, {
+			connectionId: 'mail-account',
+			settingsRevision: 4n,
+			runtimeGeneration: 5n,
+			readiness: MailAccountReadinessV1.MAIL_ACCOUNT_READINESS_READY,
+			connectorProfile: MailConnectorProfileV1.MAIL_CONNECTOR_PROFILE_IMAP,
+			syncReadiness: MailProviderPathReadinessV1.MAIL_PROVIDER_PATH_READINESS_READY,
+			deliveryReadiness: MailProviderPathReadinessV1.MAIL_PROVIDER_PATH_READINESS_NOT_CONFIGURED,
+		})
+
+		const exported = buildMailAccountExportV1(settings, status, 10n)
+		const desired = mailAccountExportSettingsInputs(parseMailAccountExportV1(
+			serializeMailAccountExportV1(exported),
+		))
+
+		expect(exported.configuration?.addressBookProvider).toBe(
+			MailAddressBookProviderV1.MAIL_ADDRESS_BOOK_PROVIDER_ICLOUD_CARD_DAV,
+		)
+		expect(exported.configuration?.carddavUsername).toBe('owner@example.test')
+		expect(desired).toContainEqual({
+			settingId: 'mail.address_book.carddav_host',
+			value: { case: 'stringValue', value: 'contacts.icloud.com' },
+		})
+		expect(serializeMailAccountExportV1(exported)).not.toMatch(/password|credential|secret/i)
+	})
+
 	it('rejects unknown secret-looking fields instead of silently dropping them', () => {
 		const source = serializeMailAccountExportV1(buildMailAccountExportV1(
 			create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema, {
 				registrationId: 'mail-registration',
 				schemaMajor: 2,
-				schemaRevision: 1,
+				schemaRevision: 3,
 				effectiveRevision: 1n,
 				values: [
+					stringSetting('mail.address_book.provider', 'none'),
 					stringSetting('mail.connection_id', 'mail-account'),
 					stringSetting('mail.inbound.kind', 'imap'),
 					stringSetting('mail.imap.host', 'imap.example.test'),

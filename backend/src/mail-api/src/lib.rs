@@ -194,24 +194,88 @@ pub enum MailAddressBookProviderV1 {
     IcloudCardDav,
 }
 
+pub const GOOGLE_PEOPLE_API_HOST_V1: &str = "people.googleapis.com";
+pub const GOOGLE_PEOPLE_API_PORT_V1: u16 = 443;
+pub const ICLOUD_CARDDAV_HOST_V1: &str = "contacts.icloud.com";
+pub const ICLOUD_CARDDAV_PORT_V1: u16 = 443;
+pub const ICLOUD_CARDDAV_BASE_PATH_V1: &str = "/";
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailAddressBookTlsEndpointV1 {
+    pub host: String,
+    pub port: u16,
+    pub ca_certificate_pem: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MailCardDavEndpointV1 {
+    pub tls: MailAddressBookTlsEndpointV1,
+    pub base_path: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailAddressBookConfigurationV1 {
     pub provider: MailAddressBookProviderV1,
     pub carddav_username: Option<String>,
+    pub google_people_endpoint: Option<MailAddressBookTlsEndpointV1>,
+    pub carddav_endpoint: Option<MailCardDavEndpointV1>,
 }
 
 pub fn valid_address_book_configuration(
     configuration: &MailAddressBookConfigurationV1,
     inbound: &MailInboundTransportV1,
 ) -> bool {
+    valid_address_book_configuration_for_authority_v1(
+        configuration,
+        inbound,
+        AddressBookEndpointAuthorityV1::Production,
+    )
+}
+
+#[cfg(feature = "conformance-test-support")]
+pub fn valid_address_book_configuration_for_conformance_v1(
+    configuration: &MailAddressBookConfigurationV1,
+    inbound: &MailInboundTransportV1,
+) -> bool {
+    valid_address_book_configuration_for_authority_v1(
+        configuration,
+        inbound,
+        AddressBookEndpointAuthorityV1::LoopbackConformance,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum AddressBookEndpointAuthorityV1 {
+    Production,
+    #[cfg(feature = "conformance-test-support")]
+    LoopbackConformance,
+}
+
+fn valid_address_book_configuration_for_authority_v1(
+    configuration: &MailAddressBookConfigurationV1,
+    inbound: &MailInboundTransportV1,
+    authority: AddressBookEndpointAuthorityV1,
+) -> bool {
     match configuration.provider {
-        MailAddressBookProviderV1::None => configuration.carddav_username.is_none(),
+        MailAddressBookProviderV1::None => {
+            configuration.carddav_username.is_none()
+                && configuration.google_people_endpoint.is_none()
+                && configuration.carddav_endpoint.is_none()
+        }
         MailAddressBookProviderV1::GooglePeople => {
             matches!(inbound, MailInboundTransportV1::Gmail(_))
                 && configuration.carddav_username.is_none()
+                && configuration.carddav_endpoint.is_none()
+                && configuration
+                    .google_people_endpoint
+                    .as_ref()
+                    .is_some_and(|endpoint| {
+                        valid_google_people_endpoint_for_authority_v1(endpoint, authority)
+                    })
         }
         MailAddressBookProviderV1::IcloudCardDav => {
             matches!(inbound, MailInboundTransportV1::Imap(_))
+                && configuration.google_people_endpoint.is_none()
                 && configuration
                     .carddav_username
                     .as_deref()
@@ -220,6 +284,79 @@ pub fn valid_address_book_configuration(
                             && value.len() <= 256
                             && !value.chars().any(char::is_control)
                     })
+                && configuration
+                    .carddav_endpoint
+                    .as_ref()
+                    .is_some_and(|endpoint| {
+                        valid_carddav_endpoint_for_authority_v1(endpoint, authority)
+                    })
+        }
+    }
+}
+
+#[must_use]
+pub fn valid_google_people_endpoint_v1(endpoint: &MailAddressBookTlsEndpointV1) -> bool {
+    valid_google_people_endpoint_for_authority_v1(
+        endpoint,
+        AddressBookEndpointAuthorityV1::Production,
+    )
+}
+
+#[must_use]
+pub fn valid_carddav_endpoint_v1(endpoint: &MailCardDavEndpointV1) -> bool {
+    valid_carddav_endpoint_for_authority_v1(endpoint, AddressBookEndpointAuthorityV1::Production)
+}
+
+fn valid_google_people_endpoint_for_authority_v1(
+    endpoint: &MailAddressBookTlsEndpointV1,
+    authority: AddressBookEndpointAuthorityV1,
+) -> bool {
+    valid_address_book_tls_endpoint_for_authority_v1(
+        endpoint,
+        GOOGLE_PEOPLE_API_HOST_V1,
+        GOOGLE_PEOPLE_API_PORT_V1,
+        authority,
+    )
+}
+
+fn valid_carddav_endpoint_for_authority_v1(
+    endpoint: &MailCardDavEndpointV1,
+    authority: AddressBookEndpointAuthorityV1,
+) -> bool {
+    valid_address_book_tls_endpoint_for_authority_v1(
+        &endpoint.tls,
+        ICLOUD_CARDDAV_HOST_V1,
+        ICLOUD_CARDDAV_PORT_V1,
+        authority,
+    ) && !endpoint.base_path.is_empty()
+        && endpoint.base_path.len() <= 2_048
+        && endpoint.base_path.starts_with('/')
+        && !endpoint.base_path.contains(['\r', '\n'])
+}
+
+fn valid_address_book_tls_endpoint_for_authority_v1(
+    endpoint: &MailAddressBookTlsEndpointV1,
+    production_host: &str,
+    production_port: u16,
+    authority: AddressBookEndpointAuthorityV1,
+) -> bool {
+    if !valid_host(&endpoint.host)
+        || endpoint
+            .ca_certificate_pem
+            .as_deref()
+            .is_some_and(|value| !valid_ca_certificate_pem(value))
+    {
+        return false;
+    }
+    match authority {
+        AddressBookEndpointAuthorityV1::Production => {
+            endpoint.host == production_host
+                && endpoint.port == production_port
+                && endpoint.ca_certificate_pem.is_none()
+        }
+        #[cfg(feature = "conformance-test-support")]
+        AddressBookEndpointAuthorityV1::LoopbackConformance => {
+            endpoint.port > 0 && matches!(endpoint.host.as_str(), "127.0.0.1" | "localhost")
         }
     }
 }
@@ -612,5 +749,51 @@ mod conformance_port_tests {
             port: 0,
             ca_certificate_pem: None,
         }));
+    }
+
+    #[test]
+    fn address_book_provider_requires_its_own_exact_endpoint_authority() {
+        let production_google = MailAddressBookTlsEndpointV1 {
+            host: GOOGLE_PEOPLE_API_HOST_V1.to_owned(),
+            port: GOOGLE_PEOPLE_API_PORT_V1,
+            ca_certificate_pem: None,
+        };
+        let production_carddav = MailCardDavEndpointV1 {
+            tls: MailAddressBookTlsEndpointV1 {
+                host: ICLOUD_CARDDAV_HOST_V1.to_owned(),
+                port: ICLOUD_CARDDAV_PORT_V1,
+                ca_certificate_pem: None,
+            },
+            base_path: ICLOUD_CARDDAV_BASE_PATH_V1.to_owned(),
+        };
+        assert!(valid_google_people_endpoint_v1(&production_google));
+        assert!(valid_carddav_endpoint_v1(&production_carddav));
+
+        let loopback_google = MailAddressBookTlsEndpointV1 {
+            host: "127.0.0.1".to_owned(),
+            port: 19_443,
+            ca_certificate_pem: None,
+        };
+        let loopback_carddav = MailCardDavEndpointV1 {
+            tls: MailAddressBookTlsEndpointV1 {
+                host: "localhost".to_owned(),
+                port: 19_444,
+                ca_certificate_pem: None,
+            },
+            base_path: "/contacts/".to_owned(),
+        };
+        assert!(!valid_google_people_endpoint_v1(&loopback_google));
+        assert!(!valid_carddav_endpoint_v1(&loopback_carddav));
+        #[cfg(feature = "conformance-test-support")]
+        {
+            assert!(valid_google_people_endpoint_for_authority_v1(
+                &loopback_google,
+                AddressBookEndpointAuthorityV1::LoopbackConformance,
+            ));
+            assert!(valid_carddav_endpoint_for_authority_v1(
+                &loopback_carddav,
+                AddressBookEndpointAuthorityV1::LoopbackConformance,
+            ));
+        }
     }
 }

@@ -8057,7 +8057,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'mail_address_book_provider_pagination_v1') {
+  if (currentSlice === 'mail_address_book_managed_provider_conformance_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY,

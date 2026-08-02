@@ -208,8 +208,13 @@ mod attachment_security_persistence_fixture;
 mod contacts_managed_flow;
 #[path = "managed_storage_vault_docker/contacts_managed_setup.rs"]
 mod contacts_managed_setup;
+#[path = "managed_storage_vault_docker/mail_address_book_provider_flow.rs"]
+mod mail_address_book_provider_flow;
 #[path = "managed_storage_vault_docker/mail_attachment_flow.rs"]
 mod mail_attachment_flow;
+#[path = "managed_storage_vault_docker/mail_carddav_fixture.rs"]
+mod mail_carddav_fixture;
+use mail_carddav_fixture::*;
 #[path = "managed_storage_vault_docker/mail_composition_flow.rs"]
 mod mail_composition_flow;
 #[path = "managed_storage_vault_docker/mail_delivery_test_support.rs"]

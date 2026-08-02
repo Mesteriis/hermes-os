@@ -2,6 +2,7 @@
 
 use super::*;
 
+use hermes_mail_address_book_contract::MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1;
 use hermes_mail_api::{
     MailCredentialPurpose,
     account::{MailBindCredentialRequestV1, MailCredentialPurposeV1},
@@ -65,6 +66,12 @@ pub(super) struct MailGmailOAuthFixtureSettingsV1 {
     pub(super) ca_certificate_pem: String,
 }
 
+pub(super) struct MailCardDavFixtureSettingsV1 {
+    pub(super) imap_port: u16,
+    pub(super) carddav_port: u16,
+    pub(super) ca_certificate_pem: String,
+}
+
 pub(super) struct SeededGmailCredentialBindingV1 {
     imap_password_record_id: SecretRecordId,
     smtp_password_record_id: SecretRecordId,
@@ -85,6 +92,13 @@ impl SeededGmailCredentialBindingV1 {
             contacts_write_authorized: false,
         }
     }
+
+    pub(super) fn contacts_binding(&self) -> GmailOAuthCredentialBindingV1 {
+        GmailOAuthCredentialBindingV1 {
+            contacts_write_authorized: true,
+            ..self.binding()
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -96,6 +110,8 @@ enum MailAdmissionProfileV1 {
     GmailDelivery,
     GmailAttachmentDelivery,
     GmailOAuth,
+    GooglePeopleAddressBook,
+    CardDavAddressBook,
 }
 
 enum MailSettingsProfileV1 {
@@ -104,6 +120,12 @@ enum MailSettingsProfileV1 {
         smtp: Option<MailSmtpFixtureSettingsV1>,
     },
     Gmail(MailGmailFixtureSettingsV1),
+    GooglePeopleAddressBook(MailGmailFixtureSettingsV1),
+    CardDavAddressBook {
+        imap_port: u16,
+        carddav_port: u16,
+        ca_certificate_pem: String,
+    },
 }
 
 pub(super) fn installed_communications_mail_release(root: &Path) -> InstalledSignedBundle {
@@ -181,6 +203,11 @@ pub(super) fn seed_mail_vault(vault_dir: &Path) -> SeededGmailCredentialBindingV
         MailCredentialPurpose::GmailRefreshCredential,
         SecretClassV1::OAuthRefreshCredential,
         b"managed-mail-gmail-refresh-credential",
+    );
+    let _carddav_password_record_id = store_basic_secret(
+        &store,
+        MailCredentialPurpose::IcloudCardDavPassword,
+        b"managed-mail-carddav-password",
     );
     SeededGmailCredentialBindingV1 {
         imap_password_record_id,
@@ -298,6 +325,14 @@ pub(super) fn admit_mail_gmail_attachment_delivery_runtime(
 
 pub(super) fn admit_mail_gmail_oauth_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
     admit_mail_runtime_profile(store, MailAdmissionProfileV1::GmailOAuth)
+}
+
+pub(super) fn admit_mail_google_people_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::GooglePeopleAddressBook)
+}
+
+pub(super) fn admit_mail_carddav_runtime(store: &SqliteControlStore) -> AdmittedMailRuntime {
+    admit_mail_runtime_profile(store, MailAdmissionProfileV1::CardDavAddressBook)
 }
 
 fn admit_mail_runtime_profile(
@@ -452,6 +487,16 @@ fn admit_mail_runtime_profile(
             MailClientContractV1::GmailOAuthStart
                 .capability_id()
                 .to_owned(),
+        ],
+        MailAdmissionProfileV1::GooglePeopleAddressBook => vec![
+            MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1.to_owned(),
+            MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
+        ],
+        MailAdmissionProfileV1::CardDavAddressBook => vec![
+            MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1.to_owned(),
+            MAIL_IMAP_CREDENTIALS_CAPABILITY_ID.to_owned(),
+            MAIL_STORAGE_CAPABILITY_ID.to_owned(),
         ],
     };
     capability_ids.push(MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1.to_owned());
@@ -734,6 +779,78 @@ pub(super) fn start_mail_gmail_delivery_runtime(
     )
 }
 
+pub(super) fn start_mail_google_people_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    admitted: AdmittedMailRuntime,
+    gmail: MailGmailFixtureSettingsV1,
+) -> StartedMailRuntime {
+    start_mail_runtime_with_settings(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        admitted,
+        MailSettingsProfileV1::GooglePeopleAddressBook(gmail),
+    )
+}
+
+pub(super) fn start_mail_carddav_runtime(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    admitted: AdmittedMailRuntime,
+    carddav: MailCardDavFixtureSettingsV1,
+) -> StartedMailRuntime {
+    seed_basic_mail_bindings(false);
+    seed_carddav_binding();
+    start_mail_runtime_with_settings(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        admitted,
+        MailSettingsProfileV1::CardDavAddressBook {
+            imap_port: carddav.imap_port,
+            carddav_port: carddav.carddav_port,
+            ca_certificate_pem: carddav.ca_certificate_pem,
+        },
+    )
+}
+
+fn seed_carddav_binding() {
+    let runtime = tokio::runtime::Runtime::new().expect("CardDAV binding runtime");
+    runtime.block_on(async {
+        let durable = super::mail_event_flow::connect_postgres().await;
+        if durable
+            .account_credential_binding(
+                MAIL_ACCOUNT_ID,
+                MailCredentialPurposeV1::IcloudCardDavPassword,
+            )
+            .await
+            .expect("query CardDAV credential binding")
+            .is_none()
+        {
+            durable
+                .bind_account_credential(
+                    &MailBindCredentialRequestV1 {
+                        connection_id: MAIL_ACCOUNT_ID.to_owned(),
+                        purpose: MailCredentialPurposeV1::IcloudCardDavPassword,
+                        expected_binding_revision: 0,
+                        credential_revision: 1,
+                    },
+                    MAIL_ACCOUNT_ID,
+                    1,
+                )
+                .await
+                .expect("seed CardDAV credential binding");
+        }
+    });
+}
+
 fn seed_basic_mail_bindings(include_smtp: bool) {
     let runtime = tokio::runtime::Runtime::new().expect("Mail binding runtime");
     runtime.block_on(async {
@@ -910,6 +1027,8 @@ fn mail_settings_snapshot(
         entry("mail.sync.window", Value::UnsignedIntegerValue(1)),
         entry("mail.sync.windows", Value::UnsignedIntegerValue(2)),
     ];
+    let google_people_enabled =
+        matches!(&profile, MailSettingsProfileV1::GooglePeopleAddressBook(_));
     match profile {
         MailSettingsProfileV1::Imap { port, smtp } => {
             values.extend([
@@ -947,7 +1066,8 @@ fn mail_settings_snapshot(
                 ]);
             }
         }
-        MailSettingsProfileV1::Gmail(gmail) => {
+        MailSettingsProfileV1::Gmail(gmail)
+        | MailSettingsProfileV1::GooglePeopleAddressBook(gmail) => {
             values.extend([
                 entry(
                     "mail.gmail.api_host",
@@ -969,6 +1089,26 @@ fn mail_settings_snapshot(
                 entry("mail.inbound.kind", Value::StringValue("gmail".to_owned())),
                 entry("mail.smtp.enabled", Value::BooleanValue(false)),
             ]);
+            if google_people_enabled {
+                values.extend([
+                    entry(
+                        "mail.address_book.google_people_ca_certificate_pem",
+                        Value::StringValue(gmail.ca_certificate_pem.clone()),
+                    ),
+                    entry(
+                        "mail.address_book.google_people_host",
+                        Value::StringValue("localhost".to_owned()),
+                    ),
+                    entry(
+                        "mail.address_book.google_people_port",
+                        Value::UnsignedIntegerValue(u64::from(gmail.port)),
+                    ),
+                    entry(
+                        "mail.address_book.provider",
+                        Value::StringValue("google_people".to_owned()),
+                    ),
+                ]);
+            }
             if let Some(oauth) = gmail.oauth {
                 values.extend([
                     entry(
@@ -1013,6 +1153,49 @@ fn mail_settings_snapshot(
                     ),
                 ]);
             }
+        }
+        MailSettingsProfileV1::CardDavAddressBook {
+            imap_port,
+            carddav_port,
+            ca_certificate_pem,
+        } => {
+            values.extend([
+                entry(
+                    "mail.address_book.carddav_base_path",
+                    Value::StringValue("/".to_owned()),
+                ),
+                entry(
+                    "mail.address_book.carddav_ca_certificate_pem",
+                    Value::StringValue(ca_certificate_pem),
+                ),
+                entry(
+                    "mail.address_book.carddav_host",
+                    Value::StringValue("localhost".to_owned()),
+                ),
+                entry(
+                    "mail.address_book.carddav_port",
+                    Value::UnsignedIntegerValue(u64::from(carddav_port)),
+                ),
+                entry(
+                    "mail.address_book.carddav_username",
+                    Value::StringValue("owner@example.test".to_owned()),
+                ),
+                entry(
+                    "mail.address_book.provider",
+                    Value::StringValue("icloud_carddav".to_owned()),
+                ),
+                entry("mail.imap.host", Value::StringValue("localhost".to_owned())),
+                entry(
+                    "mail.imap.port",
+                    Value::UnsignedIntegerValue(u64::from(imap_port)),
+                ),
+                entry(
+                    "mail.imap.username",
+                    Value::StringValue("owner@example.test".to_owned()),
+                ),
+                entry("mail.inbound.kind", Value::StringValue("imap".to_owned())),
+                entry("mail.smtp.enabled", Value::BooleanValue(false)),
+            ]);
         }
     }
     values.sort_by(|left, right| left.setting_id.cmp(&right.setting_id));

@@ -20,8 +20,12 @@ create/update либо exact iCloud read-only rejection. Target custody receipt
 restart/replay тестом. Provider-to-Contacts pagination path реализован
 статически, включая exact consumer, Google People/CardDAV adapters, opaque
 cursors, atomic Mail-owned inbox/outbox и disposable PostgreSQL replay
-evidence. Managed provider и browser conformance ещё не реализованы, поэтому
-gate остаётся закрытым.
+evidence. Managed Mail provider-read conformance для Google People и CardDAV
+реализован через signed process, Vault/Storage/PgBouncer/NATS и loopback TLS
+providers; Google successor restart и exact duplicate suppression также
+доказаны. Managed workflow/Contacts assembly, reverse Blob/provider write,
+revoke/outage и browser conformance ещё не реализованы, поэтому gate остаётся
+закрытым.
 Contacts command открыт только после exact five-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
 legacy address-book service, Mail account UI или статических contracts не

@@ -126,6 +126,23 @@ const files = {
   ),
   mailRuntimeManaged: new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT),
   mailRuntimeMain: new URL('src/mail-runtime/src/main.rs', BACKEND_ROOT),
+  mailApi: new URL('src/mail-api/src/lib.rs', BACKEND_ROOT),
+  managedMailSetup: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_managed_setup.rs',
+    BACKEND_ROOT,
+  ),
+  managedProviderFlow: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_address_book_provider_flow.rs',
+    BACKEND_ROOT,
+  ),
+  managedGoogleFixture: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_gmail_fixture.rs',
+    BACKEND_ROOT,
+  ),
+  managedCardDavFixture: new URL(
+    'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/mail_carddav_fixture.rs',
+    BACKEND_ROOT,
+  ),
   mailOAuthCore: new URL('src/mail-core/src/oauth.rs', BACKEND_ROOT),
   mailOAuthPersistence: new URL('src/mail-persistence/src/oauth.rs', BACKEND_ROOT),
   mailPortabilityProto: new URL(
@@ -220,7 +237,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_provider_pagination_v1',
+    'mail_address_book_managed_provider_conformance_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -463,7 +480,10 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(outbox, /mark_result_published/);
   assert.match(managed, /address_book_upsert_subscribe_permit/);
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
-  assert.equal(policy.implementation.currentSlice, 'mail_address_book_provider_pagination_v1');
+  assert.equal(
+    policy.implementation.currentSlice,
+    'mail_address_book_managed_provider_conformance_v1',
+  );
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(
       'mail.address-book.contact-source.blob.v1',
@@ -495,6 +515,39 @@ test('Mail runtime paginates provider address books behind typed event-only comm
   assert.match(admission, /EntryObserved\.publish_request/);
   assert.match(admission, /PageCompleted\.publish_request/);
   assert.match(admission, /PageRejected\.publish_request/);
+});
+
+test('managed Mail provider conformance keeps endpoints credentials and evidence owner-local', async () => {
+  const [api, settings, worker, admission, setup, flow, googleFixture, cardDavFixture] =
+    await Promise.all([
+      readFile(files.mailApi, 'utf8'),
+      readFile(files.mailRuntimeSettings, 'utf8'),
+      readFile(files.mailRuntimeAddressBookFetchWorker, 'utf8'),
+      readFile(files.mailRuntimeAdmission, 'utf8'),
+      readFile(files.managedMailSetup, 'utf8'),
+      readFile(files.managedProviderFlow, 'utf8'),
+      readFile(files.managedGoogleFixture, 'utf8'),
+      readFile(files.managedCardDavFixture, 'utf8'),
+    ]);
+  assert.match(api, /MailAddressBookTlsEndpointV1/);
+  assert.match(api, /MailCardDavEndpointV1/);
+  assert.match(api, /valid_google_people_endpoint_v1/);
+  assert.match(api, /valid_carddav_endpoint_v1/);
+  assert.match(settings, /mail\.address_book\.google_people_host/);
+  assert.match(settings, /mail\.address_book\.carddav_host/);
+  assert.match(worker, /google_people_client\(endpoint\)/);
+  assert.match(worker, /carddav_client\(endpoint\)/);
+  assert.match(admission, /provider_credential_request_v1\("mail_icloud_carddav_password"\)/);
+  assert.match(setup, /GooglePeopleAddressBook/);
+  assert.match(setup, /CardDavAddressBook/);
+  assert.match(flow, /managed_mail_google_people_page_is_exact_restart_safe_and_private/);
+  assert.match(flow, /managed_mail_carddav_page_uses_separate_credential_and_read_only_provider/);
+  assert.match(flow, /restart_mail_runtime_without_smtp/);
+  assert.match(googleFixture, /\/v1\/people\/me\/connections/);
+  assert.match(setup, /managed-mail-carddav-password/);
+  assert.match(cardDavFixture, /authorization/);
+  assert.doesNotMatch(cardDavFixture, /managed-mail-carddav-password/);
+  assert.doesNotMatch(`${worker}\n${setup}`, /hermes_contacts_(?:runtime|persistence)/);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

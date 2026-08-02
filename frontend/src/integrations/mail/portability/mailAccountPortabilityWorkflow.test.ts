@@ -26,6 +26,7 @@ import {
 import {
 	MailAccountConfigurationV1Schema,
 	MailAccountExportV1Schema,
+	MailAddressBookProviderV1,
 	MailExportAccountReadinessV1,
 	MailExportConnectorProfileV1,
 	MailExportProviderPathReadinessV1,
@@ -335,7 +336,7 @@ function imapExportJson(smtp: boolean): string {
 		exportedAtUnixMillis: 1n,
 		sourceRegistrationId: 'source-mail-registration',
 		settingsSchemaMajor: 2,
-		settingsSchemaRevision: 1,
+		settingsSchemaRevision: 3,
 		effectiveSettingsRevision: 1n,
 		connectorProfile: smtp
 			? MailExportConnectorProfileV1.MAIL_EXPORT_CONNECTOR_PROFILE_IMAP_SMTP
@@ -346,6 +347,7 @@ function imapExportJson(smtp: boolean): string {
 			? MailExportProviderPathReadinessV1.MAIL_EXPORT_PROVIDER_PATH_READINESS_READY
 			: MailExportProviderPathReadinessV1.MAIL_EXPORT_PROVIDER_PATH_READINESS_NOT_CONFIGURED,
 		configuration: create(MailAccountConfigurationV1Schema, {
+			addressBookProvider: MailAddressBookProviderV1.MAIL_ADDRESS_BOOK_PROVIDER_NONE,
 			connectionId: 'mail-account',
 			syncWindow: 100,
 			syncWindows: 2,
@@ -375,13 +377,14 @@ function gmailExportJson(): string {
 		exportedAtUnixMillis: 1n,
 		sourceRegistrationId: 'source-mail-registration',
 		settingsSchemaMajor: 2,
-		settingsSchemaRevision: 1,
+		settingsSchemaRevision: 3,
 		effectiveSettingsRevision: 1n,
 		connectorProfile: MailExportConnectorProfileV1.MAIL_EXPORT_CONNECTOR_PROFILE_GMAIL,
 		readiness: MailExportAccountReadinessV1.MAIL_EXPORT_ACCOUNT_READINESS_READY,
 		syncReadiness: MailExportProviderPathReadinessV1.MAIL_EXPORT_PROVIDER_PATH_READINESS_READY,
 		deliveryReadiness: MailExportProviderPathReadinessV1.MAIL_EXPORT_PROVIDER_PATH_READINESS_READY,
 		configuration: create(MailAccountConfigurationV1Schema, {
+			addressBookProvider: MailAddressBookProviderV1.MAIL_ADDRESS_BOOK_PROVIDER_NONE,
 			connectionId: 'gmail-account',
 			syncWindow: 100,
 			syncWindows: 2,

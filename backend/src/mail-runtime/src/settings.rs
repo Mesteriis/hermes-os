@@ -1,10 +1,15 @@
 //! Mail-owned decoding of one admitted generic settings snapshot.
 
+#[cfg(not(feature = "conformance-test-support"))]
+use hermes_mail_api::valid_address_book_configuration;
+#[cfg(feature = "conformance-test-support")]
+use hermes_mail_api::valid_address_book_configuration_for_conformance_v1;
 use hermes_mail_api::{
     GmailApiEndpointV1, GmailOAuthConfigurationV1, GmailOAuthEndpointV1,
     MailAccountConfigurationV1, MailAddressBookConfigurationV1, MailAddressBookProviderV1,
-    MailGmailConfigurationV1, MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1,
-    valid_account_configuration, valid_address_book_configuration, valid_gmail_oauth_configuration,
+    MailAddressBookTlsEndpointV1, MailCardDavEndpointV1, MailGmailConfigurationV1,
+    MailImapConfigurationV1, MailInboundTransportV1, SmtpEndpointV1, valid_account_configuration,
+    valid_gmail_oauth_configuration,
 };
 pub use hermes_mail_api::{MAIL_SETTINGS_SCHEMA_MAJOR_V2, MAIL_SETTINGS_SCHEMA_REVISION_V2};
 use hermes_runtime_protocol::v1::{
@@ -17,6 +22,24 @@ use prost::Message;
 const CONNECTION_ID: &str = "mail.connection_id";
 const ADDRESS_BOOK_PROVIDER: &str = "mail.address_book.provider";
 const ADDRESS_BOOK_CARDDAV_USERNAME: &str = "mail.address_book.carddav_username";
+const ADDRESS_BOOK_CARDDAV_HOST: &str = "mail.address_book.carddav_host";
+const ADDRESS_BOOK_CARDDAV_PORT: &str = "mail.address_book.carddav_port";
+const ADDRESS_BOOK_CARDDAV_BASE_PATH: &str = "mail.address_book.carddav_base_path";
+const ADDRESS_BOOK_CARDDAV_CA_CERTIFICATE_PEM: &str =
+    "mail.address_book.carddav_ca_certificate_pem";
+const ADDRESS_BOOK_GOOGLE_PEOPLE_HOST: &str = "mail.address_book.google_people_host";
+const ADDRESS_BOOK_GOOGLE_PEOPLE_PORT: &str = "mail.address_book.google_people_port";
+const ADDRESS_BOOK_GOOGLE_PEOPLE_CA_CERTIFICATE_PEM: &str =
+    "mail.address_book.google_people_ca_certificate_pem";
+const ADDRESS_BOOK_ENDPOINT_SETTING_IDS: [&str; 7] = [
+    ADDRESS_BOOK_CARDDAV_HOST,
+    ADDRESS_BOOK_CARDDAV_PORT,
+    ADDRESS_BOOK_CARDDAV_BASE_PATH,
+    ADDRESS_BOOK_CARDDAV_CA_CERTIFICATE_PEM,
+    ADDRESS_BOOK_GOOGLE_PEOPLE_HOST,
+    ADDRESS_BOOK_GOOGLE_PEOPLE_PORT,
+    ADDRESS_BOOK_GOOGLE_PEOPLE_CA_CERTIFICATE_PEM,
+];
 const IMAP_HOST: &str = "mail.imap.host";
 const IMAP_PORT: &str = "mail.imap.port";
 const IMAP_USERNAME: &str = "mail.imap.username";
@@ -68,9 +91,44 @@ pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
         revision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
         definitions: vec![
             definition(
+                ADDRESS_BOOK_CARDDAV_BASE_PATH,
+                SettingValueTypeV1::String,
+                "CardDAV base path",
+            ),
+            definition(
+                ADDRESS_BOOK_CARDDAV_CA_CERTIFICATE_PEM,
+                SettingValueTypeV1::String,
+                "CardDAV CA certificate",
+            ),
+            definition(
+                ADDRESS_BOOK_CARDDAV_HOST,
+                SettingValueTypeV1::String,
+                "CardDAV host",
+            ),
+            definition(
+                ADDRESS_BOOK_CARDDAV_PORT,
+                SettingValueTypeV1::UnsignedInteger,
+                "CardDAV port",
+            ),
+            definition(
                 ADDRESS_BOOK_CARDDAV_USERNAME,
                 SettingValueTypeV1::String,
                 "CardDAV username",
+            ),
+            definition(
+                ADDRESS_BOOK_GOOGLE_PEOPLE_CA_CERTIFICATE_PEM,
+                SettingValueTypeV1::String,
+                "Google People CA certificate",
+            ),
+            definition(
+                ADDRESS_BOOK_GOOGLE_PEOPLE_HOST,
+                SettingValueTypeV1::String,
+                "Google People host",
+            ),
+            definition(
+                ADDRESS_BOOK_GOOGLE_PEOPLE_PORT,
+                SettingValueTypeV1::UnsignedInteger,
+                "Google People port",
             ),
             string_definition_with_default(ADDRESS_BOOK_PROVIDER, "Address-book provider", "none"),
             definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
@@ -281,25 +339,81 @@ pub fn decode(snapshot: &SettingsSnapshotV1) -> Result<MailRuntimeSettingsV1, St
     let address_book = match optional_string(snapshot, ADDRESS_BOOK_PROVIDER)?.as_deref() {
         None | Some("none") => {
             absent(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?;
+            for setting_id in ADDRESS_BOOK_ENDPOINT_SETTING_IDS {
+                absent(snapshot, setting_id)?;
+            }
             MailAddressBookConfigurationV1 {
                 provider: MailAddressBookProviderV1::None,
                 carddav_username: None,
+                google_people_endpoint: None,
+                carddav_endpoint: None,
             }
         }
         Some("google_people") => {
             absent(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?;
+            for setting_id in [
+                ADDRESS_BOOK_CARDDAV_HOST,
+                ADDRESS_BOOK_CARDDAV_PORT,
+                ADDRESS_BOOK_CARDDAV_BASE_PATH,
+                ADDRESS_BOOK_CARDDAV_CA_CERTIFICATE_PEM,
+            ] {
+                absent(snapshot, setting_id)?;
+            }
             MailAddressBookConfigurationV1 {
                 provider: MailAddressBookProviderV1::GooglePeople,
                 carddav_username: None,
+                google_people_endpoint: Some(MailAddressBookTlsEndpointV1 {
+                    host: required_string(snapshot, ADDRESS_BOOK_GOOGLE_PEOPLE_HOST)?,
+                    port: u16::try_from(required_unsigned(
+                        snapshot,
+                        ADDRESS_BOOK_GOOGLE_PEOPLE_PORT,
+                    )?)
+                    .map_err(|_| invalid_settings())?,
+                    ca_certificate_pem: optional_string(
+                        snapshot,
+                        ADDRESS_BOOK_GOOGLE_PEOPLE_CA_CERTIFICATE_PEM,
+                    )?,
+                }),
+                carddav_endpoint: None,
             }
         }
-        Some("icloud_carddav") => MailAddressBookConfigurationV1 {
-            provider: MailAddressBookProviderV1::IcloudCardDav,
-            carddav_username: Some(required_string(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?),
-        },
+        Some("icloud_carddav") => {
+            for setting_id in [
+                ADDRESS_BOOK_GOOGLE_PEOPLE_HOST,
+                ADDRESS_BOOK_GOOGLE_PEOPLE_PORT,
+                ADDRESS_BOOK_GOOGLE_PEOPLE_CA_CERTIFICATE_PEM,
+            ] {
+                absent(snapshot, setting_id)?;
+            }
+            MailAddressBookConfigurationV1 {
+                provider: MailAddressBookProviderV1::IcloudCardDav,
+                carddav_username: Some(required_string(snapshot, ADDRESS_BOOK_CARDDAV_USERNAME)?),
+                google_people_endpoint: None,
+                carddav_endpoint: Some(MailCardDavEndpointV1 {
+                    tls: MailAddressBookTlsEndpointV1 {
+                        host: required_string(snapshot, ADDRESS_BOOK_CARDDAV_HOST)?,
+                        port: u16::try_from(required_unsigned(
+                            snapshot,
+                            ADDRESS_BOOK_CARDDAV_PORT,
+                        )?)
+                        .map_err(|_| invalid_settings())?,
+                        ca_certificate_pem: optional_string(
+                            snapshot,
+                            ADDRESS_BOOK_CARDDAV_CA_CERTIFICATE_PEM,
+                        )?,
+                    },
+                    base_path: required_string(snapshot, ADDRESS_BOOK_CARDDAV_BASE_PATH)?,
+                }),
+            }
+        }
         _ => return Err(invalid_settings()),
     };
-    if !valid_address_book_configuration(&address_book, &account.inbound) {
+    #[cfg(feature = "conformance-test-support")]
+    let address_book_is_valid =
+        valid_address_book_configuration_for_conformance_v1(&address_book, &account.inbound);
+    #[cfg(not(feature = "conformance-test-support"))]
+    let address_book_is_valid = valid_address_book_configuration(&address_book, &account.inbound);
+    if !address_book_is_valid {
         return Err(invalid_settings());
     }
     Ok(MailRuntimeSettingsV1 {
@@ -460,13 +574,50 @@ mod tests {
                 && definition.client_visibility == SettingClientVisibilityV1::Editable as i32
                 && definition.fresh_owner_proof_required
         }));
-        assert_eq!(schema.definitions.len(), 30);
+        assert_eq!(schema.definitions.len(), 37);
     }
 
     #[test]
     fn production_gmail_endpoint_defaults_are_canonical() {
         assert_eq!(hermes_mail_api::GMAIL_API_HOST, "gmail.googleapis.com");
         assert_eq!(hermes_mail_api::GMAIL_API_HTTPS_PORT, 443);
+    }
+
+    #[test]
+    fn address_book_provider_settings_do_not_reuse_mail_transport_endpoint() {
+        let mut snapshot = gmail_pre_authorization_snapshot("me");
+        snapshot.values.extend([
+            settings_entry(
+                ADDRESS_BOOK_PROVIDER,
+                Value::StringValue("google_people".to_owned()),
+            ),
+            settings_entry(
+                ADDRESS_BOOK_GOOGLE_PEOPLE_HOST,
+                Value::StringValue(if cfg!(feature = "conformance-test-support") {
+                    "localhost".to_owned()
+                } else {
+                    hermes_mail_api::GOOGLE_PEOPLE_API_HOST_V1.to_owned()
+                }),
+            ),
+            settings_entry(
+                ADDRESS_BOOK_GOOGLE_PEOPLE_PORT,
+                Value::UnsignedIntegerValue(u64::from(hermes_mail_api::GOOGLE_PEOPLE_API_PORT_V1)),
+            ),
+        ]);
+        snapshot
+            .values
+            .sort_by(|left, right| left.setting_id.cmp(&right.setting_id));
+
+        let decoded = decode(&snapshot).expect("decode Google People authority");
+        let endpoint = decoded
+            .address_book
+            .google_people_endpoint
+            .expect("Google People endpoint");
+        let MailInboundTransportV1::Gmail(gmail) = decoded.account.inbound else {
+            panic!("Gmail transport");
+        };
+        assert_ne!(endpoint.host, gmail.api_endpoint.host);
+        assert!(decoded.address_book.carddav_endpoint.is_none());
     }
 
     #[test]
@@ -525,6 +676,13 @@ mod tests {
             target_id: "gmail-target".to_owned(),
             revision: 1,
             values,
+        }
+    }
+
+    fn settings_entry(setting_id: &str, value: Value) -> SettingsValueEntryV1 {
+        SettingsValueEntryV1 {
+            setting_id: setting_id.to_owned(),
+            value: Some(SettingValueV1 { value: Some(value) }),
         }
     }
 }

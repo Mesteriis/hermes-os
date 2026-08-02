@@ -241,6 +241,9 @@ fn start_reserved_attachment_preview_evidence_replay_runtime_v1(
             event_hub_endpoint: events.nats_endpoint().to_owned(),
             event_credential_revision: events.credential_revision(),
             runtime_artifacts: Vec::new(),
+            configuration_instance_id: String::new(),
+            settings_revision: 0,
+            configuration_instances: Vec::new(),
         },
         &capability_ids,
     )

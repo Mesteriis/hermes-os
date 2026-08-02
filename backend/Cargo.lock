@@ -4058,6 +4058,7 @@ dependencies = [
  "hermes-knowledge-command-api",
  "hermes-knowledge-persistence",
  "hermes-knowledge-runtime",
+ "hermes-mail-address-book-contract",
  "hermes-mail-api",
  "hermes-mail-core",
  "hermes-mail-gmail",

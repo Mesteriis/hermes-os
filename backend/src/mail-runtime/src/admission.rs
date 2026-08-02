@@ -186,6 +186,7 @@ fn mail_address_book_provider_capability_v1() -> CapabilityDescriptorV1 {
             MailAddressBookContractV1::UpsertEntryCommand.consume_request(),
             MailAddressBookContractV1::EntryUpserted.publish_request(),
             MailAddressBookContractV1::EntryUpsertRejected.publish_request(),
+            provider_credential_request_v1("mail_icloud_carddav_password"),
         ],
         ..Default::default()
     }
@@ -623,13 +624,21 @@ mod tests {
             .find(|capability| capability.capability_id == MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1)
             .expect("Mail address-book provider capability");
         assert_eq!(address_book.provides, []);
-        assert_eq!(address_book.requests.len(), 7);
-        assert!(
+        assert_eq!(address_book.requests.len(), 8);
+        assert_eq!(
             address_book
                 .requests
                 .iter()
-                .all(|request| matches!(request.request, Some(Request::EventRoute(_))))
+                .filter(|request| matches!(request.request, Some(Request::EventRoute(_))))
+                .count(),
+            7,
         );
+        assert!(address_book.requests.iter().any(|request| matches!(
+            request.request.as_ref(),
+            Some(Request::VaultPurpose(request))
+                if request.purpose_id == "mail_icloud_carddav_password"
+                        && request.actions == [VaultActionV1::Resolve as i32]
+        )));
         let source_blob = descriptor
             .capabilities
             .iter()

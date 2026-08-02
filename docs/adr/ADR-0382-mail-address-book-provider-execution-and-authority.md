@@ -4,15 +4,21 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: static execution slice implemented. Reverse upsert и
+Состояние реализации: provider execution slice частично закрыт live evidence.
+Reverse upsert и
 provider-to-Contacts pagination имеют отдельные consumers/workers, provider
 units, typed Settings/OAuth authority, Mail-owned atomic inbox/outbox, opaque
 cursors и exact terminal events. Target-bound Blob custody/read, Google People
 create/update и iCloud read-only rejection подключены к Mail managed runtime.
 Target custody receipt сохраняется в Mail-owned PostgreSQL до Blob read и
 provider dispatch; disposable PostgreSQL conformance доказывает restart replay,
-идемпотентную запись и conflict rejection. Managed Blob/provider/browser
-conformance ещё не закрыт, поэтому наличие этого среза не открывает
+идемпотентную запись и conflict rejection. Signed managed Mail process теперь
+проходит отдельный disposable Vault/Storage/PgBouncer/NATS conformance с
+реальными loopback TLS dialects Google People и CardDAV: отдельные typed
+endpoints, отдельный CardDAV Vault purpose, provider read, exact
+observation/result, duplicate suppression и successor Google runtime generation
+доказаны. Managed reverse Blob/write, workflow assembly, revoke/outage и browser
+conformance ещё не закрыты, поэтому наличие этого среза не открывает
 `mail_contacts_sync_v1`.
 
 Уточняет:

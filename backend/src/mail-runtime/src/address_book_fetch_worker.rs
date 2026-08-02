@@ -16,7 +16,10 @@ use hermes_mail_address_book_contract::{
 use hermes_mail_address_book_persistence::{
     MailAddressBookPersistenceErrorV1, PendingMailAddressBookFetchV1,
 };
-use hermes_mail_api::{MailAddressBookProviderV1, MailInboundTransportV1};
+use hermes_mail_api::{
+    MailAddressBookProviderV1, MailAddressBookTlsEndpointV1, MailCardDavEndpointV1,
+    MailInboundTransportV1,
+};
 use hermes_mail_carddav::{CardDavAdapterErrorV1, CardDavClientV1, CardDavContactV1};
 use hermes_mail_google_people::{
     GooglePeopleAdapterErrorV1, GooglePeopleClientV1, GooglePeopleContactV1,
@@ -146,7 +149,12 @@ async fn fetch_google_page(
     let cursor = decode_google_cursor(job.admission.continuation_cursor.as_deref())?;
     let page_size = u16::try_from(job.admission.page_size)
         .map_err(|_| MailAddressBookRejectCodeV1::MailAddressBookRejectCodeInvalidRequest)?;
-    let page = GooglePeopleClientV1::new()
+    let endpoint = runtime
+        .address_book
+        .google_people_endpoint
+        .as_ref()
+        .ok_or(MailAddressBookRejectCodeV1::MailAddressBookRejectCodeAccountUnavailable)?;
+    let page = google_people_client(endpoint)
         .map_err(map_google_error)?
         .list_connections(token, cursor.as_deref(), None, page_size)
         .await
@@ -172,7 +180,12 @@ async fn fetch_carddav_page(
     let (username, password) = runtime
         .carddav_credentials()
         .ok_or(MailAddressBookRejectCodeV1::MailAddressBookRejectCodeCredentialUnavailable)?;
-    let mut contacts = CardDavClientV1::new()
+    let endpoint = runtime
+        .address_book
+        .carddav_endpoint
+        .as_ref()
+        .ok_or(MailAddressBookRejectCodeV1::MailAddressBookRejectCodeAccountUnavailable)?;
+    let mut contacts = carddav_client(endpoint)
         .map_err(map_carddav_error)?
         .list_contacts(username, password)
         .await
@@ -196,6 +209,54 @@ async fn fetch_carddav_page(
         entries,
         next_cursor,
     })
+}
+
+fn google_people_client(
+    endpoint: &MailAddressBookTlsEndpointV1,
+) -> Result<GooglePeopleClientV1, GooglePeopleAdapterErrorV1> {
+    #[cfg(feature = "conformance-test-support")]
+    {
+        GooglePeopleClientV1::for_conformance_endpoint(
+            &endpoint.host,
+            endpoint.port,
+            endpoint.ca_certificate_pem.clone(),
+        )
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    {
+        if endpoint.host != hermes_mail_api::GOOGLE_PEOPLE_API_HOST_V1
+            || endpoint.port != hermes_mail_api::GOOGLE_PEOPLE_API_PORT_V1
+            || endpoint.ca_certificate_pem.is_some()
+        {
+            return Err(GooglePeopleAdapterErrorV1::InvalidRequest);
+        }
+        GooglePeopleClientV1::new()
+    }
+}
+
+fn carddav_client(
+    endpoint: &MailCardDavEndpointV1,
+) -> Result<CardDavClientV1, CardDavAdapterErrorV1> {
+    #[cfg(feature = "conformance-test-support")]
+    {
+        CardDavClientV1::for_conformance_endpoint(
+            &endpoint.tls.host,
+            endpoint.tls.port,
+            &endpoint.base_path,
+            endpoint.tls.ca_certificate_pem.clone(),
+        )
+    }
+    #[cfg(not(feature = "conformance-test-support"))]
+    {
+        if endpoint.tls.host != hermes_mail_api::ICLOUD_CARDDAV_HOST_V1
+            || endpoint.tls.port != hermes_mail_api::ICLOUD_CARDDAV_PORT_V1
+            || endpoint.base_path != hermes_mail_api::ICLOUD_CARDDAV_BASE_PATH_V1
+            || endpoint.tls.ca_certificate_pem.is_some()
+        {
+            return Err(CardDavAdapterErrorV1::InvalidRequest);
+        }
+        CardDavClientV1::new()
+    }
 }
 
 fn build_page_records(
