@@ -805,10 +805,6 @@ const fn renderer_error(error: AttachmentPreviewRendererErrorV1) -> AttachmentPr
         | AttachmentPreviewRendererErrorV1::InvalidContent => {
             AttachmentPreviewErrorCodeV1::InvalidContent
         }
-        AttachmentPreviewRendererErrorV1::Unavailable
-        | AttachmentPreviewRendererErrorV1::TimedOut => {
-            AttachmentPreviewErrorCodeV1::RendererUnavailable
-        }
         AttachmentPreviewRendererErrorV1::OutputTooLarge
         | AttachmentPreviewRendererErrorV1::Failed => AttachmentPreviewErrorCodeV1::RendererFailed,
     }

@@ -7,7 +7,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
 test('attachment preview is a planned workflow and not a Communications facade', async () => {
-  const [inventorySource, policySource, adr] = await Promise.all([
+  const [inventorySource, policySource, adr, rendererAdmissionAdr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
       'utf8',
@@ -15,6 +15,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL('docs/adr/ADR-0373-bounded-attachment-preview-workflow.md', REPOSITORY_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'docs/adr/ADR-0375-static-preview-renderer-admission-and-failure-semantics.md',
+        REPOSITORY_ROOT,
+      ),
       'utf8',
     ),
   ]);
@@ -29,14 +36,16 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_job_authority_fences_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_static_renderer_admission_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
   assert.match(adr, /Следующий managed\s+authority gate[\s\S]*source-receipt mismatch/);
-  assert.match(adr, /Browser evidence,[\s\S]*privacy-negative матрица ещё не реализованы/);
+  assert.match(adr, /Browser evidence[\s\S]*privacy-negative матрица ещё не реализованы/);
+  assert.match(rendererAdmissionAdr, /availability является admission invariant/);
+  assert.match(rendererAdmissionAdr, /environment test hook или fake outage не вводятся/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
   assert.match(adr, /exact twelve-unit package inventory/);
@@ -244,6 +253,7 @@ test('renderer contract is byte-only and metadata cannot select behavior', async
   assert.match(source, /source_bytes: &'a \[u8\]/);
   assert.match(source, /DocxContainerCandidate/);
   assert.match(source, /ATTACHMENT_PREVIEW_MAX_SOURCE_BYTES_V1/);
+  assert.doesNotMatch(source, /\b(?:Unavailable|TimedOut)\b/);
   assert.doesNotMatch(
     source,
     /\b(?:filename|content_type_hint|provider|account_id|filesystem|source_path|url)\b/,

@@ -74,7 +74,7 @@ test('Tasks reviewed-candidate command and core are distinct target-owned units'
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_job_authority_fences_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_static_renderer_admission_v1');
   for (const unit of [
     'hermes-tasks-command-api',
     'hermes-tasks-core',

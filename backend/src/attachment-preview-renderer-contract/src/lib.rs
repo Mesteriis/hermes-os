@@ -42,8 +42,6 @@ pub enum AttachmentPreviewRendererErrorV1 {
     Unsupported,
     InvalidContent,
     OutputTooLarge,
-    Unavailable,
-    TimedOut,
     Failed,
 }
 

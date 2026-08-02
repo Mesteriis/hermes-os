@@ -61,8 +61,9 @@ polyglot rejection и bounded DOCX expansion rejection. Общий Blob data cli
 authority gate доказывает stale runtime/grant route fencing, stale delegated
 custody proof после замены source grant epoch, exact source-receipt mismatch
 после fenced lease recovery и отсутствие derived artifact/private bytes во
-всех этих сценариях. Browser evidence, unavailable renderer и полная
-log/error/health/telemetry privacy-negative матрица ещё не реализованы.
+всех этих сценариях. ADR-0375 отдельно доказывает static renderer admission и
+исключает fake runtime outage. Browser evidence и полная log/error/health/
+telemetry privacy-negative матрица ещё не реализованы.
 Inventory gate `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:
@@ -75,8 +76,9 @@ Inventory gate `attachment_preview_v1` остаётся `planned`.
 - [ADR-0230](ADR-0230-blob-platform-opaque-references-and-owner-local-metadata.md);
 - [ADR-0273](ADR-0273-attachment-security-engine-and-event-only-verdict-authority.md);
 - [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
-- [ADR-0360](ADR-0360-current-custodian-target-bound-blob-redelegation.md).
-- [ADR-0374](ADR-0374-authenticated-client-blob-response-ceiling.md).
+- [ADR-0360](ADR-0360-current-custodian-target-bound-blob-redelegation.md);
+- [ADR-0374](ADR-0374-authenticated-client-blob-response-ceiling.md);
+- [ADR-0375](ADR-0375-static-preview-renderer-admission-and-failure-semantics.md).
 
 ## Контекст
 
@@ -226,9 +228,11 @@ Image metadata, animation и embedded profiles удаляются. PDF/DOCX adap
 access. Media adapter не транскодирует и допускает только exact MP3/MP4 V1
 container policy; неизвестный codec/container завершается `unsupported`.
 
-Empty, malformed, polyglot, decompression-bomb, oversized, timed-out или
-unavailable renderer input завершается bounded typed failure без partial
-artifact. Unsupported не считается empty successful preview.
+Empty, malformed, polyglot, decompression-bomb или oversized renderer input
+завершается bounded typed failure без partial artifact. Renderer V1 статически
+связан с signed runtime и его availability проверяется admission/release gate
+по ADR-0375; искусственный process outage не вводится. Unsupported не считается
+empty successful preview.
 
 Legacy base64 `data:` URL не восстанавливается: он дублировал private bytes в
 JSON/heap/logging surfaces и обходил `client_blob` authorization.
@@ -316,8 +320,8 @@ Gate становится `implemented` атомарно только после
 7. derived owner-local Blob write without PostgreSQL private content;
 8. wrong-owner, collision, stale revision/generation/grant/proof/renderer,
    source-hash and ticket replay/expiry negative matrix;
-9. unavailable Blob/Vault/Event/renderer and malformed/polyglot/oversized input
-   fail closed;
+9. unavailable Blob/Vault/Event, renderer admission/integrity и
+   malformed/polyglot/oversized input fail closed;
 10. restart/NATS outage replay without duplicate custody, render or artifact;
 11. authenticated Gateway Start/Get/IssueRead/client_blob and exact SSE cursor
    replay;

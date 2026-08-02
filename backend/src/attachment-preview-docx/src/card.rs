@@ -42,7 +42,7 @@ pub(crate) fn render_docx_card_v1(
     text: &str,
 ) -> Result<RenderedDocxCardV1, AttachmentPreviewRendererErrorV1> {
     let font = FontRef::from_index(FIXED_FONT_BYTES_V1, 0)
-        .ok_or(AttachmentPreviewRendererErrorV1::Unavailable)?;
+        .ok_or(AttachmentPreviewRendererErrorV1::Failed)?;
     let (mut lines, mut truncated) = wrap_text_v1(
         &font,
         text,
