@@ -48,6 +48,7 @@ hermes-communications-evidence-export-source-api = { path = "../../../src/commun
 hermes-communications-export-api = { path = "../../../src/communications-export-api" }
 hermes-communications-export-persistence = { path = "../../../src/communications-export-persistence" }
 hermes-communications-export-runtime = { path = "../../../src/communications-export-runtime" }
+hermes-communications-retained-evidence-replay-contract = { path = "../../../src/communications-retained-evidence-replay-contract" }
 hermes-communications-saved-query-api = { path = "../../../src/communications-saved-query-api" }
 hermes-communications-sender-insights-api = { path = "../../../src/communications-sender-insights-api" }
 hermes-communication-delivery-intent-api = { path = "../../../src/communication-delivery-intent-api" }

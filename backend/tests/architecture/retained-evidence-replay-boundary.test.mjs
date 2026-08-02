@@ -288,12 +288,15 @@ test('producer contracts build exact workflow commands and causal terminal resul
 });
 
 test('producer consumers persist terminal result before Ack and retry infrastructure outage', async () => {
-  const [communicationsConsumer, communicationsRelay, mailConsumer, mailRelay] =
+  const [communicationsConsumer, communicationsRelay, mailConsumer, mailRelay, managedFixture,
+    testkitManifest] =
     await Promise.all([
       read('src/communications-runtime/src/retained_evidence_replay_consumer.rs'),
       read('src/communications-runtime/src/retained_evidence_replay_result.rs'),
       read('src/mail-runtime/src/retained_evidence_replay_consumer.rs'),
       read('src/mail-runtime/src/retained_evidence_replay_result.rs'),
+      read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communications_setup.rs'),
+      read('tests/support/kernel-recovery/Cargo.toml'),
     ]);
 
   for (const source of [communicationsConsumer, mailConsumer]) {
@@ -324,6 +327,10 @@ test('producer consumers persist terminal result before Ack and retry infrastruc
   }
   assert.doesNotMatch(communicationsConsumer, /hermes_mail|mail_/);
   assert.doesNotMatch(mailConsumer, /hermes_communications|communications_/);
+  assert.match(managedFixture, /COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID/);
+  assert.match(managedFixture, /communications_replay_command_contract_reference_v1/);
+  assert.match(managedFixture, /communications_replay_result_contract_reference_v1/);
+  assert.match(testkitManifest, /hermes-communications-retained-evidence-replay-contract/);
 });
 
 test('replay coordination is a separate workflow with owner-local operation storage', async () => {

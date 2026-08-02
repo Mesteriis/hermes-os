@@ -3870,6 +3870,7 @@ dependencies = [
  "hermes-communications-note-source-api",
  "hermes-communications-persistence",
  "hermes-communications-recipient-source-api",
+ "hermes-communications-retained-evidence-replay-contract",
  "hermes-communications-runtime",
  "hermes-communications-saved-query-api",
  "hermes-communications-sender-insights-api",

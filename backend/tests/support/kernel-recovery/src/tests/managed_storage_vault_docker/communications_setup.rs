@@ -81,6 +81,10 @@ use hermes_communications_recipient_source_api::{
     communication_recipient_source_prepared_contract_reference_v1,
     communication_recipient_source_rejected_contract_reference_v1,
 };
+use hermes_communications_retained_evidence_replay_contract::{
+    communications_replay_command_contract_reference_v1,
+    communications_replay_result_contract_reference_v1,
+};
 use hermes_communications_runtime::admission::{
     COMMUNICATIONS_AI_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
     COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -97,13 +101,14 @@ use hermes_communications_runtime::admission::{
     COMMUNICATIONS_NOTE_SOURCE_CAPABILITY_ID, COMMUNICATIONS_OBSERVE_CAPABILITY_ID,
     COMMUNICATIONS_OWNER_ID, COMMUNICATIONS_QUERY_CAPABILITY_ID,
     COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID,
-    COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID, COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID,
-    COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION,
-    COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS, COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID,
-    COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID, COMMUNICATIONS_STORAGE_CAPABILITY_ID,
-    COMMUNICATIONS_SUMMARY_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_SUMMARY_SOURCE_CAPABILITY_ID,
-    COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID, COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID,
-    COMMUNICATIONS_TRANSLATION_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID,
+    COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID,
+    COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID, COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID,
+    COMMUNICATIONS_SEARCH_INDEX_KEY_SCHEMA_REVISION, COMMUNICATIONS_SEARCH_INDEX_LEASE_TTL_SECONDS,
+    COMMUNICATIONS_SEARCH_INDEX_PURPOSE_ID, COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID,
+    COMMUNICATIONS_STORAGE_CAPABILITY_ID, COMMUNICATIONS_SUMMARY_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_SUMMARY_SOURCE_CAPABILITY_ID, COMMUNICATIONS_TASK_SOURCE_BLOB_CAPABILITY_ID,
+    COMMUNICATIONS_TASK_SOURCE_CAPABILITY_ID, COMMUNICATIONS_TRANSLATION_SOURCE_BLOB_CAPABILITY_ID,
     COMMUNICATIONS_TRANSLATION_SOURCE_CAPABILITY_ID,
     communication_evidence_recorded_contract_reference_v1, communications_module_descriptor_v1,
     communications_query_contract_reference_v1, communications_settings_schema_bytes_v1,
@@ -2707,6 +2712,7 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
         "communications.query.v1".to_owned(),
         COMMUNICATIONS_RECIPIENT_SOURCE_BLOB_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_RECIPIENT_SOURCE_CAPABILITY_ID.to_owned(),
+        COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SAVED_SEARCH_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SEARCH_INDEX_CAPABILITY_ID.to_owned(),
         COMMUNICATIONS_SENDER_INSIGHTS_CAPABILITY_ID.to_owned(),
@@ -2873,6 +2879,8 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
     let recipient_source_prepare = communication_recipient_source_prepare_contract_reference_v1();
     let recipient_source_prepared = communication_recipient_source_prepared_contract_reference_v1();
     let recipient_source_rejected = communication_recipient_source_rejected_contract_reference_v1();
+    let replay_command = communications_replay_command_contract_reference_v1();
+    let replay_result = communications_replay_result_contract_reference_v1();
     let routes = [
         communications_event_route(
             COMMUNICATIONS_ATTACHMENT_BLOB_ADMISSION_OBSERVE_CAPABILITY_ID,
@@ -3076,6 +3084,18 @@ fn record_communications_registration(store: &SqliteControlStore, descriptor: &[
             COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID,
             ModuleEventEnvelopeKindV1::Result,
             &ai_source_rejected,
+            ModuleEventRouteDirectionV1::Publish,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Command,
+            &replay_command,
+            ModuleEventRouteDirectionV1::Consume,
+        ),
+        communications_event_route(
+            COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID,
+            ModuleEventEnvelopeKindV1::Result,
+            &replay_result,
             ModuleEventRouteDirectionV1::Publish,
         ),
     ];
