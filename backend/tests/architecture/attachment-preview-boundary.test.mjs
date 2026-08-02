@@ -29,13 +29,13 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_stale_outage_input_boundaries_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_job_authority_fences_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
-  assert.match(adr, /Следующий managed gate[\s\S]*bounded DOCX expansion rejection/);
+  assert.match(adr, /Следующий managed\s+authority gate[\s\S]*source-receipt mismatch/);
   assert.match(adr, /Browser evidence,[\s\S]*privacy-negative матрица ещё не реализованы/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
   assert.match(adr, /Legacy base64 `data:` URL не восстанавливается/);
@@ -479,6 +479,9 @@ test('Preview has an authenticated exact signed managed admission gate', async (
   assert.match(flow, /stale state revision/);
   assert.match(flow, /expired ticket/);
   assert.match(flow, /stale runtime generation/);
+  assert.match(flow, /stale Attachment Preview grant epoch/);
+  assert.match(flow, /stale Preview custody proof/);
+  assert.match(flow, /mismatched Preview source receipt/);
   assert.match(flow, /Blob outage/);
   assert.match(flow, /Vault outage/);
   assert.match(formats, /preview-bad-pdf/);
@@ -490,6 +493,8 @@ test('Preview has an authenticated exact signed managed admission gate', async (
   assert.match(formats, /assert_private_source_absent_v1/);
   assert.match(persistence, /attachment_preview_custody_outbox/);
   assert.match(persistence, /attachment_preview_artifacts/);
+  assert.match(persistence, /replace_attachment_preview_job_source_receipt_v1/);
+  assert.match(persistence, /expire_attachment_preview_job_lease_v1/);
   assert.match(harness, /-p'[\s\S]*hermes-attachment-preview-runtime/);
   assert.match(harness, /HERMES_ATTACHMENT_PREVIEW_RUNTIME_BIN/);
   assert.match(harness, /managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart/);

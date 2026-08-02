@@ -10,7 +10,9 @@ use super::{
     },
     attachment_preview_managed_formats::assert_managed_attachment_preview_formats_v1,
     attachment_preview_persistence_fixture::{
-        expire_attachment_preview_ticket_v1, replace_attachment_preview_renderer_identity_v1,
+        expire_attachment_preview_job_lease_v1, expire_attachment_preview_ticket_v1,
+        replace_attachment_preview_job_source_receipt_v1,
+        replace_attachment_preview_renderer_identity_v1,
         replace_attachment_preview_state_revision_v1,
     },
     attachment_security_blob_fixture::AttachmentSecurityBlobSourceFixture,
@@ -23,7 +25,10 @@ use super::{
 
 use crate::identity::device::signer::DeviceSigner;
 use hermes_attachment_preview_api::{
-    ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1, ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1,
+    ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1, ATTACHMENT_PREVIEW_COMMAND_CONTRACT_NAME_V1,
+    ATTACHMENT_PREVIEW_CONTRACT_MAJOR_V1, ATTACHMENT_PREVIEW_CONTRACT_REVISION_V1,
+    ATTACHMENT_PREVIEW_CONTROL_SCHEMA_SHA256, ATTACHMENT_PREVIEW_MODULE_ID_V1,
+    ATTACHMENT_PREVIEW_OWNER_V1, ATTACHMENT_PREVIEW_TICKET_CONNECT_PATH_V1,
     wire::{
         AttachmentPreviewContentTypeV1, AttachmentPreviewErrorCodeV1, AttachmentPreviewKindV1,
         AttachmentPreviewStateV1, AttachmentPreviewStatusChangedV1,
@@ -31,6 +36,8 @@ use hermes_attachment_preview_api::{
         StartAttachmentPreviewRequestV1, StartAttachmentPreviewResponseV1,
     },
 };
+use hermes_attachment_preview_runtime::admission::ATTACHMENT_PREVIEW_CLIENT_CAPABILITY_ID_V1;
+use hermes_runtime_protocol::v1::{ContractReferenceV1, ModuleClientRequestV1};
 use hyper::StatusCode;
 
 const PRIVATE_SOURCE: &[u8] =
@@ -120,14 +127,14 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         prepare_attachment_preview_runtime_v1(&supervisor, &store, admitted_preview);
     configure_communications_jetstream(&store);
     start_communications_domain(&supervisor, &store, &root.join("runtime"));
-    let security = start_attachment_security_runtime(
+    let mut security = start_attachment_security_runtime(
         &supervisor,
         &store,
         &root.join("runtime"),
         admitted_security,
         clamav.port(),
     );
-    let preview = start_attachment_preview_runtime_v1(
+    let mut preview = start_attachment_preview_runtime_v1(
         &supervisor,
         &store,
         &root.join("runtime"),
@@ -154,6 +161,12 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         wait_for_attachment_state(&store, &supervisor, attachment.attachment_anchor_id),
         hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
             as u32
+    );
+    assert_attachment_preview_runtime_fences_v1(
+        &store,
+        &supervisor,
+        &preview,
+        attachment.attachment_anchor_id,
     );
     wait_for_attachment_preview_evidence_v1();
 
@@ -222,7 +235,6 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
             .windows(PRIVATE_SOURCE.len())
             .any(|window| window == PRIVATE_SOURCE)
     );
-    let first_cursor = first_event.cursor.clone();
     let completed = attachment_preview_diagnostics_v1();
     assert_eq!(
         completed,
@@ -321,6 +333,263 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         &cookie,
     );
 
+    let stale_proof_baseline = attachment_preview_diagnostics_v1();
+    let stale_proof_source =
+        b"Private Preview source whose delegated custody proof must become stale.";
+    let stale_proof_blob =
+        blob_source.write(&store, &supervisor, &data, [0xf1; 16], stale_proof_source);
+    let stale_proof_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "preview-stale-custody-proof",
+        stale_proof_blob.declared_size,
+        stale_proof_blob.receipt_sha256,
+    );
+    assert_clean_attachment_security_verdict_flow(
+        &store,
+        &stale_proof_attachment,
+        &stale_proof_blob,
+        &clamav,
+        stale_proof_source,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            stale_proof_attachment.attachment_anchor_id,
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+    wait_for_attachment_preview_evidence_counts_v1(
+        stale_proof_baseline.candidates + 1,
+        stale_proof_baseline.safety_facts + 1,
+    );
+    supervisor
+        .stop(&security.registration_id)
+        .expect("stop Attachment Security before stale Preview custody request");
+    let stale_proof_run = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentPreviewRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0xf2; 16],
+            attachment_anchor_id: stale_proof_attachment.attachment_anchor_id.to_vec(),
+        },
+    );
+    assert_eq!(
+        stale_proof_run.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    wait_for_attachment_preview_custody_request_v1(stale_proof_baseline.custody_requests + 1);
+    supervisor
+        .stop(&preview.registration_id)
+        .expect("stop Preview before stale custody result delivery");
+    security = restart_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        &security,
+        clamav.port(),
+    );
+    wait_for_attachment_preview_security_result_v1(
+        stale_proof_baseline.security_delegation_results + 1,
+    );
+    let proof_source_grant_epoch = security.grant_epoch;
+    let security_capabilities = store
+        .module_grant_snapshot(&security.registration_id)
+        .expect("read Attachment Security grants before stale Preview proof fence")
+        .expect("Attachment Security grant snapshot")
+        .effective_grants()
+        .expect("approved Attachment Security grants")
+        .capability_ids()
+        .to_vec();
+    supervisor
+        .stop(&security.registration_id)
+        .expect("stop Attachment Security before Preview proof grant replacement");
+    store
+        .transition_module_registration(
+            &security.registration_id,
+            ModuleRegistrationState::Suspended,
+        )
+        .expect("suspend Attachment Security after Preview custody proof issue");
+    let reapproved_security = store
+        .approve_module_registration(&security.registration_id, &security_capabilities)
+        .expect("reapprove Attachment Security with exact capabilities");
+    assert!(reapproved_security.grant_epoch() > proof_source_grant_epoch);
+    security = restart_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        &security,
+        clamav.port(),
+    );
+    assert_eq!(security.grant_epoch, reapproved_security.grant_epoch());
+    preview =
+        restart_attachment_preview_runtime_v1(&supervisor, &store, &root.join("runtime"), preview);
+    wait_for_attachment_preview_failed_job_attempt_v1(
+        stale_proof_baseline.jobs + 1,
+        stale_proof_baseline.attempts + 1,
+        stale_proof_baseline.artifacts,
+        "stale Preview custody proof",
+    );
+    let stale_proof_status =
+        get_attachment_preview_v1(&router, &gateway_runtime, &cookie, &stale_proof_run.run_id);
+    assert_ne!(
+        stale_proof_status.state,
+        AttachmentPreviewStateV1::Ready as i32
+    );
+    assert_private_preview_source_absent_v1(
+        &stale_proof_status.encode_to_vec(),
+        stale_proof_source,
+        "stale custody proof status",
+    );
+
+    let source_hash_baseline = attachment_preview_diagnostics_v1();
+    let source_hash_source = b"Private Preview source protected by its exact SHA-256 receipt.";
+    let source_hash_blob =
+        blob_source.write(&store, &supervisor, &data, [0xf3; 16], source_hash_source);
+    let source_hash_attachment = prepare_communications_attachment_for_scan(
+        &store,
+        "attachment-preview-source-hash",
+        source_hash_blob.declared_size,
+        source_hash_blob.receipt_sha256,
+    );
+    assert_clean_attachment_security_verdict_flow(
+        &store,
+        &source_hash_attachment,
+        &source_hash_blob,
+        &clamav,
+        source_hash_source,
+    );
+    assert_eq!(
+        wait_for_attachment_state(
+            &store,
+            &supervisor,
+            source_hash_attachment.attachment_anchor_id,
+        ),
+        hermes_communications_attachment_contract::lifecycle_v1::AttachmentSafetyStateV1::SafeForDelivery
+            as u32
+    );
+    wait_for_attachment_preview_evidence_counts_v1(
+        source_hash_baseline.candidates + 1,
+        source_hash_baseline.safety_facts + 1,
+    );
+    supervisor
+        .stop(&security.registration_id)
+        .expect("stop Attachment Security before source-hash Preview request");
+    let source_hash_run = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentPreviewRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0xf4; 16],
+            attachment_anchor_id: source_hash_attachment.attachment_anchor_id.to_vec(),
+        },
+    );
+    assert_eq!(
+        source_hash_run.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    wait_for_attachment_preview_custody_request_v1(source_hash_baseline.custody_requests + 1);
+    supervisor
+        .stop(&preview.registration_id)
+        .expect("stop Preview before source-hash custody result delivery");
+    let _source_hash_security = restart_attachment_security_runtime(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        &security,
+        clamav.port(),
+    );
+    wait_for_attachment_preview_security_result_v1(
+        source_hash_baseline.security_delegation_results + 1,
+    );
+    supervisor
+        .stop(blob_binding::BLOB_PROCESS_ID)
+        .expect("stop Blob before source-hash Preview attempt");
+    preview =
+        restart_attachment_preview_runtime_v1(&supervisor, &store, &root.join("runtime"), preview);
+    wait_for_attachment_preview_failed_job_attempt_v1(
+        source_hash_baseline.jobs + 1,
+        source_hash_baseline.attempts + 1,
+        source_hash_baseline.artifacts,
+        "source-hash setup Blob outage",
+    );
+    let replacement_receipt_sha256 = [0x5c; 32];
+    assert_ne!(source_hash_blob.receipt_sha256, replacement_receipt_sha256);
+    replace_attachment_preview_job_source_receipt_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &source_hash_run.run_id,
+        source_hash_blob.receipt_sha256,
+        replacement_receipt_sha256,
+    );
+    expire_attachment_preview_job_lease_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        &source_hash_run.run_id,
+    );
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("restart signed Blob runtime for source-hash Preview fence"),
+        2
+    );
+    wait_for_attachment_preview_failed_job_attempt_v1(
+        source_hash_baseline.jobs + 1,
+        source_hash_baseline.attempts + 2,
+        source_hash_baseline.artifacts,
+        "mismatched Preview source receipt",
+    );
+    let source_hash_status =
+        get_attachment_preview_v1(&router, &gateway_runtime, &cookie, &source_hash_run.run_id);
+    assert_ne!(
+        source_hash_status.state,
+        AttachmentPreviewStateV1::Ready as i32
+    );
+    assert_private_preview_source_absent_v1(
+        &source_hash_status.encode_to_vec(),
+        source_hash_source,
+        "source-hash status",
+    );
+
+    let accepted = post_attachment_preview_proto_v1::<_, StartAttachmentPreviewResponseV1>(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        ATTACHMENT_PREVIEW_COMMAND_CONNECT_PATH_V1,
+        StartAttachmentPreviewRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0xf5; 16],
+            attachment_anchor_id: attachment.attachment_anchor_id.to_vec(),
+        },
+    );
+    assert_eq!(
+        accepted.error,
+        AttachmentPreviewErrorCodeV1::Unspecified as i32
+    );
+    let ready = wait_for_ready_attachment_preview_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &accepted.run_id,
+        "current-generation ticket fences",
+    );
+    let first_event = read_terminal_attachment_preview_sse_event_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        &accepted.run_id,
+    );
+    let first_cursor = first_event.cursor.clone();
+
     let current_renderer_identity =
         hermes_attachment_preview_runtime::attachment_preview_renderer_identity_v1();
     let stale_renderer_identity = [0x79; 32];
@@ -416,7 +685,7 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
             &root.join("runtime"),
         )
         .expect("restart signed Blob runtime after Preview outage"),
-        2
+        3
     );
 
     assert!(
@@ -425,7 +694,7 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
             .expect("clear Attachment Preview Gateway replay cache")
     );
     let previous_generation = preview.runtime_generation;
-    let preview =
+    preview =
         restart_attachment_preview_runtime_v1(&supervisor, &store, &root.join("runtime"), preview);
     assert_eq!(preview.runtime_generation, previous_generation + 1);
     let restarted_router =
@@ -579,6 +848,87 @@ fn wait_for_attachment_preview_evidence_v1() {
     }
 }
 
+fn wait_for_attachment_preview_evidence_counts_v1(
+    expected_candidates: i64,
+    expected_safety_facts: i64,
+) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_preview_diagnostics_v1();
+        if diagnostics.candidates == expected_candidates
+            && diagnostics.safety_facts == expected_safety_facts
+        {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Attachment Preview did not consume expected source evidence: {diagnostics:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn wait_for_attachment_preview_custody_request_v1(expected_count: i64) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_preview_diagnostics_v1();
+        if diagnostics.custody_requests == expected_count && diagnostics.pending_custody_outbox == 0
+        {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Attachment Preview did not publish custody request {expected_count}: {diagnostics:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn wait_for_attachment_preview_security_result_v1(expected_count: i64) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_preview_diagnostics_v1();
+        if diagnostics.security_delegation_results == expected_count {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Attachment Security did not publish Preview custody result {expected_count}: {diagnostics:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn wait_for_attachment_preview_failed_job_attempt_v1(
+    expected_jobs: i64,
+    expected_attempts: i64,
+    expected_artifacts: i64,
+    scenario: &str,
+) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let diagnostics = attachment_preview_diagnostics_v1();
+        if diagnostics.jobs == expected_jobs
+            && diagnostics.attempts == expected_attempts
+            && diagnostics.artifacts == expected_artifacts
+        {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Attachment Preview failure fence did not settle for {scenario}: {diagnostics:?}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+}
+
+fn assert_private_preview_source_absent_v1(carrier: &[u8], source: &[u8], scenario: &str) {
+    assert!(
+        !carrier.windows(source.len()).any(|window| window == source),
+        "Preview source bytes escaped through {scenario}"
+    );
+}
+
 fn wait_for_pending_attachment_preview_custody_outbox_v1() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
@@ -592,4 +942,78 @@ fn wait_for_pending_attachment_preview_custody_outbox_v1() {
         );
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
+}
+
+fn assert_attachment_preview_runtime_fences_v1(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    preview: &StartedAttachmentPreviewRuntimeV1,
+    attachment_anchor_id: [u8; 16],
+) {
+    let request = attachment_preview_module_request_v1(
+        ATTACHMENT_PREVIEW_LOGICAL_OWNER_ID_V1,
+        700,
+        [0x8a; 16],
+        attachment_anchor_id,
+    );
+    for (runtime_generation, grant_epoch, label) in [
+        (
+            preview.runtime_generation + 1,
+            preview.grant_epoch,
+            "stale Attachment Preview runtime generation",
+        ),
+        (
+            preview.runtime_generation,
+            preview.grant_epoch + 1,
+            "stale Attachment Preview grant epoch",
+        ),
+    ] {
+        let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+            &preview.registration_id,
+            &preview.runtime_instance_id,
+            runtime_generation,
+            grant_epoch,
+            ATTACHMENT_PREVIEW_CLIENT_CAPABILITY_ID_V1,
+            &request,
+        );
+        assert_eq!(
+            crate::modules::capability::router::route_managed_client_request(
+                store,
+                &supervisor.relay_port(),
+                &route,
+            )
+            .expect_err(label),
+            "managed runtime fence is stale"
+        );
+    }
+}
+
+fn attachment_preview_module_request_v1(
+    logical_owner_id: &str,
+    request_id: u64,
+    operation_id: [u8; 16],
+    attachment_anchor_id: [u8; 16],
+) -> Vec<u8> {
+    ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: ATTACHMENT_PREVIEW_MODULE_ID_V1.to_owned(),
+        owner_id: ATTACHMENT_PREVIEW_OWNER_V1.to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: ATTACHMENT_PREVIEW_OWNER_V1.to_owned(),
+            name: ATTACHMENT_PREVIEW_COMMAND_CONTRACT_NAME_V1.to_owned(),
+            major: ATTACHMENT_PREVIEW_CONTRACT_MAJOR_V1,
+            revision: ATTACHMENT_PREVIEW_CONTRACT_REVISION_V1,
+            schema_sha256: ATTACHMENT_PREVIEW_CONTROL_SCHEMA_SHA256.to_vec(),
+        }),
+        request_id,
+        request_payload: StartAttachmentPreviewRequestV1 {
+            protocol_major: 1,
+            operation_id: operation_id.to_vec(),
+            attachment_anchor_id: attachment_anchor_id.to_vec(),
+        }
+        .encode_to_vec(),
+        logical_owner_id: logical_owner_id.to_owned(),
+        authenticated_device_id: "desktop-1".to_owned(),
+    }
+    .encode_to_vec()
 }

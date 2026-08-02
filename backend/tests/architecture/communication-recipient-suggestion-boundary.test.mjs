@@ -171,7 +171,7 @@ test('recipient suggestion agreement separates source ownership from workflow de
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_preview_stale_outage_input_boundaries_v1',
+    'attachment_preview_job_authority_fences_v1',
   );
   assert.match(workspace, /"src\/communication-recipient-suggestion-api"/);
   assert.match(workspace, /"src\/communication-recipient-suggestion-core"/);

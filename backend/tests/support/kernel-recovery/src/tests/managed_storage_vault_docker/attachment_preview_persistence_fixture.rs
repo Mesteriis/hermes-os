@@ -146,6 +146,50 @@ pub(super) fn expire_attachment_preview_ticket_v1(
     });
 }
 
+pub(super) fn replace_attachment_preview_job_source_receipt_v1(
+    logical_owner_id: &str,
+    run_id: &[u8],
+    expected_receipt_sha256: [u8; 32],
+    replacement_receipt_sha256: [u8; 32],
+) {
+    assert_eq!(run_id.len(), 16);
+    assert!(expected_receipt_sha256.iter().any(|byte| *byte != 0));
+    assert!(replacement_receipt_sha256.iter().any(|byte| *byte != 0));
+    assert_ne!(expected_receipt_sha256, replacement_receipt_sha256);
+    attachment_preview_fixture_runtime_v1().block_on(async {
+        let pool = attachment_preview_diagnostics_pool_v1().await;
+        let changed = sqlx::query(
+            "UPDATE hermes_data.attachment_preview_jobs SET source_receipt_sha256=$4 WHERE logical_owner_id=$1 AND run_id=$2 AND source_receipt_sha256=$3",
+        )
+        .bind(logical_owner_id)
+        .bind(run_id)
+        .bind(expected_receipt_sha256.as_slice())
+        .bind(replacement_receipt_sha256.as_slice())
+        .execute(&pool)
+        .await
+        .expect("replace disposable Preview job source receipt")
+        .rows_affected();
+        assert_eq!(changed, 1, "source receipt replacement must use exact CAS");
+    });
+}
+
+pub(super) fn expire_attachment_preview_job_lease_v1(logical_owner_id: &str, run_id: &[u8]) {
+    assert_eq!(run_id.len(), 16);
+    attachment_preview_fixture_runtime_v1().block_on(async {
+        let pool = attachment_preview_diagnostics_pool_v1().await;
+        let changed = sqlx::query(
+            "UPDATE hermes_data.attachment_preview_jobs SET lease_expires_at_unix_millis=updated_at_unix_millis+1 WHERE logical_owner_id=$1 AND run_id=$2 AND state=2 AND lease_expires_at_unix_millis>updated_at_unix_millis+1",
+        )
+        .bind(logical_owner_id)
+        .bind(run_id)
+        .execute(&pool)
+        .await
+        .expect("expire disposable Preview job lease")
+        .rows_affected();
+        assert_eq!(changed, 1, "exactly one active Preview job lease must expire");
+    });
+}
+
 fn attachment_preview_fixture_runtime_v1() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("Attachment Preview diagnostics runtime")
 }

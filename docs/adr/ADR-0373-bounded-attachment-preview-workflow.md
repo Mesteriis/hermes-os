@@ -57,10 +57,13 @@ malformed PDF/PNG, active PDF и unsupported binary fail-closed outcomes, а
 wrong-actor ticket fencing, Blob и Vault outages, strict PNG trailing-payload
 polyglot rejection и bounded DOCX expansion rejection. Общий Blob data client
 получил bounded 30-second local-frame timeout, а loopback ClamAV conformance
-явно переводит inherited accepted stream в blocking mode. Browser evidence,
-stale custody proof/grant epoch/source-hash, unavailable renderer и полная
-log/error/health/telemetry privacy-negative матрица ещё не реализованы. Inventory gate
-`attachment_preview_v1` остаётся `planned`.
+явно переводит inherited accepted stream в blocking mode. Следующий managed
+authority gate доказывает stale runtime/grant route fencing, stale delegated
+custody proof после замены source grant epoch, exact source-receipt mismatch
+после fenced lease recovery и отсутствие derived artifact/private bytes во
+всех этих сценариях. Browser evidence, unavailable renderer и полная
+log/error/health/telemetry privacy-negative матрица ещё не реализованы.
+Inventory gate `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:
 
