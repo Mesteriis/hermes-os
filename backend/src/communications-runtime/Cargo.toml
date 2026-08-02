@@ -36,6 +36,7 @@ hermes-communications-note-source-api = { path = "../communications-note-source-
 hermes-communications-persistence = { path = "../communications-persistence" }
 hermes-communications-recipient-source-api = { path = "../communications-recipient-source-api" }
 hermes-communications-retained-evidence-replay-persistence = { path = "../communications-retained-evidence-replay-persistence" }
+hermes-communications-retained-evidence-replay-contract = { path = "../communications-retained-evidence-replay-contract" }
 hermes-communications-task-source-api = { path = "../communications-task-source-api" }
 hermes-blob-client = { path = "../platform/blob/client" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }

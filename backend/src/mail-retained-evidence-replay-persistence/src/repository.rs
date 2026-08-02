@@ -150,6 +150,49 @@ impl MailRetainedEvidenceReplayPersistenceV1 {
         })
     }
 
+    pub async fn retained_scan_candidate_by_message_id(
+        &self,
+        message_id: [u8; 16],
+    ) -> Result<RetainedMailEvidenceV1, RetainedMailReplayErrorV1> {
+        if zero(&message_id) {
+            return Err(RetainedMailReplayErrorV1::InvalidInput);
+        }
+        let row = sqlx::query(
+            "SELECT replay.attachment_anchor_id, replay.envelope_sha256, \
+                    replay.contract_schema_sha256, outbox.exact_envelope_bytes \
+             FROM hermes_data.mail_retained_evidence_replay_index replay \
+             JOIN hermes_data.mail_attachment_security_outbox outbox \
+               ON outbox.message_id = replay.message_id \
+             WHERE replay.message_id = $1 \
+               AND replay.contract_owner = $2 \
+               AND replay.contract_name = $3 \
+               AND replay.contract_major = $4 \
+               AND replay.contract_revision = $5",
+        )
+        .bind(message_id.as_slice())
+        .bind(ATTACHMENT_SECURITY_CONTRACT_OWNER)
+        .bind(ATTACHMENT_SECURITY_SCAN_CANDIDATE_CONTRACT_NAME)
+        .bind(i32::try_from(ATTACHMENT_SECURITY_CONTRACT_MAJOR).expect("major fits i32"))
+        .bind(i32::try_from(ATTACHMENT_SECURITY_CONTRACT_REVISION).expect("revision fits i32"))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage_error)?
+        .ok_or(RetainedMailReplayErrorV1::NotFound)?;
+        let attachment_anchor_id = row_id16(&row, "attachment_anchor_id")?;
+        let stored_hash = row_sha256(&row, "envelope_sha256")?;
+        let stored_schema = row_sha256(&row, "contract_schema_sha256")?;
+        if stored_schema != ATTACHMENT_SECURITY_SCAN_CANDIDATE_SCHEMA_SHA256 {
+            return Err(RetainedMailReplayErrorV1::WrongContract);
+        }
+        let exact_bytes: Vec<u8> = row.try_get("exact_envelope_bytes").map_err(row_error)?;
+        let record = OutboxRecordV1::accept(exact_bytes).map_err(row_error)?;
+        verify_record(&record, attachment_anchor_id, message_id, stored_hash)?;
+        Ok(RetainedMailEvidenceV1 {
+            attachment_anchor_id,
+            record,
+        })
+    }
+
     pub async fn append_audit(
         &self,
         audit: &RetainedMailReplayAuditV1,

@@ -2374,6 +2374,10 @@
         {
           "name": "hermes-communications-retained-evidence-replay-persistence",
           "kind": "normal"
+        },
+        {
+          "name": "hermes-communications-retained-evidence-replay-contract",
+          "kind": "normal"
         }
       ],
       "hermes-communications-assembly": [
@@ -3027,6 +3031,10 @@
         },
         {
           "name": "hermes-mail-retained-evidence-replay-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-retained-evidence-replay-contract",
           "kind": "normal"
         }
       ],

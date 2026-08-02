@@ -15,6 +15,7 @@ pub mod delivery_intent_worker;
 pub mod gmail_oauth;
 pub mod gmail_sync_worker;
 pub mod managed;
+pub mod retained_evidence_replay;
 pub mod settings;
 pub mod storage_bundle;
 

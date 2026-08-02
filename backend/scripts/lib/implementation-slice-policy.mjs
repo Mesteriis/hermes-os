@@ -3533,6 +3533,7 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST
   'hermes-communications-runtime': [
     ...ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-communications-runtime'],
     { name: 'hermes-communications-retained-evidence-replay-persistence', kind: 'normal' },
+    { name: 'hermes-communications-retained-evidence-replay-contract', kind: 'normal' },
   ],
   'hermes-mail-retained-evidence-replay-persistence': [
     { name: 'hermes-attachment-security-contract', kind: 'normal' },
@@ -3542,6 +3543,7 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST
   'hermes-mail-runtime': [
     ...ATTACHMENT_PREVIEW_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST['hermes-mail-runtime'],
     { name: 'hermes-mail-retained-evidence-replay-persistence', kind: 'normal' },
+    { name: 'hermes-mail-retained-evidence-replay-contract', kind: 'normal' },
   ],
   'hermes-communications-retained-evidence-replay-contract': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },

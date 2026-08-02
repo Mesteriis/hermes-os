@@ -177,3 +177,27 @@ test('producer replay routes are separate owner-specific contract units', async 
   assert.doesNotMatch(communicationsContract, /mail_/);
   assert.doesNotMatch(mailContract, /communications_/);
 });
+
+test('producer adapters publish only verified original bytes with append-only audit', async () => {
+  const [communications, mail] = await Promise.all([
+    read('src/communications-runtime/src/retained_evidence_replay.rs'),
+    read('src/mail-runtime/src/retained_evidence_replay.rs'),
+  ]);
+  for (const adapter of [communications, mail]) {
+    assert.match(adapter, /producer_registration_id != current_registration_id/);
+    assert.match(adapter, /producer_runtime_generation != current_runtime_generation/);
+    assert.match(adapter, /producer_grant_epoch != current_grant_epoch/);
+    assert.match(
+      adapter,
+      /publish_exact\(\s*original_contract_publish_permit,\s*retained\.record\.exact_bytes\(\),?\s*\)/,
+    );
+    assert.match(adapter, /ReplayPhaseV1::Authorized/);
+    assert.match(adapter, /ReplayPhaseV1::Published/);
+    assert.match(adapter, /ReplayPhaseV1::PublishUnavailable/);
+    assert.doesNotMatch(adapter, /mark_.*published|published_at|decode_envelope/);
+  }
+  assert.match(communications, /retained_attachment_safety_event_by_message_id/);
+  assert.match(mail, /retained_scan_candidate_by_message_id/);
+  assert.doesNotMatch(communications, /hermes_mail|mail_/);
+  assert.doesNotMatch(mail, /hermes_communications|communications_/);
+});

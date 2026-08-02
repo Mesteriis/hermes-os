@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+use std::collections::HashSet;
+
 use hermes_runtime_protocol::v1::{
     CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventRouteRequestV1, EventSubscriptionRequirementV1, capability_request_v1::Request,
@@ -23,6 +25,91 @@ pub const MAIL_REPLAY_RESULT_CONTRACT_NAME_V1: &str = "mail_retained_evidence_re
 pub const MAIL_REPLAY_CONTRACT_MAJOR_V1: u32 = 1;
 pub const MAIL_REPLAY_CONTRACT_REVISION_V1: u32 = 1;
 pub const MAIL_REPLAY_MAX_IN_FLIGHT_V1: u32 = 8;
+pub const MAIL_REPLAY_MAX_MESSAGES_V1: usize = 16;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailReplayValidationErrorV1 {
+    InvalidOperation,
+    InvalidOwner,
+    InvalidActor,
+    InvalidProducer,
+    InvalidRuntimeFence,
+    InvalidGrantFence,
+    InvalidMessageSelection,
+    InvalidResult,
+}
+
+pub fn validate_mail_replay_command_v1(
+    command: &wire::ReplayMailEvidenceCommandV1,
+) -> Result<(), MailReplayValidationErrorV1> {
+    validate_id16(&command.operation_id)
+        .map_err(|_| MailReplayValidationErrorV1::InvalidOperation)?;
+    if !valid_identity(&command.logical_owner_id) {
+        return Err(MailReplayValidationErrorV1::InvalidOwner);
+    }
+    if !valid_sha256(&command.owner_device_actor_sha256) {
+        return Err(MailReplayValidationErrorV1::InvalidActor);
+    }
+    if !valid_identity(&command.producer_registration_id) {
+        return Err(MailReplayValidationErrorV1::InvalidProducer);
+    }
+    if command.producer_runtime_generation == 0 {
+        return Err(MailReplayValidationErrorV1::InvalidRuntimeFence);
+    }
+    if command.producer_grant_epoch == 0 {
+        return Err(MailReplayValidationErrorV1::InvalidGrantFence);
+    }
+    validate_message_ids(&command.original_message_ids)
+}
+
+pub fn validate_mail_replay_result_v1(
+    result: &wire::ReplayMailEvidenceResultV1,
+) -> Result<(), MailReplayValidationErrorV1> {
+    validate_id16(&result.operation_id)
+        .map_err(|_| MailReplayValidationErrorV1::InvalidOperation)?;
+    validate_message_ids(&result.original_message_ids)?;
+    use wire::{ReplayMailEvidenceFailureV1 as Failure, ReplayMailEvidenceOutcomeV1 as Outcome};
+    let outcome = Outcome::try_from(result.outcome)
+        .map_err(|_| MailReplayValidationErrorV1::InvalidResult)?;
+    let failure = Failure::try_from(result.failure)
+        .map_err(|_| MailReplayValidationErrorV1::InvalidResult)?;
+    match outcome {
+        Outcome::Published | Outcome::AlreadyPublished if failure == Failure::Unspecified => Ok(()),
+        Outcome::Rejected | Outcome::Unavailable if failure != Failure::Unspecified => Ok(()),
+        _ => Err(MailReplayValidationErrorV1::InvalidResult),
+    }
+}
+
+fn validate_message_ids(ids: &[Vec<u8>]) -> Result<(), MailReplayValidationErrorV1> {
+    if ids.is_empty() || ids.len() > MAIL_REPLAY_MAX_MESSAGES_V1 {
+        return Err(MailReplayValidationErrorV1::InvalidMessageSelection);
+    }
+    let mut unique = HashSet::with_capacity(ids.len());
+    for id in ids {
+        if validate_id16(id).is_err() || !unique.insert(id.as_slice()) {
+            return Err(MailReplayValidationErrorV1::InvalidMessageSelection);
+        }
+    }
+    Ok(())
+}
+
+fn validate_id16(value: &[u8]) -> Result<(), ()> {
+    (value.len() == 16 && value.iter().any(|byte| *byte != 0))
+        .then_some(())
+        .ok_or(())
+}
+
+fn valid_sha256(value: &[u8]) -> bool {
+    value.len() == 32 && value.iter().any(|byte| *byte != 0)
+}
+
+fn valid_identity(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+}
 
 #[must_use]
 pub fn mail_replay_command_contract_reference_v1() -> ContractReferenceV1 {
