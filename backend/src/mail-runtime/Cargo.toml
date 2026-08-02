@@ -44,6 +44,7 @@ hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 hermes-storage-protocol = { path = "../platform/storage/protocol" }
 hermes-storage-vault = { path = "../platform/storage/vault" }
 hermes-vault-protocol = { path = "../platform/vault/protocol" }
+hermes-mail-retained-evidence-replay-persistence = { path = "../mail-retained-evidence-replay-persistence" }
 libc = "=0.2.186"
 getrandom = { version = "=0.4.3", default-features = false }
 prost = "=0.14.4"

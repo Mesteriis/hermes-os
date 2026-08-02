@@ -221,6 +221,7 @@ members = [
   "src/mail-gmail",
   "src/mail-smtp",
   "src/mail-persistence",
+  "src/mail-retained-evidence-replay-persistence",
   "src/mail-runtime",
   "src/mail-assembly",
   "src/telegram-api",

@@ -4044,6 +4044,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-mail-retained-evidence-replay-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-security-contract",
+ "hermes-events-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-mail-runtime"
 version = "0.1.0"
 dependencies = [
@@ -4060,6 +4073,7 @@ dependencies = [
  "hermes-mail-gmail",
  "hermes-mail-imap",
  "hermes-mail-persistence",
+ "hermes-mail-retained-evidence-replay-persistence",
  "hermes-mail-smtp",
  "hermes-managed-vault-client",
  "hermes-runtime-protocol",

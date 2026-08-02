@@ -154,7 +154,7 @@ test('Mail credential binding is owner-local, configuration-only and successor-a
   assert.match(runtime, /MailConnectorProfileV1::ImapSmtp/);
   assert.match(runtime, /MailProviderPathReadinessV1::CredentialRequired/);
   assert.match(assembly, /mail_settings_schema_v2/);
-  assert.match(assembly, /mail_storage_bundle_v1/);
+  assert.match(assembly, /mail_runtime_storage_bundle_v1/);
 
   assert.match(
     live,

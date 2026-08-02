@@ -4,8 +4,8 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: protocol and Communications owner-local persistence
-foundations implemented, gate planned.
+Состояние реализации: protocol and producer-local persistence foundations
+implemented, gate planned.
 Диагностический browser gate Preview подтвердил, что generated Start/Get
 проходят через Core Gateway и один shared SSE stream, но source events старше
 bounded JetStream retention уже отсутствуют в broker. Отдельный workflow-owned
@@ -16,9 +16,12 @@ surface. Communications build unit
 `hermes-communications-retained-evidence-replay-persistence` добавляет exact
 index поверх собственного `communications_domain_outbox`, проверяет сохранённые
 bytes/message/hash/contract и ведёт append-only replay audit как storage bundle
-revision 17. Mail owner-local selection/audit adapter, workflow runtime и live
-conformance ещё не реализованы. Никакая SQL-правка publish state не считается
-реализацией этого решения.
+revision 17. Integration build unit
+`hermes-mail-retained-evidence-replay-persistence` аналогично индексирует только
+собственный `mail_attachment_security_outbox`, проверяет exact scan-candidate
+contract и добавляет Mail storage successor revision 23. Producer-local publish
+adapters, workflow runtime и live conformance ещё не реализованы. Никакая
+SQL-правка publish state не считается реализацией этого решения.
 
 ## Контекст
 

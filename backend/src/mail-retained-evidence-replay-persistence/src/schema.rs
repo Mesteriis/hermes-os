@@ -1,0 +1,88 @@
+use hermes_storage_protocol::{
+    v1::{StorageBundleV1, StorageMigrationStepV1},
+    validation::validate_storage_bundle,
+};
+use sha2::{Digest, Sha256};
+
+pub const MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1: u32 = 23;
+pub const MAIL_RETAINED_EVIDENCE_REPLAY_SCHEMA_V1: &[u8] =
+    include_bytes!("../migrations/0001_retained_evidence_replay.sql");
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailRetainedEvidenceReplaySchemaErrorV1 {
+    InvalidPredecessor,
+    InvalidSuccessor,
+}
+
+pub fn append_mail_retained_evidence_replay_storage_v1(
+    mut predecessor: StorageBundleV1,
+) -> Result<StorageBundleV1, MailRetainedEvidenceReplaySchemaErrorV1> {
+    if predecessor.major != 1
+        || predecessor.revision != MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1 - 1
+        || predecessor.bundle_id != "mail_state"
+        || predecessor.owner_id != "mail"
+        || predecessor.steps.last().map(|step| step.revision) != Some(20)
+        || validate_storage_bundle(&predecessor).is_err()
+    {
+        return Err(MailRetainedEvidenceReplaySchemaErrorV1::InvalidPredecessor);
+    }
+    predecessor.steps.push(StorageMigrationStepV1 {
+        revision: MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1,
+        migration_id: "mail_retained_evidence_replay".to_owned(),
+        forward_sql_utf8: MAIL_RETAINED_EVIDENCE_REPLAY_SCHEMA_V1.to_vec(),
+        sha256: Sha256::digest(MAIL_RETAINED_EVIDENCE_REPLAY_SCHEMA_V1).to_vec(),
+    });
+    predecessor.revision = MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1;
+    validate_storage_bundle(&predecessor)
+        .map(|()| predecessor)
+        .map_err(|_| MailRetainedEvidenceReplaySchemaErrorV1::InvalidSuccessor)
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_storage_protocol::v1::StorageMigrationStepV1;
+
+    use super::*;
+
+    fn predecessor(owner_id: &str) -> StorageBundleV1 {
+        StorageBundleV1 {
+            major: 1,
+            revision: 22,
+            bundle_id: "mail_state".to_owned(),
+            owner_id: owner_id.to_owned(),
+            steps: (1..=20)
+                .map(|revision| {
+                    let sql = format!("CREATE TABLE hermes_data.mail_test_{revision} (id BIGINT);")
+                        .into_bytes();
+                    StorageMigrationStepV1 {
+                        revision,
+                        migration_id: format!("mail_test_{revision}"),
+                        sha256: Sha256::digest(&sql).to_vec(),
+                        forward_sql_utf8: sql,
+                    }
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn appends_only_mail_index_and_audit() {
+        let bundle = append_mail_retained_evidence_replay_storage_v1(predecessor("mail"))
+            .expect("valid successor");
+        assert_eq!(bundle.revision, 23);
+        let sql = String::from_utf8(bundle.steps[20].forward_sql_utf8.clone()).expect("utf8");
+        assert!(sql.contains("mail_retained_evidence_replay_index"));
+        assert!(sql.contains("mail_retained_evidence_replay_audit"));
+        assert!(!sql.contains("communications_"));
+        assert!(!sql.contains("payload"));
+        assert!(!sql.contains("subject"));
+    }
+
+    #[test]
+    fn rejects_wrong_owner_predecessor() {
+        assert_eq!(
+            append_mail_retained_evidence_replay_storage_v1(predecessor("communications")),
+            Err(MailRetainedEvidenceReplaySchemaErrorV1::InvalidPredecessor)
+        );
+    }
+}

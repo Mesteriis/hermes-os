@@ -137,7 +137,12 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     policy.implementation.productionPackages
       .filter(({ role }) => role === 'integration')
       .map(({ name }) => name),
-    [...MAIL_PACKAGES, ...PROVIDER_DELIVERY_CONTRACT_PACKAGES, ...STAGED_OLLAMA_PACKAGES],
+    [
+      ...MAIL_PACKAGES,
+      ...PROVIDER_DELIVERY_CONTRACT_PACKAGES,
+      ...STAGED_OLLAMA_PACKAGES,
+      'hermes-mail-retained-evidence-replay-persistence',
+    ],
   );
   assert.deepEqual(
     inventory.businessCapabilities.filter((capability) => capability.startsWith('mail.')),

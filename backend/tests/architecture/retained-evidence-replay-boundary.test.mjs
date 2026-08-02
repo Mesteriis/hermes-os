@@ -103,3 +103,54 @@ test('Communications replay storage is an additive exact revision 17 successor',
   assert.match(schema, /predecessor\.bundle_id != "communications_state"/);
   assert.match(schema, /predecessor\.steps\.push\(StorageMigrationStepV1/);
 });
+
+test('Mail retained replay persistence is integration-owned and storage-isolated', async () => {
+  const [manifest, repository, migration, runtimeBundle, assembly, policySource] =
+    await Promise.all([
+      read('src/mail-retained-evidence-replay-persistence/Cargo.toml'),
+      read('src/mail-retained-evidence-replay-persistence/src/repository.rs'),
+      read(
+        'src/mail-retained-evidence-replay-persistence/migrations/0001_retained_evidence_replay.sql',
+      ),
+      read('src/mail-runtime/src/storage_bundle.rs'),
+      read('src/mail-assembly/src/lib.rs'),
+      read('architecture/policy.json'),
+    ]);
+  const policy = JSON.parse(policySource);
+  const descriptor = policy.implementation.productionPackages.find(
+    ({ name }) => name === 'hermes-mail-retained-evidence-replay-persistence',
+  );
+
+  assert.deepEqual(descriptor, {
+    name: 'hermes-mail-retained-evidence-replay-persistence',
+    role: 'integration',
+    owner: 'mail',
+    surface: 'persistence',
+  });
+  assert.match(manifest, /role = "integration"/);
+  assert.match(manifest, /owner = "mail"/);
+  assert.doesNotMatch(manifest, /hermes-communications-(?:domain|persistence|runtime)/);
+  assert.doesNotMatch(manifest, /hermes-(?:attachment-security-runtime|kernel)/);
+  assert.match(repository, /mail_attachment_security_outbox/);
+  assert.match(repository, /OutboxRecordV1::accept/);
+  assert.match(repository, /ATTACHMENT_SECURITY_SCAN_CANDIDATE_SCHEMA_SHA256/);
+  assert.match(repository, /ON CONFLICT \(operation_id, original_message_id, logical_attempt, phase\) DO NOTHING/);
+  assert.match(runtimeBundle, /append_mail_retained_evidence_replay_storage_v1/);
+  assert.match(assembly, /mail_runtime_storage_bundle_v1/);
+  assert.match(migration, /REFERENCES hermes_data\.mail_attachment_security_outbox/);
+  assert.doesNotMatch(migration, /REFERENCES hermes_data\.communications_/);
+  assert.doesNotMatch(migration, /\b(?:UPDATE|DELETE)\b/);
+});
+
+test('Mail replay storage is an additive exact revision 23 successor', async () => {
+  const schema = await read('src/mail-retained-evidence-replay-persistence/src/schema.rs');
+
+  assert.match(
+    schema,
+    /MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1: u32 = 23/,
+  );
+  assert.match(schema, /predecessor\.revision != MAIL_RETAINED_EVIDENCE_REPLAY_STORAGE_BUNDLE_REVISION_V1 - 1/);
+  assert.match(schema, /predecessor\.owner_id != "mail"/);
+  assert.match(schema, /predecessor\.bundle_id != "mail_state"/);
+  assert.match(schema, /predecessor\.steps\.push\(StorageMigrationStepV1/);
+});

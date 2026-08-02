@@ -277,6 +277,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'hermes-ollama-ai-http',
       'hermes-ollama-ai-persistence',
       'hermes-ollama-ai-runtime',
+      'hermes-mail-retained-evidence-replay-persistence',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );

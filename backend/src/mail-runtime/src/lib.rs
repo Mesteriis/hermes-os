@@ -16,6 +16,7 @@ pub mod gmail_oauth;
 pub mod gmail_sync_worker;
 pub mod managed;
 pub mod settings;
+pub mod storage_bundle;
 
 use hermes_mail_api::{GmailOAuthConfigurationV1, MailAccountConfigurationV1};
 
