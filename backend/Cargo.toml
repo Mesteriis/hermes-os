@@ -209,6 +209,7 @@ members = [
   "src/attachment-translation-api",
   "src/attachment-translation-ingress",
   "src/attachment-translation-core",
+  "src/attachment-translation-persistence",
   "src/attachment-preview-api",
   "src/attachment-preview-assembly",
   "src/attachment-preview-ingress",

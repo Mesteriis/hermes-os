@@ -4,12 +4,14 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: частично реализовано. Отдельный phase gate
-`attachment_translation_contracts_v1` закрыт тремя production units: generated
-private-content-free client API, exact durable source ingress и pure lifecycle
-core. Runtime, persistence, source producer, AI use-case extension, assembly и
-managed/live evidence ещё отсутствуют, поэтому `attachment_translation_v1`
-остаётся `planned`; contract foundation не является полным переносом.
+Состояние реализации: частично реализовано. Phase gate
+`attachment_translation_persistence_v1` закрывает четыре production units:
+generated private-content-free client API, exact durable source ingress, pure
+lifecycle core и owner-local PostgreSQL persistence. Persistence атомарно
+владеет idempotency, inbox/outbox, recovery и realtime, а SQL хранит только
+authority receipts и result metadata без source/translated text. Runtime,
+source producer, AI use-case extension, assembly и managed/live evidence ещё
+отсутствуют, поэтому `attachment_translation_v1` остаётся `planned`.
 
 Уточняет:
 
@@ -221,6 +223,13 @@ gate и включает только:
 
 Этот foundation gate не выдаёт runtime grants, Blob authority или AI route и
 не меняет состояние `attachment_translation_v1`.
+
+Следующий phase gate `attachment_translation_persistence_v1` добавляет только
+`hermes-attachment-translation-persistence`: owner-local additive Storage
+bundle, operation fingerprint, commit-before-Ack inbox, exact outbox bytes,
+recoverable non-terminal runs и replayable realtime sequence. Он не вводит
+runtime, AI provider или cross-owner SQL и также не меняет состояние полного
+inventory gate.
 
 `attachment_translation_v1` становится `implemented` только атомарно после:
 

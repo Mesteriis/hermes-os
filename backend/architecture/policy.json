@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_translation_contracts_v1",
+    "currentSlice": "attachment_translation_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1452,6 +1452,12 @@
         "role": "workflow",
         "owner": "attachment_translation",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-translation-persistence",
+        "role": "workflow",
+        "owner": "attachment_translation",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -1493,6 +1499,10 @@
         { "name": "hermes-runtime-protocol", "kind": "normal" }
       ],
       "hermes-attachment-translation-core": [],
+      "hermes-attachment-translation-persistence": [
+        { "name": "hermes-attachment-translation-core", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
       "hermes-communications-retained-evidence-replay-persistence": [
         {
           "name": "hermes-communications-attachment-contract",
@@ -4306,6 +4316,10 @@
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
       ],
       "hermes-attachment-translation-core": [],
+      "hermes-attachment-translation-persistence": [
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
       "hermes-communications-retained-evidence-replay-persistence": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "prost", "kind": "dev", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -9772,6 +9786,10 @@
         "customBuildAllowed": true
       },
       "hermes-attachment-translation-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-translation-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

@@ -1223,6 +1223,11 @@ const ATTACHMENT_TRANSLATION_CONTRACTS_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-translation-core', role: 'workflow', owner: 'attachment_translation', surface: 'implementation' },
 ];
 
+const ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...ATTACHMENT_TRANSLATION_CONTRACTS_PRODUCTION_PACKAGES,
+  { name: 'hermes-attachment-translation-persistence', role: 'workflow', owner: 'attachment_translation', surface: 'persistence' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3609,6 +3614,14 @@ const ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-attachment-translation-core': [],
 };
 
+const ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-translation-persistence': [
+    { name: 'hermes-attachment-translation-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4854,6 +4867,14 @@ const ATTACHMENT_TRANSLATION_CONTRACTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
   'hermes-attachment-translation-core': [],
+};
+
+const ATTACHMENT_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TRANSLATION_CONTRACTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-attachment-translation-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -7361,6 +7382,17 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_TRANSLATION_CONTRACTS_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TRANSLATION_CONTRACTS_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_TRANSLATION_CONTRACTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'attachment_translation_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: ATTACHMENT_TRANSLATION_CONTRACTS_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: ATTACHMENT_TRANSLATION_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: ATTACHMENT_TRANSLATION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

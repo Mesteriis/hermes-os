@@ -6,7 +6,7 @@ const BACKEND_ROOT = new URL('../..', import.meta.url);
 const REPOSITORY_ROOT = new URL('../', BACKEND_ROOT);
 
 test('attachment translation agreement keeps workflow source engine and provider separate', async () => {
-  const [inventorySource, policySource, workspace, apiManifest, api, apiProto, ingressManifest, ingress, coreManifest, core, adr] = await Promise.all([
+  const [inventorySource, policySource, workspace, apiManifest, api, apiProto, ingressManifest, ingress, coreManifest, core, persistenceManifest, persistence, schema, adr] = await Promise.all([
     readFile(
       new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
       'utf8',
@@ -26,6 +26,9 @@ test('attachment translation agreement keeps workflow source engine and provider
     readFile(new URL('src/attachment-translation-ingress/src/lib.rs', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-core/Cargo.toml', BACKEND_ROOT), 'utf8'),
     readFile(new URL('src/attachment-translation-core/src/lib.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-persistence/Cargo.toml', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-persistence/src/repository.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-persistence/migrations/0001_translation.sql', BACKEND_ROOT), 'utf8'),
     readFile(
       new URL('docs/adr/ADR-0378-bounded-attachment-translation-workflow.md', REPOSITORY_ROOT),
       'utf8',
@@ -53,6 +56,7 @@ test('attachment translation agreement keeps workflow source engine and provider
     'hermes-attachment-translation-ingress',
     'hermes-attachment-translation-core',
     'hermes-attachment-translation-persistence',
+    'hermes-attachment-translation-persistence',
     'hermes-attachment-translation-runtime',
     'hermes-attachment-translation-assembly',
   ]) {
@@ -64,7 +68,7 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(adr, /distinct capability/);
   assert.match(adr, /Source text и translated[\s\S]*не попадают в SQL workflow owner/);
   assert.match(adr, /inventory state остаётся `planned`/);
-  assert.equal(policy.implementation.currentSlice, 'attachment_translation_contracts_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_persistence_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_translation'));
   for (const packageName of [
     'hermes-attachment-translation-api',
@@ -76,6 +80,7 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(workspace, /"src\/attachment-translation-api"/);
   assert.match(workspace, /"src\/attachment-translation-ingress"/);
   assert.match(workspace, /"src\/attachment-translation-core"/);
+  assert.match(workspace, /"src\/attachment-translation-persistence"/);
   assert.match(apiManifest, /owner = "attachment_translation"/);
   assert.match(api, /ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1/);
   assert.doesNotMatch(apiProto, /translated_text_utf8|provider_id|model_id|prompt/);
@@ -86,6 +91,14 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(core, /AttachmentTranslationStateV1/);
   assert.match(core, /MaterializingResult/);
   assert.doesNotMatch(core, /translated_text_utf8|communications|ollama|ai_inference/);
+  assert.match(persistenceManifest, /surface = "persistence"/);
+  assert.match(persistence, /persist_source_result/);
+  assert.match(persistence, /persist_inference_result/);
+  assert.match(persistence, /persist_materialization_result/);
+  assert.match(schema, /source_extraction_run_id/);
+  assert.match(schema, /pending_translated_sha256/);
+  assert.match(schema, /artifact_translated_sha256/);
+  assert.doesNotMatch(schema, /translated_text|source_text|provider_id|model_id|prompt/);
   assert.doesNotMatch(
     adr,
     /Communications owns attachment translation|legacy REST facade открывает gate|caller выбирает provider/,
