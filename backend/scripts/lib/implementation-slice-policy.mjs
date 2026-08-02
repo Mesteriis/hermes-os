@@ -1309,6 +1309,11 @@ const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES =
 const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES =
   MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES;
 
+const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES,
+  { name: 'hermes-mail-contacts-sync-assembly', role: 'workflow', owner: 'mail_contacts_sync', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3874,6 +3879,16 @@ const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   )),
 };
 
+const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-contacts-sync-assembly': [
+    { name: 'hermes-mail-contacts-sync-persistence', kind: 'normal' },
+    { name: 'hermes-mail-contacts-sync-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5262,6 +5277,15 @@ const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
 
 const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
   MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST;
+
+const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-contacts-sync-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+};
 
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
@@ -8065,6 +8089,17 @@ function expectedSlice(currentSlice) {
       packages: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'mail_contacts_sync_release_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

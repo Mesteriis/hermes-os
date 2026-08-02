@@ -4287,6 +4287,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-mail-contacts-sync-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-contacts-sync-persistence",
+ "hermes-mail-contacts-sync-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-mail-contacts-sync-core"
 version = "0.1.0"
 

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_address_book_managed_provider_conformance_v1",
+    "currentSlice": "mail_contacts_sync_release_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1554,6 +1554,12 @@
         "role": "integration",
         "owner": "mail",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-contacts-sync-assembly",
+        "role": "workflow",
+        "owner": "mail_contacts_sync",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2557,6 +2563,24 @@
       ],
       "hermes-mail-google-people": [],
       "hermes-mail-carddav": [],
+      "hermes-mail-contacts-sync-assembly": [
+        {
+          "name": "hermes-mail-contacts-sync-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-contacts-sync-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "hermes-storage-protocol",
@@ -9360,6 +9384,35 @@
           "features": []
         }
       ],
+      "hermes-mail-contacts-sync-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "sha2",
@@ -13828,6 +13881,10 @@
       },
       "hermes-mail-carddav": {
         "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-contacts-sync-assembly": {
+        "primaryKind": "bin",
         "customBuildAllowed": false
       },
       "hermes-tasks-persistence": {

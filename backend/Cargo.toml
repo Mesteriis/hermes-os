@@ -89,6 +89,7 @@ members = [
   "src/mail-contacts-sync-core",
   "src/mail-contacts-sync-persistence",
   "src/mail-contacts-sync-runtime",
+  "src/mail-contacts-sync-assembly",
   "src/reviewed-task-candidate-promotion-core",
   "src/reviewed-task-candidate-promotion-persistence",
   "src/reviewed-task-candidate-promotion-runtime",

@@ -191,6 +191,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-tasks-assembly \
 	--package hermes-contacts-runtime \
 	--package hermes-contacts-assembly \
+	--package hermes-mail-contacts-sync-runtime \
+	--package hermes-mail-contacts-sync-assembly \
 	--package hermes-knowledge-runtime \
 	--package hermes-knowledge-assembly \
 	--package hermes-review-note-candidate-runtime \
@@ -272,6 +274,7 @@ communication_note_candidate_assembly="$assembly_root/communication-note-candida
 review_task_candidate_assembly="$assembly_root/review-task-candidate"
 tasks_assembly="$assembly_root/tasks"
 contacts_assembly="$assembly_root/contacts"
+mail_contacts_sync_assembly="$assembly_root/mail-contacts-sync"
 knowledge_assembly="$assembly_root/knowledge"
 review_note_candidate_assembly="$assembly_root/review-note-candidate"
 reviewed_note_candidate_promotion_assembly="$assembly_root/reviewed-note-candidate-promotion"
@@ -348,6 +351,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$contacts_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-contacts-runtime"
+"$cargo_target_dir/debug/hermes-mail-contacts-sync-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$mail_contacts_sync_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-mail-contacts-sync-runtime"
 "$cargo_target_dir/debug/hermes-knowledge-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$knowledge_assembly" \
@@ -457,6 +464,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$review_task_candidate_assembly/review-task-candidate.release-artifacts.json" \
 	--artifact-fragment "$tasks_assembly/tasks.release-artifacts.json" \
 	--artifact-fragment "$contacts_assembly/contacts.release-artifacts.json" \
+	--artifact-fragment "$mail_contacts_sync_assembly/mail_contacts_sync.release-artifacts.json" \
 	--artifact-fragment "$knowledge_assembly/knowledge.release-artifacts.json" \
 	--artifact-fragment "$review_note_candidate_assembly/review-note-candidate.release-artifacts.json" \
 	--artifact-fragment "$reviewed_note_candidate_promotion_assembly/reviewed_note_candidate_promotion.release-artifacts.json" \

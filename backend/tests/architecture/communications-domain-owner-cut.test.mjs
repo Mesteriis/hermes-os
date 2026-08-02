@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_managed_provider_conformance_v1',
+    'mail_contacts_sync_release_assembly_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],

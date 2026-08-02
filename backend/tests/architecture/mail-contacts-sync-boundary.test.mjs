@@ -193,6 +193,14 @@ const files = {
   workflowRuntimeAdmission: new URL('src/mail-contacts-sync-runtime/src/admission.rs', BACKEND_ROOT),
   workflowManagedRuntime: new URL('src/mail-contacts-sync-runtime/src/managed_runtime.rs', BACKEND_ROOT),
   workflowRuntimeMain: new URL('src/mail-contacts-sync-runtime/src/main.rs', BACKEND_ROOT),
+  workflowAssemblyManifest: new URL(
+    'src/mail-contacts-sync-assembly/Cargo.toml',
+    BACKEND_ROOT,
+  ),
+  workflowAssembly: new URL(
+    'src/mail-contacts-sync-assembly/src/lib.rs',
+    BACKEND_ROOT,
+  ),
   workflowScheduler: new URL('src/mail-contacts-sync-runtime/src/scheduler_due.rs', BACKEND_ROOT),
   workflowReverseChange: new URL(
     'src/mail-contacts-sync-runtime/src/reverse_change.rs',
@@ -237,7 +245,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_managed_provider_conformance_v1',
+    'mail_contacts_sync_release_assembly_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -285,6 +293,36 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
   assert.match(sourceResults, /consume_source_prepared_once_v1/);
   assert.match(sourceResults, /build_upsert_mail_address_book_entry_command_v1/);
   assert.doesNotMatch(`${reverseChange}\n${sourceResults}`, /BlobDataClient|provider_kind\s*==|reqwest/);
+});
+
+test('mail contacts sync assembly is a distinct unsigned workflow build unit', async () => {
+  const [manifest, assembly, developmentRelease] = await Promise.all([
+    readFile(files.workflowAssemblyManifest, 'utf8'),
+    readFile(files.workflowAssembly, 'utf8'),
+    readFile(files.developmentRelease, 'utf8'),
+  ]);
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "mail_contacts_sync"/);
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(manifest, /hermes-mail-contacts-sync-persistence/);
+  assert.match(manifest, /hermes-mail-contacts-sync-runtime/);
+  assert.doesNotMatch(
+    manifest,
+    /hermes-mail-(?:runtime|persistence)|hermes-contacts-(?:runtime|persistence)/,
+  );
+  assert.match(assembly, /mail_contacts_sync_module_descriptor_v1/);
+  assert.match(assembly, /mail_contacts_sync_settings_schema_v1/);
+  assert.match(assembly, /mail_contacts_sync_storage_bundle_v1/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.doesNotMatch(
+    assembly,
+    /SigningKey|--signing-key|private[_-]?key|provider_kind|reqwest/i,
+  );
+  assert.match(developmentRelease, /--package hermes-mail-contacts-sync-assembly/);
+  assert.match(
+    developmentRelease,
+    /mail_contacts_sync\.release-artifacts\.json/,
+  );
 });
 
 test('Mail address-book providers are separate bounded integration adapters', async () => {
@@ -482,7 +520,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_managed_provider_conformance_v1',
+    'mail_contacts_sync_release_assembly_v1',
   );
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(

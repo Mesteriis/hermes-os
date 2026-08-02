@@ -1092,7 +1092,7 @@ test('signs the exact Review attention runtime and Storage entries emitted by it
   }
 });
 
-test('signs distinct task note and Contacts runtime and Storage entries', async () => {
+test('signs distinct task note Contacts and mail sync runtime and Storage entries', async () => {
   const root = canonicalTemporaryDirectory('hermes-task-candidate-release-fragments-');
   try {
     const privateKeyPath = join(root, 'release-key.pem');
@@ -1154,6 +1154,13 @@ test('signs distinct task note and Contacts runtime and Storage entries', async 
         owner: 'contacts',
         ids: ['contacts.runtime.v1', 'contacts.storage.v1'],
       },
+      {
+        package: 'hermes-mail-contacts-sync-assembly',
+        runtimeName: 'hermes-mail-contacts-sync-runtime',
+        fragmentName: 'mail_contacts_sync.release-artifacts.json',
+        owner: 'mail_contacts_sync',
+        ids: ['mail_contacts_sync.runtime.v1', 'mail_contacts_sync.storage.v1'],
+      },
     ];
     const fragments = [];
     for (const [index, unit] of units.entries()) {
@@ -1213,6 +1220,8 @@ test('signs distinct task note and Contacts runtime and Storage entries', async 
         ['communication_task_candidate_extraction.storage.v1', 3n],
         ['contacts.runtime.v1', 1n],
         ['contacts.storage.v1', 3n],
+        ['mail_contacts_sync.runtime.v1', 1n],
+        ['mail_contacts_sync.storage.v1', 3n],
         ['review.task-candidate.runtime.v1', 1n],
         ['review.task-candidate.storage.v1', 3n],
         ['reviewed_task_candidate_promotion.runtime.v1', 1n],

@@ -13,7 +13,11 @@ provider observations, Contacts commands, early terminal results and page
 completion without cross-owner SQL or in-memory truth. Отдельный managed
 workflow runtime, typed multi-instance Settings bootstrap и Scheduler due/receipt
 binding реализованы со статическим architecture и pre-commit evidence. Workflow
-assembly и Contacts-to-Mail command path реализованы статически; Mail runtime
+release assembly реализована как отдельная unsigned workflow build unit и
+включена в signed development distribution; она материализует только exact
+descriptor, Settings schema и workflow-owned Storage bundle, не получая
+signing или execution authority. Contacts-to-Mail command path реализован
+статически; Mail runtime
 durable-резервирует команду, читает target-bound Blob и выполняет Google People
 create/update либо exact iCloud read-only rejection. Target custody receipt
 сохраняется до Blob read/provider dispatch и проверен disposable PostgreSQL
