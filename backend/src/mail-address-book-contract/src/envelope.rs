@@ -13,8 +13,9 @@ use sha2::{Digest, Sha256};
 use crate::{
     MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1, MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1,
     MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1, MAIL_ADDRESS_BOOK_MAX_CURSOR_BYTES_V1,
-    MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1, MAIL_ADDRESS_BOOK_SCHEMA_SHA256_V1, MAIL_OWNER_ID_V1,
-    MailAddressBookContractV1, wire::FetchMailAddressBookPageCommandV1,
+    MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1, MAIL_ADDRESS_BOOK_MAX_SNAPSHOT_TICKET_BYTES_V1,
+    MAIL_ADDRESS_BOOK_SCHEMA_SHA256_V1, MAIL_OWNER_ID_V1, MailAddressBookContractV1,
+    wire::{FetchMailAddressBookPageCommandV1, UpsertMailAddressBookEntryCommandV1},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -96,6 +97,90 @@ pub fn build_fetch_mail_address_book_page_command_v1(
                 b"mail-address-book-fetch-page-idempotency-v1",
                 &run_id,
                 &payload.page_size.to_be_bytes(),
+            )
+            .to_vec(),
+            deadline: Some(Timestamp {
+                seconds: deadline_unix_seconds,
+                nanos: 0,
+            }),
+            logical_attempt: 1,
+        })),
+        payload: payload.encode_to_vec(),
+    };
+    validate_envelope_v1(&envelope)
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidEnvelope)?;
+    OutboxRecordV1::accept(envelope.encode_to_vec()).map_err(outbox_error)
+}
+
+pub fn build_upsert_mail_address_book_entry_command_v1(
+    payload: UpsertMailAddressBookEntryCommandV1,
+    deadline_unix_seconds: i64,
+    context: &MailAddressBookEnvelopeContextV1,
+) -> Result<OutboxRecordV1, MailAddressBookEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    let command_id = id16(&payload.command_id)?;
+    let run_id = id16(&payload.run_id)?;
+    id16(&payload.contact_snapshot_reference_id)?;
+    if !valid_identity(&payload.logical_owner_id)
+        || !valid_bounded(&payload.account_id, 256)
+        || payload.contact_snapshot_sha256.len() != 32
+        || payload
+            .contact_snapshot_sha256
+            .iter()
+            .all(|byte| *byte == 0)
+        || payload.expected_contact_revision == 0
+        || payload.contact_snapshot_declared_bytes == 0
+        || payload.contact_snapshot_declared_bytes > 32 * 1024
+        || payload.contact_snapshot_custody_source_proof.is_empty()
+        || payload.contact_snapshot_custody_source_proof.len()
+            > MAIL_ADDRESS_BOOK_MAX_SNAPSHOT_TICKET_BYTES_V1
+        || deadline_unix_seconds <= context.recorded_at_unix_seconds
+    {
+        return Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    let contract = MailAddressBookContractV1::UpsertEntryCommand;
+    let envelope = DurableEnvelopeV1 {
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: command_id.to_vec(),
+        contract: Some(ContractRefV1 {
+            owner: MAIL_OWNER_ID_V1.to_owned(),
+            name: contract.name().to_owned(),
+            major: MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1,
+            revision: MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1,
+            schema_sha256: MAIL_ADDRESS_BOOK_SCHEMA_SHA256_V1.to_vec(),
+        }),
+        source: Some(SourceRefV1 {
+            module_id: context.module_id.clone(),
+            runtime_instance_id: digest16(
+                b"mail-contacts-sync-runtime-instance-v1",
+                context.runtime_instance_id.as_bytes(),
+                b"mail-address-book-write",
+            )
+            .to_vec(),
+            runtime_generation: context.runtime_generation,
+        }),
+        recorded_at: Some(timestamp(context)),
+        partition_key: run_id.to_vec(),
+        causation_message_id: Vec::new(),
+        correlation_id: run_id.to_vec(),
+        actor: Some(ActorRefV1 {
+            kind: ActorKindV1::Module as i32,
+            actor_id: context.module_id.as_bytes().to_vec(),
+        }),
+        trace: None,
+        source_fence: Some(SourceFenceV1 {
+            kind: FenceKindV1::RuntimeLease as i32,
+            scope_id: context.module_id.as_bytes().to_vec(),
+            epoch: context.runtime_generation,
+        }),
+        semantics: Some(Semantics::Command(CommandMetadataV1 {
+            command_id: command_id.to_vec(),
+            target_capability: MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1.to_owned(),
+            idempotency_key: digest16(
+                b"mail-address-book-upsert-entry-idempotency-v1",
+                &run_id,
+                &payload.expected_contact_revision.to_be_bytes(),
             )
             .to_vec(),
             deadline: Some(Timestamp {

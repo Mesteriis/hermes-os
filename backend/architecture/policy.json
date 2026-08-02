@@ -1070,6 +1070,12 @@
         "surface": "contract"
       },
       {
+        "name": "hermes-contacts-mail-sync-source-api",
+        "role": "domain",
+        "owner": "contacts",
+        "surface": "contract"
+      },
+      {
         "name": "hermes-contacts-core",
         "role": "domain",
         "owner": "contacts",
@@ -2359,6 +2365,16 @@
           "kind": "normal"
         }
       ],
+      "hermes-contacts-mail-sync-source-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-contacts-core": [],
       "hermes-contacts-persistence": [
         {
@@ -2372,11 +2388,19 @@
       ],
       "hermes-contacts-runtime": [
         {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-contacts-command-api",
           "kind": "normal"
         },
         {
           "name": "hermes-contacts-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-contacts-mail-sync-source-api",
           "kind": "normal"
         },
         {
@@ -2452,6 +2476,10 @@
       "hermes-mail-contacts-sync-runtime": [
         {
           "name": "hermes-contacts-command-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-contacts-mail-sync-source-api",
           "kind": "normal"
         },
         {
@@ -8838,6 +8866,56 @@
           "features": []
         }
       ],
+      "hermes-contacts-mail-sync-source-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-contacts-core": [
         {
           "name": "sha2",
@@ -13516,6 +13594,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": true
       },
+      "hermes-contacts-mail-sync-source-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
       "hermes-contacts-core": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -13784,6 +13866,9 @@
         "communications_export.events.v1",
         "communications_export.storage.v1",
         "contacts.mail-identity.command.v1",
+        "contacts.mail-sync-source.blob-writer.v1",
+        "contacts.mail-sync-source.changed.v1",
+        "contacts.mail-sync-source.v1",
         "knowledge.reviewed-candidate.blob.v1",
         "knowledge.reviewed-candidate.command.v1",
         "knowledge.reviewed-candidate.created.publisher.v1",
@@ -13810,8 +13895,12 @@
         "mail.smtp.credentials.v1",
         "mail.storage.v1",
         "mail.sync.v1",
+        "mail_contacts_sync.contacts.changed.v1",
         "mail_contacts_sync.contacts.command.v1",
         "mail_contacts_sync.contacts.rejected.v1",
+        "mail_contacts_sync.contacts.source-prepare.v1",
+        "mail_contacts_sync.contacts.source-prepared.v1",
+        "mail_contacts_sync.contacts.source-rejected.v1",
         "mail_contacts_sync.contacts.upserted.v1",
         "mail_contacts_sync.mail.entry-observed.v1",
         "mail_contacts_sync.mail.entry-upsert-rejected.v1",

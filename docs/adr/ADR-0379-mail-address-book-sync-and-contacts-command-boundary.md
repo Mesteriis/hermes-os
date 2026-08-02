@@ -84,10 +84,12 @@ Contacts state.
 
 ### Единицы сборки
 
-Contacts получает минимальный production slice:
+Contacts получает минимальный production slice из шести units:
 
 - `hermes-contacts-command-api` — exact durable upsert command и terminal
   result contracts;
+- `hermes-contacts-mail-sync-source-api` — bounded changed event и отдельный
+  target-bound source handoff для обратного Mail sync;
 - `hermes-contacts-core` — canonical identity normalization, merge/conflict
   invariants и deterministic IDs;
 - `hermes-contacts-persistence` — Contacts-owned canonical state, inbox/outbox
@@ -151,7 +153,8 @@ detail never leave Mail. Workflow does not call provider SDK or read Mail SQL.
 For local-to-provider flow Contacts publishes a bounded changed event with an
 opaque contact reference and exact revision. Workflow requests an authorized
 Contacts export snapshot through a distinct target-bound Blob handoff, then
-emits exact Mail provider upsert command. Mail verifies current account,
+emits exact Mail provider upsert command без provider selector. Mail разрешает
+provider только из current account configuration и проверяет current account,
 credential lease, provider write scope, expected ETag, runtime generation and
 grant epoch before network mutation. ICloud v1 remains read-only and rejects
 remote write explicitly.

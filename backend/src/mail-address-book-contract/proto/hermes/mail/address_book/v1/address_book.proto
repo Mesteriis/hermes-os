@@ -53,12 +53,13 @@ message UpsertMailAddressBookEntryCommandV1 {
   bytes run_id = 2;
   string logical_owner_id = 3;
   string account_id = 4;
-  MailAddressBookProviderKindV1 provider_kind = 5;
-  bytes contact_snapshot_blob_ticket = 6;
+  reserved 5;
+  bytes contact_snapshot_reference_id = 6;
   bytes contact_snapshot_sha256 = 7;
   uint64 expected_contact_revision = 8;
-  optional string provider_entry_id = 9;
-  optional string expected_provider_etag = 10;
+  reserved 9, 10;
+  uint64 contact_snapshot_declared_bytes = 11;
+  bytes contact_snapshot_custody_source_proof = 12;
 }
 
 message MailAddressBookEntryUpsertedV1 {

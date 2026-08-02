@@ -12,6 +12,98 @@ pub struct ContactsOutboxRecordV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactMutationOutboxV1 {
+    pub terminal_result: ContactsOutboxRecordV1,
+    pub changed_event: Option<ContactsOutboxRecordV1>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactMailSyncSourceLinkV1 {
+    pub provider_entry_id: String,
+    pub provider_etag: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactMailSyncSourceSnapshotV1 {
+    pub contact_id: [u8; 16],
+    pub contact_revision: u64,
+    pub display_name: String,
+    pub email_addresses: Vec<String>,
+    pub phone_numbers: Vec<String>,
+    pub target_account_link: Option<ContactMailSyncSourceLinkV1>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(i16)]
+pub enum ContactMailSyncSourceRejectCodeV1 {
+    InvalidRequest = 1,
+    ContactMissing = 2,
+    StaleContactRevision = 3,
+    ContentLimit = 4,
+    Policy = 5,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReserveContactMailSyncSourceV1 {
+    pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub operation_id: [u8; 16],
+    pub contact_id: [u8; 16],
+    pub expected_contact_revision: u64,
+    pub target_mail_account_id: String,
+    pub logical_owner_id: String,
+    pub received_at_unix_millis: i64,
+}
+
+impl ReserveContactMailSyncSourceV1 {
+    #[must_use]
+    pub fn command_fingerprint(&self) -> [u8; 32] {
+        source_command_fingerprint(
+            self.command_envelope_sha256,
+            self.operation_id,
+            self.contact_id,
+            self.expected_contact_revision,
+            &self.target_mail_account_id,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PersistContactMailSyncSourceResultV1 {
+    pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub operation_id: [u8; 16],
+    pub contact_id: [u8; 16],
+    pub expected_contact_revision: u64,
+    pub target_mail_account_id: String,
+    pub logical_owner_id: String,
+    pub reject_code: Option<ContactMailSyncSourceRejectCodeV1>,
+    pub terminal_result: ContactsOutboxRecordV1,
+    pub received_at_unix_millis: i64,
+    pub completed_at_unix_millis: i64,
+}
+
+impl PersistContactMailSyncSourceResultV1 {
+    #[must_use]
+    pub fn command_fingerprint(&self) -> [u8; 32] {
+        source_command_fingerprint(
+            self.command_envelope_sha256,
+            self.operation_id,
+            self.contact_id,
+            self.expected_contact_revision,
+            &self.target_mail_account_id,
+        )
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactMailSyncSourceResultV1 {
+    pub terminal_result: ContactsOutboxRecordV1,
+    pub reject_code: Option<ContactMailSyncSourceRejectCodeV1>,
+    pub replayed: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyMailEntryCommandV1 {
     pub command_message_id: [u8; 16],
     pub command_envelope_sha256: [u8; 32],
@@ -124,6 +216,82 @@ pub(crate) fn valid_outbox(value: &ContactsOutboxRecordV1) -> bool {
         && Sha256::digest(&value.envelope_bytes).as_slice() == value.envelope_sha256
 }
 
+pub(crate) fn valid_mutation_outbox(value: &ContactMutationOutboxV1) -> bool {
+    valid_outbox(&value.terminal_result)
+        && value.changed_event.as_ref().is_none_or(|changed| {
+            valid_outbox(changed) && changed.message_id != value.terminal_result.message_id
+        })
+}
+
+pub(crate) fn valid_source_result(value: &PersistContactMailSyncSourceResultV1) -> bool {
+    valid_source_command(
+        value.command_message_id,
+        value.command_envelope_sha256,
+        value.operation_id,
+        value.contact_id,
+        value.expected_contact_revision,
+        &value.target_mail_account_id,
+        &value.logical_owner_id,
+        value.received_at_unix_millis,
+    ) && valid_outbox(&value.terminal_result)
+        && value.completed_at_unix_millis >= value.received_at_unix_millis
+}
+
+pub(crate) fn valid_source_reservation(value: &ReserveContactMailSyncSourceV1) -> bool {
+    valid_source_command(
+        value.command_message_id,
+        value.command_envelope_sha256,
+        value.operation_id,
+        value.contact_id,
+        value.expected_contact_revision,
+        &value.target_mail_account_id,
+        &value.logical_owner_id,
+        value.received_at_unix_millis,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn valid_source_command(
+    command_message_id: [u8; 16],
+    command_envelope_sha256: [u8; 32],
+    operation_id: [u8; 16],
+    contact_id: [u8; 16],
+    expected_contact_revision: u64,
+    target_mail_account_id: &str,
+    logical_owner_id: &str,
+    received_at_unix_millis: i64,
+) -> bool {
+    nonzero(&command_message_id)
+        && nonzero(&command_envelope_sha256)
+        && nonzero(&operation_id)
+        && nonzero(&contact_id)
+        && expected_contact_revision > 0
+        && valid_bounded_text(target_mail_account_id, 256)
+        && valid_owner(logical_owner_id)
+        && received_at_unix_millis > 0
+}
+
+fn source_command_fingerprint(
+    command_envelope_sha256: [u8; 32],
+    operation_id: [u8; 16],
+    contact_id: [u8; 16],
+    expected_contact_revision: u64,
+    target_mail_account_id: &str,
+) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"hermes.contacts.mail-sync-source.command.v1\0");
+    hash.update(command_envelope_sha256);
+    hash.update(operation_id);
+    hash.update(contact_id);
+    hash.update(expected_contact_revision.to_be_bytes());
+    hash.update(target_mail_account_id.as_bytes());
+    hash.finalize().into()
+}
+
+pub(crate) fn valid_bounded_text(value: &str, max: usize) -> bool {
+    !value.trim().is_empty() && value.len() <= max && !value.chars().any(char::is_control)
+}
+
 pub(crate) fn valid_owner(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
@@ -162,6 +330,42 @@ mod tests {
         let first = input.command_fingerprint();
         input.command_envelope_sha256[0] ^= 1;
         assert_ne!(first, input.command_fingerprint());
+    }
+
+    #[test]
+    fn source_reservation_and_completion_share_one_command_fingerprint() {
+        let reservation = ReserveContactMailSyncSourceV1 {
+            command_message_id: [1; 16],
+            command_envelope_sha256: [2; 32],
+            operation_id: [3; 16],
+            contact_id: [4; 16],
+            expected_contact_revision: 5,
+            target_mail_account_id: "mail-1".to_owned(),
+            logical_owner_id: "owner-1".to_owned(),
+            received_at_unix_millis: 6,
+        };
+        let completion = PersistContactMailSyncSourceResultV1 {
+            command_message_id: reservation.command_message_id,
+            command_envelope_sha256: reservation.command_envelope_sha256,
+            operation_id: reservation.operation_id,
+            contact_id: reservation.contact_id,
+            expected_contact_revision: reservation.expected_contact_revision,
+            target_mail_account_id: reservation.target_mail_account_id.clone(),
+            logical_owner_id: reservation.logical_owner_id.clone(),
+            reject_code: None,
+            terminal_result: ContactsOutboxRecordV1 {
+                message_id: [7; 16],
+                envelope_sha256: [8; 32],
+                envelope_bytes: vec![9],
+            },
+            received_at_unix_millis: reservation.received_at_unix_millis,
+            completed_at_unix_millis: 7,
+        };
+
+        assert_eq!(
+            reservation.command_fingerprint(),
+            completion.command_fingerprint()
+        );
     }
 
     fn sample() -> ApplyMailEntryCommandV1 {

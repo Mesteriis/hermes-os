@@ -8,10 +8,12 @@ mod contacts_results;
 mod event_outbox;
 mod managed_runtime;
 mod provider_events;
+mod reverse_change;
 mod run_progress;
 mod scheduler_due;
 mod scheduler_execution;
 mod settings;
+mod source_results;
 
 pub use admission::{
     MAIL_CONTACTS_SYNC_STORAGE_CAPABILITY_ID_V1, mail_contacts_sync_module_descriptor_v1,

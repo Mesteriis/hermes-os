@@ -3687,6 +3687,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-contacts-mail-sync-source-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "prost-types 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-contacts-persistence"
 version = "0.1.0"
 dependencies = [
@@ -3700,8 +3713,10 @@ dependencies = [
 name = "hermes-contacts-runtime"
 version = "0.1.0"
 dependencies = [
+ "hermes-blob-client",
  "hermes-contacts-command-api",
  "hermes-contacts-core",
+ "hermes-contacts-mail-sync-source-api",
  "hermes-contacts-persistence",
  "hermes-events-jetstream",
  "hermes-events-protocol",
@@ -4266,6 +4281,7 @@ name = "hermes-mail-contacts-sync-runtime"
 version = "0.1.0"
 dependencies = [
  "hermes-contacts-command-api",
+ "hermes-contacts-mail-sync-source-api",
  "hermes-events-jetstream",
  "hermes-events-protocol",
  "hermes-mail-address-book-contract",

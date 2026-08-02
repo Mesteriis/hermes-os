@@ -12,12 +12,15 @@ use sqlx::{
 };
 
 use crate::model::{
-    CONTACTS_OUTBOX_LIMIT_V1, valid_apply, valid_outbox, valid_owner, valid_reject,
+    CONTACTS_OUTBOX_LIMIT_V1, valid_apply, valid_bounded_text, valid_mutation_outbox, valid_outbox,
+    valid_owner, valid_reject, valid_source_reservation, valid_source_result,
 };
 use crate::{
     AppliedMailEntryCommandV1, ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1,
-    ContactsOutboxRecordV1, ContactsPersistenceErrorV1, RejectMailEntryCommandV1,
-    RejectedMailEntryCommandV1,
+    ContactMailSyncSourceLinkV1, ContactMailSyncSourceRejectCodeV1, ContactMailSyncSourceResultV1,
+    ContactMailSyncSourceSnapshotV1, ContactMutationOutboxV1, ContactsOutboxRecordV1,
+    ContactsPersistenceErrorV1, PersistContactMailSyncSourceResultV1, RejectMailEntryCommandV1,
+    RejectedMailEntryCommandV1, ReserveContactMailSyncSourceV1,
 };
 
 #[derive(Clone)]
@@ -87,7 +90,7 @@ impl ContactsPersistenceV1 {
         F: FnOnce(
             &ContactV1,
             ContactUpsertOutcomeV1,
-        ) -> Result<ContactsOutboxRecordV1, ContactsPersistenceErrorV1>,
+        ) -> Result<ContactMutationOutboxV1, ContactsPersistenceErrorV1>,
     {
         if !valid_apply(input) {
             return Err(ContactsPersistenceErrorV1::InvalidInput);
@@ -112,8 +115,13 @@ impl ContactsPersistenceV1 {
         let (contact, outcome) =
             decide_contact_upsert_v1(input.draft.clone(), identity_match, existing.as_ref())
                 .map_err(map_decision)?;
-        let terminal_result = build_terminal_result(&contact, outcome)?;
-        if !valid_outbox(&terminal_result) {
+        let mutation_outbox = build_terminal_result(&contact, outcome)?;
+        if !valid_mutation_outbox(&mutation_outbox)
+            || (outcome == ContactUpsertOutcomeV1::Unchanged
+                && mutation_outbox.changed_event.is_some())
+            || (outcome != ContactUpsertOutcomeV1::Unchanged
+                && mutation_outbox.changed_event.is_none())
+        {
             return Err(ContactsPersistenceErrorV1::InvalidInput);
         }
         if outcome != ContactUpsertOutcomeV1::Unchanged {
@@ -123,16 +131,25 @@ impl ContactsPersistenceV1 {
         insert_outbox(
             &mut transaction,
             &input.draft.logical_owner_id,
-            &terminal_result,
+            &mutation_outbox.terminal_result,
             input.completed_at_unix_millis,
         )
         .await?;
+        if let Some(changed_event) = &mutation_outbox.changed_event {
+            insert_outbox(
+                &mut transaction,
+                &input.draft.logical_owner_id,
+                changed_event,
+                input.completed_at_unix_millis,
+            )
+            .await?;
+        }
         complete_inbox(
             &mut transaction,
             input,
             &contact,
             outcome,
-            terminal_result.message_id,
+            mutation_outbox.terminal_result.message_id,
         )
         .await?;
         transaction.commit().await.map_err(storage)?;
@@ -140,7 +157,7 @@ impl ContactsPersistenceV1 {
             contact_id: contact.contact_id,
             contact_revision: contact.contact_revision,
             outcome,
-            terminal_result,
+            terminal_result: mutation_outbox.terminal_result,
             replayed: false,
         })
     }
@@ -171,6 +188,132 @@ impl ContactsPersistenceV1 {
         Ok(RejectedMailEntryCommandV1 {
             code: input.code,
             terminal_result: input.terminal_result.clone(),
+            replayed: false,
+        })
+    }
+
+    pub async fn contact_mail_sync_source_snapshot(
+        &self,
+        logical_owner_id: &str,
+        contact_id: [u8; 16],
+        expected_contact_revision: u64,
+        target_mail_account_id: &str,
+    ) -> Result<ContactMailSyncSourceSnapshotV1, ContactsPersistenceErrorV1> {
+        if !valid_owner(logical_owner_id)
+            || contact_id.iter().all(|byte| *byte == 0)
+            || expected_contact_revision == 0
+            || !valid_bounded_text(target_mail_account_id, 256)
+        {
+            return Err(ContactsPersistenceErrorV1::InvalidInput);
+        }
+        let row = sqlx::query(
+            "SELECT display_name, contact_revision FROM hermes_data.contacts_state \
+             WHERE logical_owner_id = $1 AND contact_id = $2",
+        )
+        .bind(logical_owner_id)
+        .bind(contact_id.as_slice())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .ok_or(ContactsPersistenceErrorV1::NotFound)?;
+        let revision = u64_value(row.get::<i64, _>("contact_revision"))?;
+        if revision != expected_contact_revision {
+            return Err(ContactsPersistenceErrorV1::StaleSource);
+        }
+        let email_addresses = sqlx::query_scalar::<_, String>(
+            "SELECT normalized_email FROM hermes_data.contacts_email_identities \
+             WHERE logical_owner_id = $1 AND contact_id = $2 ORDER BY normalized_email",
+        )
+        .bind(logical_owner_id)
+        .bind(contact_id.as_slice())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        let phone_numbers = sqlx::query_scalar::<_, String>(
+            "SELECT normalized_phone FROM hermes_data.contacts_phone_identities \
+             WHERE logical_owner_id = $1 AND contact_id = $2 ORDER BY normalized_phone",
+        )
+        .bind(logical_owner_id)
+        .bind(contact_id.as_slice())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        let links = sqlx::query(
+            "SELECT provider_entry_id, provider_etag FROM hermes_data.contacts_provider_links \
+             WHERE logical_owner_id = $1 AND contact_id = $2 AND source_account_id = $3 \
+             ORDER BY provider_kind, provider_entry_id LIMIT 2",
+        )
+        .bind(logical_owner_id)
+        .bind(contact_id.as_slice())
+        .bind(target_mail_account_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(storage)?;
+        if links.len() > 1 {
+            return Err(ContactsPersistenceErrorV1::PolicyRejected);
+        }
+        let target_account_link = links.first().map(|link| ContactMailSyncSourceLinkV1 {
+            provider_entry_id: link.get("provider_entry_id"),
+            provider_etag: link.get("provider_etag"),
+        });
+        Ok(ContactMailSyncSourceSnapshotV1 {
+            contact_id,
+            contact_revision: revision,
+            display_name: row.get("display_name"),
+            email_addresses,
+            phone_numbers,
+            target_account_link,
+        })
+    }
+
+    pub async fn reserve_contact_mail_sync_source(
+        &self,
+        input: &ReserveContactMailSyncSourceV1,
+    ) -> Result<Option<ContactMailSyncSourceResultV1>, ContactsPersistenceErrorV1> {
+        if !valid_source_reservation(input) {
+            return Err(ContactsPersistenceErrorV1::InvalidInput);
+        }
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let inserted = reserve_source_inbox(&mut transaction, input).await?;
+        let replay = if inserted {
+            None
+        } else {
+            load_source_inbox(&mut transaction, input).await?
+        };
+        transaction.commit().await.map_err(storage)?;
+        Ok(replay)
+    }
+
+    pub async fn persist_contact_mail_sync_source_result(
+        &self,
+        input: &PersistContactMailSyncSourceResultV1,
+    ) -> Result<ContactMailSyncSourceResultV1, ContactsPersistenceErrorV1> {
+        if !valid_source_result(input) {
+            return Err(ContactsPersistenceErrorV1::InvalidInput);
+        }
+        let reservation = source_reservation(input);
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        if let Some(replay) = load_source_inbox(&mut transaction, &reservation).await? {
+            if replay.reject_code != input.reject_code
+                || replay.terminal_result != input.terminal_result
+            {
+                return Err(ContactsPersistenceErrorV1::CommandConflict);
+            }
+            transaction.commit().await.map_err(storage)?;
+            return Ok(replay);
+        }
+        insert_outbox(
+            &mut transaction,
+            &input.logical_owner_id,
+            &input.terminal_result,
+            input.completed_at_unix_millis,
+        )
+        .await?;
+        complete_source_inbox(&mut transaction, input).await?;
+        transaction.commit().await.map_err(storage)?;
+        Ok(ContactMailSyncSourceResultV1 {
+            terminal_result: input.terminal_result.clone(),
+            reject_code: input.reject_code,
             replayed: false,
         })
     }
@@ -222,6 +365,131 @@ impl ContactsPersistenceV1 {
         .map_err(storage)?;
         Ok(())
     }
+}
+
+async fn reserve_source_inbox(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &ReserveContactMailSyncSourceV1,
+) -> Result<bool, ContactsPersistenceErrorV1> {
+    sqlx::query(
+        "INSERT INTO hermes_data.contacts_mail_sync_source_inbox (logical_owner_id, \
+         command_message_id, command_envelope_sha256, operation_id, command_fingerprint, \
+         contact_id, expected_contact_revision, target_mail_account_id, received_at_unix_millis) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.command_message_id.as_slice())
+    .bind(input.command_envelope_sha256.as_slice())
+    .bind(input.operation_id.as_slice())
+    .bind(input.command_fingerprint().as_slice())
+    .bind(input.contact_id.as_slice())
+    .bind(i64_value(input.expected_contact_revision)?)
+    .bind(&input.target_mail_account_id)
+    .bind(input.received_at_unix_millis)
+    .execute(&mut **transaction)
+    .await
+    .map_err(storage)
+    .map(|result| result.rows_affected() == 1)
+}
+
+async fn load_source_inbox(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &ReserveContactMailSyncSourceV1,
+) -> Result<Option<ContactMailSyncSourceResultV1>, ContactsPersistenceErrorV1> {
+    let row = sqlx::query(
+        "SELECT command_envelope_sha256, operation_id, command_fingerprint, contact_id, \
+         expected_contact_revision, target_mail_account_id, completed, reject_code, \
+         result_message_id FROM hermes_data.contacts_mail_sync_source_inbox \
+         WHERE logical_owner_id = $1 AND command_message_id = $2 FOR UPDATE",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.command_message_id.as_slice())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(storage)?;
+    let Some(row) = row else {
+        let reused_operation = sqlx::query_scalar::<_, bool>(
+            "SELECT TRUE FROM hermes_data.contacts_mail_sync_source_inbox \
+             WHERE logical_owner_id = $1 AND operation_id = $2 FOR UPDATE",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.operation_id.as_slice())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(storage)?
+        .is_some();
+        return Err(if reused_operation {
+            ContactsPersistenceErrorV1::CommandConflict
+        } else {
+            ContactsPersistenceErrorV1::NotFound
+        });
+    };
+    if bytes32(&row, "command_envelope_sha256")? != input.command_envelope_sha256
+        || bytes16(&row, "operation_id")? != input.operation_id
+        || bytes32(&row, "command_fingerprint")? != input.command_fingerprint()
+        || bytes16(&row, "contact_id")? != input.contact_id
+        || u64_value(row.get::<i64, _>("expected_contact_revision"))?
+            != input.expected_contact_revision
+        || row.get::<String, _>("target_mail_account_id") != input.target_mail_account_id
+    {
+        return Err(ContactsPersistenceErrorV1::InboxConflict);
+    }
+    if !row.get::<bool, _>("completed") {
+        return Ok(None);
+    }
+    let reject_code = row
+        .get::<Option<i16>, _>("reject_code")
+        .map(decode_source_reject_code)
+        .transpose()?;
+    let terminal_result = load_outbox(
+        transaction,
+        &input.logical_owner_id,
+        bytes16(&row, "result_message_id")?,
+    )
+    .await?;
+    Ok(Some(ContactMailSyncSourceResultV1 {
+        terminal_result,
+        reject_code,
+        replayed: true,
+    }))
+}
+
+fn source_reservation(
+    input: &PersistContactMailSyncSourceResultV1,
+) -> ReserveContactMailSyncSourceV1 {
+    ReserveContactMailSyncSourceV1 {
+        command_message_id: input.command_message_id,
+        command_envelope_sha256: input.command_envelope_sha256,
+        operation_id: input.operation_id,
+        contact_id: input.contact_id,
+        expected_contact_revision: input.expected_contact_revision,
+        target_mail_account_id: input.target_mail_account_id.clone(),
+        logical_owner_id: input.logical_owner_id.clone(),
+        received_at_unix_millis: input.received_at_unix_millis,
+    }
+}
+
+async fn complete_source_inbox(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &PersistContactMailSyncSourceResultV1,
+) -> Result<(), ContactsPersistenceErrorV1> {
+    let result = sqlx::query(
+        "UPDATE hermes_data.contacts_mail_sync_source_inbox SET completed = TRUE, \
+         reject_code = $3, result_message_id = $4, completed_at_unix_millis = $5 \
+         WHERE logical_owner_id = $1 AND command_message_id = $2 AND NOT completed",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.command_message_id.as_slice())
+    .bind(input.reject_code.map(|value| value as i16))
+    .bind(input.terminal_result.message_id.as_slice())
+    .bind(input.completed_at_unix_millis)
+    .execute(&mut **transaction)
+    .await
+    .map_err(storage)?;
+    if result.rows_affected() != 1 {
+        return Err(ContactsPersistenceErrorV1::CommandConflict);
+    }
+    Ok(())
 }
 
 async fn reserve_inbox(
@@ -827,6 +1095,19 @@ fn decode_reject_code(
         3 => Ok(ContactMailEntryRejectCodeV1::ProviderLinkConflict),
         4 => Ok(ContactMailEntryRejectCodeV1::StaleSource),
         5 => Ok(ContactMailEntryRejectCodeV1::Policy),
+        _ => Err(ContactsPersistenceErrorV1::InvalidRow),
+    }
+}
+
+fn decode_source_reject_code(
+    value: i16,
+) -> Result<ContactMailSyncSourceRejectCodeV1, ContactsPersistenceErrorV1> {
+    match value {
+        1 => Ok(ContactMailSyncSourceRejectCodeV1::InvalidRequest),
+        2 => Ok(ContactMailSyncSourceRejectCodeV1::ContactMissing),
+        3 => Ok(ContactMailSyncSourceRejectCodeV1::StaleContactRevision),
+        4 => Ok(ContactMailSyncSourceRejectCodeV1::ContentLimit),
+        5 => Ok(ContactMailSyncSourceRejectCodeV1::Policy),
         _ => Err(ContactsPersistenceErrorV1::InvalidRow),
     }
 }

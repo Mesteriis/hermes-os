@@ -10,6 +10,10 @@ const files = {
     'docs/adr/ADR-0379-mail-address-book-sync-and-contacts-command-boundary.md',
     PROJECT_ROOT,
   ),
+  sourceAdr: new URL(
+    'docs/adr/ADR-0381-contacts-target-bound-mail-sync-source-port.md',
+    PROJECT_ROOT,
+  ),
   inventory: new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
   policy: new URL('architecture/policy.json', BACKEND_ROOT),
   apiManifest: new URL('src/contacts-command-api/Cargo.toml', BACKEND_ROOT),
@@ -20,6 +24,16 @@ const files = {
   ),
   api: new URL('src/contacts-command-api/src/lib.rs', BACKEND_ROOT),
   envelope: new URL('src/contacts-command-api/src/envelope.rs', BACKEND_ROOT),
+  sourceApiManifest: new URL('src/contacts-mail-sync-source-api/Cargo.toml', BACKEND_ROOT),
+  sourceProto: new URL(
+    'src/contacts-mail-sync-source-api/proto/hermes/contacts/mail_sync_source/v1/mail_sync_source.proto',
+    BACKEND_ROOT,
+  ),
+  sourceApi: new URL('src/contacts-mail-sync-source-api/src/lib.rs', BACKEND_ROOT),
+  sourceEnvelope: new URL(
+    'src/contacts-mail-sync-source-api/src/envelope.rs',
+    BACKEND_ROOT,
+  ),
   core: new URL('src/contacts-core/src/lib.rs', BACKEND_ROOT),
   identity: new URL('src/contacts-core/src/identity.rs', BACKEND_ROOT),
   upsert: new URL('src/contacts-core/src/upsert.rs', BACKEND_ROOT),
@@ -29,9 +43,14 @@ const files = {
     'src/contacts-persistence/migrations/0001_contacts.sql',
     BACKEND_ROOT,
   ),
+  sourceMigration: new URL(
+    'src/contacts-persistence/migrations/0002_mail_sync_source.sql',
+    BACKEND_ROOT,
+  ),
   runtimeManifest: new URL('src/contacts-runtime/Cargo.toml', BACKEND_ROOT),
   runtimeAdmission: new URL('src/contacts-runtime/src/admission.rs', BACKEND_ROOT),
   runtimeCommand: new URL('src/contacts-runtime/src/command.rs', BACKEND_ROOT),
+  runtimeSource: new URL('src/contacts-runtime/src/source.rs', BACKEND_ROOT),
   managedRuntime: new URL('src/contacts-runtime/src/managed_runtime.rs', BACKEND_ROOT),
   assemblyManifest: new URL('src/contacts-assembly/Cargo.toml', BACKEND_ROOT),
   assembly: new URL('src/contacts-assembly/src/lib.rs', BACKEND_ROOT),
@@ -73,11 +92,27 @@ const files = {
     'src/mail-contacts-sync-persistence/migrations/0002_mail_contacts_sync_orchestration.sql',
     BACKEND_ROOT,
   ),
+  workflowReverseMigration: new URL(
+    'src/mail-contacts-sync-persistence/migrations/0003_reverse_sync.sql',
+    BACKEND_ROOT,
+  ),
+  workflowReversePersistence: new URL(
+    'src/mail-contacts-sync-persistence/src/reverse_sync.rs',
+    BACKEND_ROOT,
+  ),
   workflowRuntimeManifest: new URL('src/mail-contacts-sync-runtime/Cargo.toml', BACKEND_ROOT),
   workflowRuntimeAdmission: new URL('src/mail-contacts-sync-runtime/src/admission.rs', BACKEND_ROOT),
   workflowManagedRuntime: new URL('src/mail-contacts-sync-runtime/src/managed_runtime.rs', BACKEND_ROOT),
   workflowRuntimeMain: new URL('src/mail-contacts-sync-runtime/src/main.rs', BACKEND_ROOT),
   workflowScheduler: new URL('src/mail-contacts-sync-runtime/src/scheduler_due.rs', BACKEND_ROOT),
+  workflowReverseChange: new URL(
+    'src/mail-contacts-sync-runtime/src/reverse_change.rs',
+    BACKEND_ROOT,
+  ),
+  workflowSourceResults: new URL(
+    'src/mail-contacts-sync-runtime/src/source_results.rs',
+    BACKEND_ROOT,
+  ),
 };
 
 test('mail contacts sync agreement keeps integration workflow and domain separate', async () => {
@@ -130,12 +165,14 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
 });
 
 test('managed sync runtime uses staged settings and exact event-only owner contracts', async () => {
-  const [manifest, admission, runtime, main, scheduler] = await Promise.all([
+  const [manifest, admission, runtime, main, scheduler, reverseChange, sourceResults] = await Promise.all([
     readFile(files.workflowRuntimeManifest, 'utf8'),
     readFile(files.workflowRuntimeAdmission, 'utf8'),
     readFile(files.workflowManagedRuntime, 'utf8'),
     readFile(files.workflowRuntimeMain, 'utf8'),
     readFile(files.workflowScheduler, 'utf8'),
+    readFile(files.workflowReverseChange, 'utf8'),
+    readFile(files.workflowSourceResults, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -153,6 +190,12 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
   assert.match(scheduler, /JOB_EXECUTE_CAPABILITY_V1/);
   assert.match(scheduler, /configuration_instance_id/);
   assert.doesNotMatch(scheduler, /account_id|provider_kind|access_token|refresh_token/);
+  assert.match(reverseChange, /consume_contact_changed_once_v1/);
+  assert.match(reverseChange, /SyncDirectionV1::Bidirectional/);
+  assert.match(reverseChange, /remote_write_enabled/);
+  assert.match(sourceResults, /consume_source_prepared_once_v1/);
+  assert.match(sourceResults, /build_upsert_mail_address_book_entry_command_v1/);
+  assert.doesNotMatch(`${reverseChange}\n${sourceResults}`, /BlobDataClient|provider_kind\s*==|reqwest/);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {
@@ -178,7 +221,16 @@ test('Mail provider contract and sync workflow foundation preserve owner boundar
   assert.match(mailContract, /FetchMailAddressBookPageCommandV1/);
   assert.match(mailContract, /MailAddressBookEntryObservedV1/);
   assert.match(mailContract, /UpsertMailAddressBookEntryCommandV1/);
-  assert.match(mailContract, /expected_provider_etag/);
+  assert.match(mailContract, /contact_snapshot_reference_id/);
+  assert.match(mailContract, /contact_snapshot_custody_source_proof/);
+  const upsertCommand = mailContract
+    .split('message UpsertMailAddressBookEntryCommandV1')[1]
+    .split('message MailAddressBookEntryUpsertedV1')[0];
+  assert.match(upsertCommand, /reserved 9, 10/);
+  assert.doesNotMatch(
+    upsertCommand,
+    /provider_kind|provider_entry_id|expected_provider_etag|display_name|email|phone/,
+  );
   assert.match(mailContract, /outcome_unknown/);
   assert.doesNotMatch(
     mailContract,
@@ -200,15 +252,27 @@ test('Mail provider contract and sync workflow foundation preserve owner boundar
   assert.doesNotMatch(workflowCore, /reqwest|sqlx|provider sdk|oauth|gateway|nats/i);
 });
 
-test('sync persistence owns atomic state relay and SSE replay without foreign storage', async () => {
-  const [manifest, repository, orchestration, relay, realtime, migration, orchestrationMigration] = await Promise.all([
+test('sync persistence owns atomic state relay, reverse operations and SSE replay without foreign storage', async () => {
+  const [
+    manifest,
+    repository,
+    orchestration,
+    reversePersistence,
+    relay,
+    realtime,
+    migration,
+    orchestrationMigration,
+    reverseMigration,
+  ] = await Promise.all([
     readFile(files.workflowPersistenceManifest, 'utf8'),
     readFile(files.workflowPersistence, 'utf8'),
     readFile(files.workflowOrchestration, 'utf8'),
+    readFile(files.workflowReversePersistence, 'utf8'),
     readFile(files.workflowRelay, 'utf8'),
     readFile(files.workflowRealtime, 'utf8'),
     readFile(files.workflowMigration, 'utf8'),
     readFile(files.workflowOrchestrationMigration, 'utf8'),
+    readFile(files.workflowReverseMigration, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -226,6 +290,8 @@ test('sync persistence owns atomic state relay and SSE replay without foreign st
   assert.match(orchestration, /accept_provider_page/);
   assert.match(orchestration, /accept_contact_outcome/);
   assert.match(orchestration, /account_pending_outcomes/);
+  assert.match(reversePersistence, /accept_contact_changed_for_mail_sync/);
+  assert.match(reversePersistence, /complete_contact_mail_sync_source/);
   for (const table of [
     'mail_contacts_sync_runs',
     'mail_contacts_sync_inbox',
@@ -237,53 +303,75 @@ test('sync persistence owns atomic state relay and SSE replay without foreign st
   assert.match(orchestrationMigration, /mail_contacts_sync_pages/);
   assert.match(orchestrationMigration, /mail_contacts_sync_entries/);
   assert.match(orchestrationMigration, /outcome_accounted/);
-  assert.doesNotMatch(`${migration}\n${orchestrationMigration}`, /hermes_data\.(?:contacts_|mail_accounts|communications_)/);
-  assert.doesNotMatch(`${repository}\n${orchestration}\n${relay}\n${realtime}`, /reqwest|oauth|provider sdk/i);
+  assert.match(reverseMigration, /mail_contacts_sync_reverse_inbox/);
+  assert.match(reverseMigration, /mail_contacts_sync_reverse_operations/);
+  assert.doesNotMatch(
+    `${migration}\n${orchestrationMigration}\n${reverseMigration}`,
+    /hermes_data\.(?:contacts_state|contacts_provider_links|mail_accounts|communications_)/,
+  );
+  assert.doesNotMatch(
+    `${repository}\n${orchestration}\n${reversePersistence}\n${relay}\n${realtime}`,
+    /reqwest|oauth|provider sdk/i,
+  );
 });
 
-test('staged Contacts slice keeps five functional build units isolated', async () => {
+test('staged Contacts slice keeps six functional build units isolated', async () => {
   const [
+    sourceAdr,
     apiManifest,
+    sourceApiManifest,
     coreManifest,
     proto,
+    sourceProto,
     api,
     envelope,
+    sourceApi,
+    sourceEnvelope,
     core,
     identity,
     upsert,
     persistenceManifest,
     persistence,
     migration,
+    sourceMigration,
     runtimeManifest,
     runtimeAdmission,
     runtimeCommand,
+    runtimeSource,
     managedRuntime,
     assemblyManifest,
     assembly,
     developmentRelease,
   ] =
     await Promise.all([
+      readFile(files.sourceAdr, 'utf8'),
       readFile(files.apiManifest, 'utf8'),
+      readFile(files.sourceApiManifest, 'utf8'),
       readFile(files.coreManifest, 'utf8'),
       readFile(files.proto, 'utf8'),
+      readFile(files.sourceProto, 'utf8'),
       readFile(files.api, 'utf8'),
       readFile(files.envelope, 'utf8'),
+      readFile(files.sourceApi, 'utf8'),
+      readFile(files.sourceEnvelope, 'utf8'),
       readFile(files.core, 'utf8'),
       readFile(files.identity, 'utf8'),
       readFile(files.upsert, 'utf8'),
       readFile(files.persistenceManifest, 'utf8'),
       readFile(files.persistence, 'utf8'),
       readFile(files.migration, 'utf8'),
+      readFile(files.sourceMigration, 'utf8'),
       readFile(files.runtimeManifest, 'utf8'),
       readFile(files.runtimeAdmission, 'utf8'),
       readFile(files.runtimeCommand, 'utf8'),
+      readFile(files.runtimeSource, 'utf8'),
       readFile(files.managedRuntime, 'utf8'),
       readFile(files.assemblyManifest, 'utf8'),
       readFile(files.assembly, 'utf8'),
       readFile(files.developmentRelease, 'utf8'),
     ]);
 
-  for (const manifest of [apiManifest, coreManifest]) {
+  for (const manifest of [apiManifest, sourceApiManifest, coreManifest]) {
     assert.match(manifest, /role = "domain"/);
     assert.match(manifest, /owner = "contacts"/);
     assert.doesNotMatch(manifest, /hermes-mail|hermes-communications|sqlx|reqwest/);
@@ -294,6 +382,19 @@ test('staged Contacts slice keeps five functional build units isolated', async (
   assert.doesNotMatch(proto, /map<|bytes payload|token|password|cookie/);
   assert.match(api, /contacts\.mail-identity\.command\.v1/);
   assert.match(envelope, /validate_envelope_v1/);
+  assert.match(sourceAdr, /шестая Contacts-owned unit/);
+  assert.match(sourceProto, /message ContactChangedForMailSyncV1/);
+  assert.match(sourceProto, /message PrepareContactMailSyncSourceCommandV1/);
+  assert.match(sourceProto, /message ContactMailSyncSourceContentV1/);
+  const changedEvent = sourceProto
+    .split('message ContactChangedForMailSyncV1')[1]
+    .split('message PrepareContactMailSyncSourceCommandV1')[0];
+  assert.doesNotMatch(changedEvent, /display_name|email|phone|provider_kind|provider_entry_id|etag/);
+  assert.match(sourceApi, /CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_OWNER_ID_V1: &str = "mail"/);
+  assert.match(sourceApi, /CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_MODULE_ID_V1: &str = "hermes-mail-runtime"/);
+  assert.match(sourceApi, /mail\.address-book\.contact-source\.blob\.v1/);
+  assert.match(sourceEnvelope, /Semantics::Event\(EventMetadataV1/);
+  assert.match(sourceEnvelope, /Semantics::Command\(CommandMetadataV1/);
   assert.match(core, /mod identity;[\s\S]*mod model;[\s\S]*mod upsert;/);
   assert.match(identity, /normalize_email_v1/);
   assert.match(identity, /normalize_phone_v1/);
@@ -308,11 +409,14 @@ test('staged Contacts slice keeps five functional build units isolated', async (
   assert.match(persistenceManifest, /surface = "persistence"/);
   assert.doesNotMatch(persistenceManifest, /hermes-mail|hermes-communications/);
   assert.match(persistence, /reserve_inbox/);
+  assert.match(persistence, /reserve_contact_mail_sync_source/);
+  assert.match(persistence, /persist_contact_mail_sync_source_result/);
   assert.match(persistence, /persist_contact/);
   assert.match(persistence, /insert_outbox/);
   assert.match(migration, /contacts_mail_entry_inbox/);
   assert.match(migration, /contacts_provider_links/);
   assert.match(migration, /contacts_outbox/);
+  assert.match(sourceMigration, /contacts_mail_sync_source_inbox/);
   assert.doesNotMatch(migration, /mail_credential|communications_|tasks_|review_/);
   for (const manifest of [runtimeManifest, assemblyManifest]) {
     assert.match(manifest, /role = "domain"/);
@@ -329,6 +433,14 @@ test('staged Contacts slice keeps five functional build units isolated', async (
   assert.match(runtimeCommand, /consume_contacts_command_once_v1/);
   assert.match(runtimeCommand, /reject_mail_entry/);
   assert.match(runtimeCommand, /delivery\.acknowledge\(\)\.await/);
+  assert.match(runtimeSource, /consume_contact_mail_sync_source_once_v1/);
+  assert.ok(
+    runtimeSource.indexOf('reserve_contact_mail_sync_source')
+      < runtimeSource.indexOf('contact_mail_sync_source_snapshot'),
+  );
+  assert.match(runtimeSource, /request_managed_blob_session_v2/);
+  assert.match(runtimeSource, /BlobDataOperationV1::BlobDataOperationWriteV1/);
+  assert.match(runtimeSource, /CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1/);
   assert.match(managedRuntime, /StorageVaultLeaseAdapterV1/);
   assert.match(managedRuntime, /connect_runtime_with_jwt/);
   assert.match(managedRuntime, /signal_ready/);

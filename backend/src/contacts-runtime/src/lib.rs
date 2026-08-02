@@ -4,6 +4,7 @@ mod admission;
 mod command;
 mod event_outbox;
 mod managed_runtime;
+mod source;
 
 pub use admission::{
     CONTACTS_STORAGE_CAPABILITY_ID_V1, contacts_module_descriptor_v1,

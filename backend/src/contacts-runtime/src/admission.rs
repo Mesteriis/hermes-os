@@ -4,16 +4,30 @@ use hermes_contacts_command_api::{
     contact_upserted_contract_reference_v1, contact_upserted_publish_request_v1,
     upsert_contact_command_consume_request_v1, upsert_contact_command_contract_reference_v1,
 };
+use hermes_contacts_mail_sync_source_api::{
+    CONTACTS_MAIL_SYNC_SOURCE_CAPABILITY_ID_V1,
+    contact_changed_for_mail_sync_contract_reference_v1,
+    contact_changed_for_mail_sync_publish_request_v1,
+    contact_mail_sync_source_prepare_consume_request_v1,
+    contact_mail_sync_source_prepared_contract_reference_v1,
+    contact_mail_sync_source_prepared_publish_request_v1,
+    contact_mail_sync_source_rejected_contract_reference_v1,
+    contact_mail_sync_source_rejected_publish_request_v1,
+};
 use hermes_runtime_protocol::v1::{
-    CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ContractReferenceV1,
-    ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1,
-    RuntimeBudgetRequestV1, SettingsSchemaRefV1, SettingsSchemaV1, StorageNamespaceRequestV1,
-    capability_request_v1::Request,
+    BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
+    CapabilityRequestV1, ContractReferenceV1, ModuleDescriptorV1, ModuleKindV1, ProtocolRangeV1,
+    ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1,
+    SettingsSchemaV1, StorageNamespaceRequestV1, capability_request_v1::Request,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
 
 pub const CONTACTS_STORAGE_CAPABILITY_ID_V1: &str = "contacts.storage.v1";
+pub const CONTACTS_MAIL_SYNC_SOURCE_BLOB_WRITER_CAPABILITY_ID_V1: &str =
+    "contacts.mail-sync-source.blob-writer.v1";
+const CONTACTS_MAIL_SYNC_CHANGED_PUBLISH_CAPABILITY_ID_V1: &str =
+    "contacts.mail-sync-source.changed.v1";
 const CONTACTS_UPSERTED_PUBLISH_CAPABILITY_ID_V1: &str =
     "contacts.mail-identity.upserted.publisher.v1";
 const CONTACTS_REJECTED_PUBLISH_CAPABILITY_ID_V1: &str =
@@ -69,6 +83,14 @@ pub fn contacts_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
                 contact_upserted_contract_reference_v1(),
                 contact_upserted_publish_request_v1(),
             ),
+            source_blob_capability(),
+            event_capability(
+                CONTACTS_MAIL_SYNC_CHANGED_PUBLISH_CAPABILITY_ID_V1,
+                ProvidedSurfaceKindV1::DurablePublisher,
+                contact_changed_for_mail_sync_contract_reference_v1(),
+                contact_changed_for_mail_sync_publish_request_v1(),
+            ),
+            source_capability(),
             storage_capability(),
         ],
         settings_schema_ref: Some(SettingsSchemaRefV1 {
@@ -108,6 +130,50 @@ fn event_capability(
     }
 }
 
+fn source_blob_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: CONTACTS_MAIL_SYNC_SOURCE_BLOB_WRITER_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: 32 * 1024 * 1024,
+                custody_scope_id: "contacts.mail-sync-source.v1".to_owned(),
+                allowed_operations: vec![BlobQuotaOperationV1::Write as i32],
+            })),
+        }],
+        ..Default::default()
+    }
+}
+
+fn source_capability() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: CONTACTS_MAIL_SYNC_SOURCE_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(contact_mail_sync_source_prepared_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::DurablePublisher as i32,
+                contract: Some(contact_mail_sync_source_rejected_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
+        ],
+        requests: vec![
+            contact_mail_sync_source_prepare_consume_request_v1(),
+            contact_mail_sync_source_prepared_publish_request_v1(),
+            contact_mail_sync_source_rejected_publish_request_v1(),
+        ],
+        ..Default::default()
+    }
+}
+
 fn storage_capability() -> CapabilityDescriptorV1 {
     CapabilityDescriptorV1 {
         capability_id: CONTACTS_STORAGE_CAPABILITY_ID_V1.to_owned(),
@@ -139,7 +205,7 @@ mod tests {
         validate_settings_schema_v1(&contacts_settings_schema_v1()).expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Domain as i32);
         assert_eq!(descriptor.owner_id, CONTACTS_OWNER_ID_V1);
-        assert_eq!(descriptor.capabilities.len(), 4);
+        assert_eq!(descriptor.capabilities.len(), 7);
         assert!(
             descriptor
                 .capabilities

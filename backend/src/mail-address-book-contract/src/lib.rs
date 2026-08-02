@@ -4,7 +4,7 @@ mod envelope;
 
 pub use envelope::{
     MailAddressBookEnvelopeBuildErrorV1, MailAddressBookEnvelopeContextV1,
-    build_fetch_mail_address_book_page_command_v1,
+    build_fetch_mail_address_book_page_command_v1, build_upsert_mail_address_book_entry_command_v1,
 };
 
 use hermes_runtime_protocol::v1::{
@@ -16,7 +16,7 @@ pub const PACKAGE: &str = "hermes-mail-address-book-contract";
 pub const MAIL_OWNER_ID_V1: &str = "mail";
 pub const MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1: &str = "mail.address-book.provider.v1";
 pub const MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1: u32 = 1;
-pub const MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1: u32 = 1;
+pub const MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1: u32 = 2;
 pub const MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1: u32 = 500;
 pub const MAIL_ADDRESS_BOOK_MAX_CURSOR_BYTES_V1: usize = 4096;
 pub const MAIL_ADDRESS_BOOK_MAX_SNAPSHOT_TICKET_BYTES_V1: usize = 4096;
@@ -121,9 +121,12 @@ mod tests {
         let source = include_str!("../proto/hermes/mail/address_book/v1/address_book.proto");
         let fetch_command = message_source(source, "FetchMailAddressBookPageCommandV1");
         let observed_entry = message_source(source, "MailAddressBookEntryObservedV1");
+        let upsert_command = message_source(source, "UpsertMailAddressBookEntryCommandV1");
         assert!(source.contains("GOOGLE_PEOPLE"));
         assert!(source.contains("ICLOUD_CARDDAV"));
-        assert!(source.contains("expected_provider_etag"));
+        assert!(!upsert_command.contains("provider_kind"));
+        assert!(!upsert_command.contains("provider_entry_id"));
+        assert!(!upsert_command.contains("provider_etag"));
         assert!(source.contains("outcome_unknown"));
         assert!(!fetch_command.contains("provider_kind"));
         assert!(observed_entry.contains("provider_kind"));

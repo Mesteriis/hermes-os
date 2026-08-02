@@ -2,6 +2,16 @@ use hermes_contacts_command_api::{
     contact_upsert_rejected_contract_reference_v1, contact_upserted_contract_reference_v1,
     upsert_contact_command_contract_reference_v1, upsert_contact_command_publish_request_v1,
 };
+use hermes_contacts_mail_sync_source_api::{
+    contact_changed_for_mail_sync_consume_request_v1,
+    contact_changed_for_mail_sync_contract_reference_v1,
+    contact_mail_sync_source_prepare_contract_reference_v1,
+    contact_mail_sync_source_prepare_publish_request_v1,
+    contact_mail_sync_source_prepared_consume_request_v1,
+    contact_mail_sync_source_prepared_contract_reference_v1,
+    contact_mail_sync_source_rejected_consume_request_v1,
+    contact_mail_sync_source_rejected_contract_reference_v1,
+};
 use hermes_mail_address_book_contract::MailAddressBookContractV1;
 use hermes_mail_contacts_sync_api::{
     MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1, MAIL_CONTACTS_SYNC_COMMAND_CONNECT_PATH_V1,
@@ -62,6 +72,12 @@ fn capabilities() -> Vec<CapabilityDescriptorV1> {
     vec![
         client_capability(),
         event_capability(
+            "mail_contacts_sync.contacts.changed.v1",
+            ProvidedSurfaceKindV1::DurableConsumer,
+            contact_changed_for_mail_sync_contract_reference_v1(),
+            contact_changed_for_mail_sync_consume_request_v1(),
+        ),
+        event_capability(
             "mail_contacts_sync.contacts.command.v1",
             ProvidedSurfaceKindV1::DurablePublisher,
             upsert_contact_command_contract_reference_v1(),
@@ -72,6 +88,24 @@ fn capabilities() -> Vec<CapabilityDescriptorV1> {
             ProvidedSurfaceKindV1::DurableConsumer,
             contact_upsert_rejected_contract_reference_v1(),
             consume_result(contact_upsert_rejected_contract_reference_v1()),
+        ),
+        event_capability(
+            "mail_contacts_sync.contacts.source-prepare.v1",
+            ProvidedSurfaceKindV1::DurablePublisher,
+            contact_mail_sync_source_prepare_contract_reference_v1(),
+            contact_mail_sync_source_prepare_publish_request_v1(),
+        ),
+        event_capability(
+            "mail_contacts_sync.contacts.source-prepared.v1",
+            ProvidedSurfaceKindV1::DurableConsumer,
+            contact_mail_sync_source_prepared_contract_reference_v1(),
+            contact_mail_sync_source_prepared_consume_request_v1(),
+        ),
+        event_capability(
+            "mail_contacts_sync.contacts.source-rejected.v1",
+            ProvidedSurfaceKindV1::DurableConsumer,
+            contact_mail_sync_source_rejected_contract_reference_v1(),
+            contact_mail_sync_source_rejected_consume_request_v1(),
         ),
         event_capability(
             "mail_contacts_sync.contacts.upserted.v1",
@@ -332,7 +366,7 @@ mod tests {
         validate_settings_schema_v1(&mail_contacts_sync_settings_schema_v1()).expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
         assert_eq!(descriptor.owner_id, MAIL_CONTACTS_SYNC_OWNER_ID_V1);
-        assert_eq!(descriptor.capabilities.len(), 14);
+        assert_eq!(descriptor.capabilities.len(), 18);
         assert!(descriptor.capabilities.iter().all(|capability| {
             capability.capability_id.starts_with("mail_contacts_sync.")
                 || capability.capability_id == MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1

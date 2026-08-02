@@ -14,9 +14,14 @@ use hermes_contacts_core::{
     ContactProviderKindV1, ContactProviderProvenanceV1, ContactTimestampV1, ContactUpsertDraftV1,
     ContactUpsertOutcomeV1,
 };
+use hermes_contacts_mail_sync_source_api::{
+    ContactsMailSyncSourceEnvelopeContextV1, build_contact_changed_for_mail_sync_outbox_record_v1,
+    wire::ContactChangedForMailSyncV1,
+};
 use hermes_contacts_persistence::{
-    ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1, ContactsOutboxRecordV1,
-    ContactsPersistenceErrorV1, ContactsPersistenceV1, RejectMailEntryCommandV1,
+    ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1, ContactMutationOutboxV1,
+    ContactsOutboxRecordV1, ContactsPersistenceErrorV1, ContactsPersistenceV1,
+    RejectMailEntryCommandV1,
 };
 use hermes_events_jetstream::{
     RuntimeJetStreamConnection, RuntimePullDeliveryErrorV1, RuntimeSubscribePermitV1,
@@ -105,7 +110,24 @@ pub(crate) async fn consume_contacts_command_once_v1(
                         &envelope_context(runtime),
                     )
                     .map_err(|_| ContactsPersistenceErrorV1::InvalidInput)?;
-                    Ok(outbox_record(&record))
+                    let changed_event = if outcome == ContactUpsertOutcomeV1::Unchanged {
+                        None
+                    } else {
+                        let changed = build_contact_changed_for_mail_sync_outbox_record_v1(
+                            ContactChangedForMailSyncV1 {
+                                contact_id: contact.contact_id.to_vec(),
+                                contact_revision: contact.contact_revision,
+                                logical_owner_id: identity.logical_owner_id.clone(),
+                            },
+                            &source_envelope_context(runtime),
+                        )
+                        .map_err(|_| ContactsPersistenceErrorV1::InvalidInput)?;
+                        Some(outbox_record(&changed))
+                    };
+                    Ok(ContactMutationOutboxV1 {
+                        terminal_result: outbox_record(&record),
+                        changed_event,
+                    })
                 })
                 .await;
             if let Err(error) = applied {
@@ -316,6 +338,19 @@ fn envelope_context(
     runtime: &ContactsCommandRuntimeContextV1<'_>,
 ) -> ContactsCommandEnvelopeContextV1 {
     ContactsCommandEnvelopeContextV1 {
+        module_id: CONTACTS_MODULE_ID_V1.to_owned(),
+        runtime_instance_id: runtime.runtime_instance_id.to_owned(),
+        runtime_generation: runtime.runtime_generation,
+        recorded_at_unix_seconds: runtime.now_unix_millis / 1_000,
+        recorded_at_nanos: i32::try_from((runtime.now_unix_millis % 1_000) * 1_000_000)
+            .unwrap_or_default(),
+    }
+}
+
+fn source_envelope_context(
+    runtime: &ContactsCommandRuntimeContextV1<'_>,
+) -> ContactsMailSyncSourceEnvelopeContextV1 {
+    ContactsMailSyncSourceEnvelopeContextV1 {
         module_id: CONTACTS_MODULE_ID_V1.to_owned(),
         runtime_instance_id: runtime.runtime_instance_id.to_owned(),
         runtime_generation: runtime.runtime_generation,

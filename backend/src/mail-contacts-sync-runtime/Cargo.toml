@@ -18,6 +18,7 @@ surface = "runtime"
 
 [dependencies]
 hermes-contacts-command-api = { path = "../contacts-command-api" }
+hermes-contacts-mail-sync-source-api = { path = "../contacts-mail-sync-source-api" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }
 hermes-events-protocol = { path = "../platform/events" }
 hermes-mail-address-book-contract = { path = "../mail-address-book-contract" }

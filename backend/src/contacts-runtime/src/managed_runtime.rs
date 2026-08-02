@@ -3,13 +3,14 @@ use std::os::unix::net::UnixStream;
 use hermes_contacts_command_api::{
     CONTACTS_OWNER_ID_V1, upsert_contact_command_contract_reference_v1,
 };
+use hermes_contacts_mail_sync_source_api::contact_mail_sync_source_prepare_contract_reference_v1;
 use hermes_contacts_persistence::{ContactsPersistenceErrorV1, ContactsPersistenceV1};
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
     RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
 };
 use hermes_runtime_protocol::{
-    managed_control::ManagedControlChannelV2,
+    managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
     v1::{
         ContractReferenceV1, ManagedRuntimeControlResponseV1, ManagedRuntimeReadyRequestV1,
         ManagedStorageRuntimeConfigurationV1,
@@ -28,6 +29,10 @@ use crate::{
         ContactsCommandErrorV1, ContactsCommandRuntimeContextV1, consume_contacts_command_once_v1,
     },
     event_outbox::{ContactsEventRelayErrorV1, relay_contacts_outbox_once_v1},
+    source::{
+        ContactsSourceErrorV1, ContactsSourceRuntimeContextV1,
+        consume_contact_mail_sync_source_once_v1,
+    },
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +61,7 @@ pub struct ContactsManagedRuntimeV1 {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     command_subscription: RuntimeSubscribePermitV1,
+    source_subscription: RuntimeSubscribePermitV1,
 }
 
 impl ContactsManagedRuntimeV1 {
@@ -138,17 +144,25 @@ impl ContactsManagedRuntimeV1 {
                 admission.grant_epoch,
             )
             .map_err(|_| ContactsManagedRuntimeErrorV1::Admission)?;
-        let command_subscription = exact_subscription(
-            event_access
-                .subscribe_permits(
-                    &admission.registration_id,
-                    &admission.runtime_instance_id,
-                    admission.runtime_generation,
-                    admission.grant_epoch,
-                )
-                .map_err(|_| ContactsManagedRuntimeErrorV1::Admission)?,
+        let mut subscriptions = event_access
+            .subscribe_permits(
+                &admission.registration_id,
+                &admission.runtime_instance_id,
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| ContactsManagedRuntimeErrorV1::Admission)?;
+        let command_subscription = take_exact_subscription(
+            &mut subscriptions,
             &upsert_contact_command_contract_reference_v1(),
         )?;
+        let source_subscription = take_exact_subscription(
+            &mut subscriptions,
+            &contact_mail_sync_source_prepare_contract_reference_v1(),
+        )?;
+        if !subscriptions.is_empty() {
+            return Err(ContactsManagedRuntimeErrorV1::Admission);
+        }
         let event_connection = JetStreamClient::connect_runtime_with_jwt(
             event_hub_endpoint,
             event_identity,
@@ -168,6 +182,7 @@ impl ContactsManagedRuntimeV1 {
             event_connection,
             event_publish_permit,
             command_subscription,
+            source_subscription,
         })
     }
 
@@ -224,29 +239,55 @@ impl ContactsManagedRuntimeV1 {
         .await
         .map_err(event_relay_error)
     }
+
+    pub async fn consume_source_once(
+        &mut self,
+        now_unix_millis: i64,
+    ) -> Result<bool, ContactsManagedRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| ContactsManagedRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = RejectManagedControlRequestsV2;
+        let result = consume_contact_mail_sync_source_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.source_subscription,
+            &mut self.control_channel,
+            &mut dispatcher,
+            &ContactsSourceRuntimeContextV1 {
+                logical_owner_id: &self.admission.logical_human_owner_id,
+                runtime_instance_id: &self.admission.runtime_instance_id,
+                runtime_generation: self.admission.runtime_generation,
+                now_unix_millis,
+            },
+        )
+        .await;
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| ContactsManagedRuntimeErrorV1::Unavailable)?;
+        result.map_err(source_error)
+    }
 }
 
-fn exact_subscription(
-    permits: Vec<RuntimeSubscribePermitV1>,
+fn take_exact_subscription(
+    permits: &mut Vec<RuntimeSubscribePermitV1>,
     contract: &ContractReferenceV1,
 ) -> Result<RuntimeSubscribePermitV1, ContactsManagedRuntimeErrorV1> {
-    if permits.len() != 1 {
-        return Err(ContactsManagedRuntimeErrorV1::Admission);
-    }
-    let permit = permits
-        .into_iter()
-        .next()
+    let index = permits
+        .iter()
+        .position(|permit| {
+            permit.contract().is_some_and(|actual| {
+                actual.owner == contract.owner
+                    && actual.name == contract.name
+                    && actual.major == contract.major
+                    && actual.revision == contract.revision
+                    && actual.schema_sha256 == contract.schema_sha256
+            })
+        })
         .ok_or(ContactsManagedRuntimeErrorV1::Admission)?;
-    if permit.contract().is_none_or(|actual| {
-        actual.owner != contract.owner
-            || actual.name != contract.name
-            || actual.major != contract.major
-            || actual.revision != contract.revision
-            || actual.schema_sha256 != contract.schema_sha256
-    }) {
-        return Err(ContactsManagedRuntimeErrorV1::Admission);
-    }
-    Ok(permit)
+    Ok(permits.remove(index))
 }
 
 fn validate_admission(
@@ -387,6 +428,20 @@ fn command_error(error: ContactsCommandErrorV1) -> ContactsManagedRuntimeErrorV1
             ContactsManagedRuntimeErrorV1::Persistence(error)
         }
         ContactsCommandErrorV1::EventUnavailable => ContactsManagedRuntimeErrorV1::EventUnavailable,
+    }
+}
+
+fn source_error(error: ContactsSourceErrorV1) -> ContactsManagedRuntimeErrorV1 {
+    match error {
+        ContactsSourceErrorV1::InvalidEnvelope | ContactsSourceErrorV1::InvalidPayload => {
+            ContactsManagedRuntimeErrorV1::EventContract
+        }
+        ContactsSourceErrorV1::Persistence(error) => {
+            ContactsManagedRuntimeErrorV1::Persistence(error)
+        }
+        ContactsSourceErrorV1::EventUnavailable | ContactsSourceErrorV1::BlobUnavailable => {
+            ContactsManagedRuntimeErrorV1::EventUnavailable
+        }
     }
 }
 

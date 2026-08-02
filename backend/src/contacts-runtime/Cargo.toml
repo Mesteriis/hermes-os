@@ -17,7 +17,9 @@ owner = "contacts"
 surface = "runtime"
 
 [dependencies]
+hermes-blob-client = { path = "../platform/blob/client" }
 hermes-contacts-command-api = { path = "../contacts-command-api" }
+hermes-contacts-mail-sync-source-api = { path = "../contacts-mail-sync-source-api" }
 hermes-contacts-core = { path = "../contacts-core" }
 hermes-contacts-persistence = { path = "../contacts-persistence" }
 hermes-events-jetstream = { path = "../platform/events/jetstream" }

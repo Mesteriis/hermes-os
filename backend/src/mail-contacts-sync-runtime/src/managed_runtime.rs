@@ -3,6 +3,11 @@ use std::os::unix::net::UnixStream;
 use hermes_contacts_command_api::{
     contact_upsert_rejected_contract_reference_v1, contact_upserted_contract_reference_v1,
 };
+use hermes_contacts_mail_sync_source_api::{
+    contact_changed_for_mail_sync_contract_reference_v1,
+    contact_mail_sync_source_prepared_contract_reference_v1,
+    contact_mail_sync_source_rejected_contract_reference_v1,
+};
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
     RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
@@ -56,8 +61,16 @@ use crate::{
     consume_mail_address_book_entry_once_v1, consume_mail_address_book_page_completed_once_v1,
     consume_mail_address_book_page_rejected_once_v1,
     event_outbox::{MailContactsSyncRelayErrorV1, relay_mail_contacts_sync_outbox_once_v1},
+    reverse_change::{
+        MailContactsSyncReverseChangeContextV1, MailContactsSyncReverseChangeErrorV1,
+        consume_contact_changed_once_v1,
+    },
     scheduler_due::{MailContactsSyncDueContractV1, MailContactsSyncDueRuntimeContextV1},
     scheduler_execution::consume_mail_contacts_sync_due_once_v1,
+    source_results::{
+        MailContactsSyncSourceResultContextV1, MailContactsSyncSourceResultErrorV1,
+        consume_source_prepared_once_v1, consume_source_rejected_once_v1,
+    },
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -79,7 +92,10 @@ pub enum MailContactsSyncManagedRuntimeErrorV1 {
 }
 
 struct MailContactsSyncSubscriptionsV1 {
+    contact_changed: RuntimeSubscribePermitV1,
     contact_rejected: RuntimeSubscribePermitV1,
+    contact_source_prepared: RuntimeSubscribePermitV1,
+    contact_source_rejected: RuntimeSubscribePermitV1,
     contact_upserted: RuntimeSubscribePermitV1,
     mail_entry_observed: RuntimeSubscribePermitV1,
     _mail_entry_upsert_rejected: RuntimeSubscribePermitV1,
@@ -287,6 +303,26 @@ impl MailContactsSyncManagedRuntimeV1 {
         .map_err(contacts_error)
     }
 
+    pub async fn consume_contact_changed_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_contact_changed_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.contact_changed,
+            &self.configurations,
+            &MailContactsSyncReverseChangeContextV1 {
+                logical_owner_id: &self.admission.logical_owner_id,
+                runtime_instance_id: &self.admission.runtime_instance_id,
+                runtime_generation: self.admission.runtime_generation,
+                now_unix_millis: now,
+            },
+        )
+        .await
+        .map_err(reverse_change_error)
+    }
+
     pub async fn consume_contact_upserted_once(
         &self,
         now: i64,
@@ -299,6 +335,34 @@ impl MailContactsSyncManagedRuntimeV1 {
         )
         .await
         .map_err(contacts_error)
+    }
+
+    pub async fn consume_contact_source_prepared_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_source_prepared_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.contact_source_prepared,
+            &self.source_result_context(now),
+        )
+        .await
+        .map_err(source_result_error)
+    }
+
+    pub async fn consume_contact_source_rejected_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_source_rejected_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.contact_source_rejected,
+            &self.source_result_context(now),
+        )
+        .await
+        .map_err(source_result_error)
     }
 
     pub async fn consume_mail_entry_once(
@@ -425,6 +489,15 @@ impl MailContactsSyncManagedRuntimeV1 {
         }
     }
 
+    fn source_result_context(&self, now: i64) -> MailContactsSyncSourceResultContextV1<'_> {
+        MailContactsSyncSourceResultContextV1 {
+            logical_owner_id: &self.admission.logical_owner_id,
+            runtime_instance_id: &self.admission.runtime_instance_id,
+            runtime_generation: self.admission.runtime_generation,
+            now_unix_millis: now,
+        }
+    }
+
     fn write_client_error(
         &mut self,
         correlation_id: [u8; 16],
@@ -521,11 +594,23 @@ async fn dispatch_client(
 fn bind_subscriptions(
     permits: Vec<RuntimeSubscribePermitV1>,
 ) -> Result<MailContactsSyncSubscriptionsV1, MailContactsSyncManagedRuntimeErrorV1> {
-    if permits.len() != 8 {
+    if permits.len() != 11 {
         return Err(MailContactsSyncManagedRuntimeErrorV1::Admission);
     }
     Ok(MailContactsSyncSubscriptionsV1 {
+        contact_changed: exact_permit(
+            &permits,
+            &contact_changed_for_mail_sync_contract_reference_v1(),
+        )?,
         contact_rejected: exact_permit(&permits, &contact_upsert_rejected_contract_reference_v1())?,
+        contact_source_prepared: exact_permit(
+            &permits,
+            &contact_mail_sync_source_prepared_contract_reference_v1(),
+        )?,
+        contact_source_rejected: exact_permit(
+            &permits,
+            &contact_mail_sync_source_rejected_contract_reference_v1(),
+        )?,
         contact_upserted: exact_permit(&permits, &contact_upserted_contract_reference_v1())?,
         mail_entry_observed: exact_permit(
             &permits,
@@ -732,6 +817,40 @@ fn contacts_error(
             MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
         }
         MailContactsSyncContactsResultErrorV1::EventUnavailable => {
+            MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn reverse_change_error(
+    error: MailContactsSyncReverseChangeErrorV1,
+) -> MailContactsSyncManagedRuntimeErrorV1 {
+    match error {
+        MailContactsSyncReverseChangeErrorV1::InvalidEnvelope
+        | MailContactsSyncReverseChangeErrorV1::InvalidPayload => {
+            MailContactsSyncManagedRuntimeErrorV1::EventContract
+        }
+        MailContactsSyncReverseChangeErrorV1::Persistence(error) => {
+            MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
+        }
+        MailContactsSyncReverseChangeErrorV1::EventUnavailable => {
+            MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn source_result_error(
+    error: MailContactsSyncSourceResultErrorV1,
+) -> MailContactsSyncManagedRuntimeErrorV1 {
+    match error {
+        MailContactsSyncSourceResultErrorV1::InvalidEnvelope
+        | MailContactsSyncSourceResultErrorV1::InvalidPayload => {
+            MailContactsSyncManagedRuntimeErrorV1::EventContract
+        }
+        MailContactsSyncSourceResultErrorV1::Persistence(error) => {
+            MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
+        }
+        MailContactsSyncSourceResultErrorV1::EventUnavailable => {
             MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
         }
     }

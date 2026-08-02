@@ -1278,10 +1278,17 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-contacts-sync-persistence', role: 'workflow', owner: 'mail_contacts_sync', surface: 'persistence' },
 ];
 
-const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES = [
-  ...MAIL_CONTACTS_SYNC_PERSISTENCE_PRODUCTION_PACKAGES,
-  { name: 'hermes-mail-contacts-sync-runtime', role: 'workflow', owner: 'mail_contacts_sync', surface: 'runtime' },
-];
+const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES =
+  MAIL_CONTACTS_SYNC_PERSISTENCE_PRODUCTION_PACKAGES.flatMap((packageDescriptor) => (
+    packageDescriptor.name === 'hermes-contacts-command-api'
+      ? [
+          packageDescriptor,
+          { name: 'hermes-contacts-mail-sync-source-api', role: 'domain', owner: 'contacts', surface: 'contract' },
+        ]
+      : [packageDescriptor]
+  )).concat([
+    { name: 'hermes-mail-contacts-sync-runtime', role: 'workflow', owner: 'mail_contacts_sync', surface: 'runtime' },
+  ]);
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
@@ -3773,8 +3780,25 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
 
 const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...MAIL_CONTACTS_SYNC_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-mail-sync-source-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-contacts-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-contacts-command-api', kind: 'normal' },
+    { name: 'hermes-contacts-core', kind: 'normal' },
+    { name: 'hermes-contacts-mail-sync-source-api', kind: 'normal' },
+    { name: 'hermes-contacts-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
   'hermes-mail-contacts-sync-runtime': [
     { name: 'hermes-contacts-command-api', kind: 'normal' },
+    { name: 'hermes-contacts-mail-sync-source-api', kind: 'normal' },
     { name: 'hermes-events-jetstream', kind: 'normal' },
     { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-mail-address-book-contract', kind: 'normal' },
@@ -5129,6 +5153,14 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
 
 const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...MAIL_CONTACTS_SYNC_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-mail-sync-source-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
   'hermes-mail-contacts-sync-runtime': [
     { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
@@ -5942,7 +5974,11 @@ const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY = {
   businessCapabilities: [
     ...MAIL_CONTACTS_SYNC_PERSISTENCE_INVENTORY.businessCapabilities,
     'mail_contacts_sync.contacts.command.v1',
+    'mail_contacts_sync.contacts.changed.v1',
     'mail_contacts_sync.contacts.rejected.v1',
+    'mail_contacts_sync.contacts.source-prepare.v1',
+    'mail_contacts_sync.contacts.source-prepared.v1',
+    'mail_contacts_sync.contacts.source-rejected.v1',
     'mail_contacts_sync.contacts.upserted.v1',
     'mail_contacts_sync.mail.entry-observed.v1',
     'mail_contacts_sync.mail.entry-upsert-rejected.v1',
@@ -5953,6 +5989,9 @@ const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY = {
     'mail_contacts_sync.mail.upsert-entry.v1',
     'mail_contacts_sync.scheduler.receipt.v1',
     'mail_contacts_sync.scheduler.v1',
+    'contacts.mail-sync-source.blob-writer.v1',
+    'contacts.mail-sync-source.changed.v1',
+    'contacts.mail-sync-source.v1',
   ].sort(),
 };
 
@@ -6218,6 +6257,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-review-task-candidate-promotion-api',
       'hermes-tasks-command-api',
       'hermes-contacts-command-api',
+      'hermes-contacts-mail-sync-source-api',
       'hermes-mail-address-book-contract',
       'hermes-mail-contacts-sync-api',
       'hermes-mail-delivery-intent-contract',

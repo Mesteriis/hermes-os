@@ -3,8 +3,9 @@ use hermes_contacts_core::{
     ContactUpsertOutcomeV1,
 };
 use hermes_contacts_persistence::{
-    ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1, ContactsOutboxRecordV1,
-    ContactsPersistenceConformanceV1, ContactsPersistenceErrorV1, RejectMailEntryCommandV1,
+    ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1, ContactMutationOutboxV1,
+    ContactsOutboxRecordV1, ContactsPersistenceConformanceV1, ContactsPersistenceErrorV1,
+    PersistContactMailSyncSourceResultV1, RejectMailEntryCommandV1, ReserveContactMailSyncSourceV1,
 };
 use sha2::{Digest, Sha256};
 
@@ -22,13 +23,75 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     let first = command(1, 1, "ada@example.test", "+34910000001");
     let created = persistence
         .apply_mail_entry(&first, |contact, outcome| {
-            terminal(11, contact.contact_id, outcome)
+            mutation(11, contact.contact_id, outcome)
         })
         .await
         .expect("create contact");
     assert_eq!(created.outcome, ContactUpsertOutcomeV1::Created);
     assert_eq!(created.contact_revision, 1);
     assert!(!created.replayed);
+
+    let source_reservation = ReserveContactMailSyncSourceV1 {
+        command_message_id: [70; 16],
+        command_envelope_sha256: [71; 32],
+        operation_id: [72; 16],
+        contact_id: created.contact_id,
+        expected_contact_revision: created.contact_revision,
+        target_mail_account_id: "mail-1".to_owned(),
+        logical_owner_id: "owner-1".to_owned(),
+        received_at_unix_millis: 1_800_000_000_070,
+    };
+    assert_eq!(
+        persistence
+            .reserve_contact_mail_sync_source(&source_reservation)
+            .await
+            .expect("reserve source command"),
+        None,
+    );
+    let snapshot = persistence
+        .contact_mail_sync_source_snapshot(
+            "owner-1",
+            created.contact_id,
+            created.contact_revision,
+            "mail-1",
+        )
+        .await
+        .expect("load exact source snapshot");
+    assert_eq!(snapshot.display_name, "Ada");
+    assert_eq!(
+        snapshot
+            .target_account_link
+            .expect("Mail link")
+            .provider_entry_id,
+        "people/ada"
+    );
+    let source_terminal = terminal(73, created.contact_id, ContactUpsertOutcomeV1::Unchanged)
+        .expect("source terminal fixture");
+    let source_completion = PersistContactMailSyncSourceResultV1 {
+        command_message_id: source_reservation.command_message_id,
+        command_envelope_sha256: source_reservation.command_envelope_sha256,
+        operation_id: source_reservation.operation_id,
+        contact_id: source_reservation.contact_id,
+        expected_contact_revision: source_reservation.expected_contact_revision,
+        target_mail_account_id: source_reservation.target_mail_account_id.clone(),
+        logical_owner_id: source_reservation.logical_owner_id.clone(),
+        reject_code: None,
+        terminal_result: source_terminal.clone(),
+        received_at_unix_millis: source_reservation.received_at_unix_millis,
+        completed_at_unix_millis: 1_800_000_000_071,
+    };
+    let completed_source = persistence
+        .persist_contact_mail_sync_source_result(&source_completion)
+        .await
+        .expect("complete source command");
+    assert!(!completed_source.replayed);
+    let source_replay = persistence
+        .reserve_contact_mail_sync_source(&source_reservation)
+        .await
+        .expect("replay source command")
+        .expect("completed source result");
+    assert!(source_replay.replayed);
+    assert_eq!(source_replay.terminal_result, source_terminal);
 
     let first_replay = persistence
         .apply_mail_entry(&first, |_, _| {
@@ -43,7 +106,7 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     let updated_input = command(2, 2, "ada@example.test", "+34910000001");
     let updated = persistence
         .apply_mail_entry(&updated_input, |contact, outcome| {
-            terminal(12, contact.contact_id, outcome)
+            mutation(12, contact.contact_id, outcome)
         })
         .await
         .expect("update contact");
@@ -61,7 +124,7 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     let unchanged_input = command(3, 2, "ada@example.test", "+34910000001");
     let unchanged = persistence
         .apply_mail_entry(&unchanged_input, |contact, outcome| {
-            terminal(13, contact.contact_id, outcome)
+            mutation(13, contact.contact_id, outcome)
         })
         .await
         .expect("unchanged contact");
@@ -73,7 +136,7 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     assert_eq!(
         persistence
             .apply_mail_entry(&reused_command_id, |contact, outcome| {
-                terminal(14, contact.contact_id, outcome)
+                mutation(14, contact.contact_id, outcome)
             })
             .await,
         Err(ContactsPersistenceErrorV1::CommandConflict)
@@ -82,7 +145,7 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     let second = command(5, 1, "grace@example.test", "+34910000002");
     persistence
         .apply_mail_entry(&second, |contact, outcome| {
-            terminal(15, contact.contact_id, outcome)
+            mutation(15, contact.contact_id, outcome)
         })
         .await
         .expect("create second contact");
@@ -90,7 +153,7 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     assert_eq!(
         persistence
             .apply_mail_entry(&ambiguous, |contact, outcome| {
-                terminal(16, contact.contact_id, outcome)
+                mutation(16, contact.contact_id, outcome)
             })
             .await,
         Err(ContactsPersistenceErrorV1::IdentityAmbiguous)
@@ -131,7 +194,28 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
         .load_pending_outbox("owner-1")
         .await
         .expect("pending outbox");
-    assert_eq!(pending.len(), 5);
+    assert_eq!(pending.len(), 9);
+}
+
+fn mutation(
+    seed: u8,
+    contact_id: [u8; 16],
+    outcome: ContactUpsertOutcomeV1,
+) -> Result<ContactMutationOutboxV1, ContactsPersistenceErrorV1> {
+    let terminal_result = terminal(seed, contact_id, outcome)?;
+    let changed_event = (outcome != ContactUpsertOutcomeV1::Unchanged).then(|| {
+        let mut bytes = b"contacts-changed-v1:".to_vec();
+        bytes.extend_from_slice(&contact_id);
+        ContactsOutboxRecordV1 {
+            message_id: [seed.wrapping_add(100); 16],
+            envelope_sha256: Sha256::digest(&bytes).into(),
+            envelope_bytes: bytes,
+        }
+    });
+    Ok(ContactMutationOutboxV1 {
+        terminal_result,
+        changed_event,
+    })
 }
 
 fn command(seed: u8, source_revision: u64, email: &str, phone: &str) -> ApplyMailEntryCommandV1 {
