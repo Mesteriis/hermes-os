@@ -19,6 +19,7 @@ pub use managed_runtime::{
 };
 pub use pull_delivery::{
     RuntimePullDeliveryErrorV1, RuntimePullDeliveryV1, receive_runtime_pull_delivery,
+    try_receive_runtime_pull_delivery,
 };
 pub use runtime::{
     PublishReceipt, RuntimeJetStreamConnection, RuntimeOutboxPublisherV1, canonical_message_id,

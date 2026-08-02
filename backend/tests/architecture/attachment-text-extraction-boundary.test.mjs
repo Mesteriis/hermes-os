@@ -358,7 +358,8 @@ test('managed runtime composes exact Event Blob parser client SSE and OCR resour
   assert.match(ocrResources, /attachment_text_extraction\.ocr_runtime\.v1/);
   assert.match(admission, /RuntimeArtifactUseV1::NativeExecutable/);
   assert.match(admission, /RuntimeArtifactUseV1::ReadOnlyData/);
-  assert.match(runtime, /receive_runtime_pull_delivery/);
+  assert.match(runtime, /try_receive_runtime_pull_delivery/);
+  assert.match(runtime, /None => return Ok\(false\)/);
   assert.match(runtime, /materialize_pending_custody_requests/);
   assert.match(runtime, /process_next_job/);
   assert.match(runtime, /pump_client_realtime_once/);

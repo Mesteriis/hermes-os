@@ -25,8 +25,8 @@ use hermes_attachment_security_contract::admission::attachment_security_scan_can
 use hermes_communications_attachment_contract::admission::communication_attachment_safety_state_changed_contract_reference_v1;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
-    request_managed_runtime_event_access_v2,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
+    try_receive_runtime_pull_delivery,
 };
 use hermes_runtime_protocol::{
     managed_control::{ManagedControlChannelV2, RejectManagedControlRequestsV2},
@@ -63,7 +63,6 @@ use crate::{
 
 const WORKER_ID: &str = "attachment-archive-inspection-runtime";
 const JOB_LEASE_MILLIS: u64 = 180_000;
-const EVENT_POLL_WAIT: Duration = Duration::from_millis(250);
 
 pub struct ArchiveInspectionRuntimeAdmissionV1 {
     pub module_owner_id: String,
@@ -217,15 +216,12 @@ impl AttachmentArchiveInspectionRuntimeV1 {
         let consumer = self.next_consumer;
         self.next_consumer = consumer.successor();
         let permit = self.permits.for_consumer(consumer);
-        let delivery = match tokio::time::timeout(
-            EVENT_POLL_WAIT,
-            receive_runtime_pull_delivery(&self.connection, permit),
-        )
-        .await
+        let delivery = match try_receive_runtime_pull_delivery(&self.connection, permit)
+            .await
+            .map_err(|_| ArchiveInspectionRuntimeErrorV1::Unavailable)?
         {
-            Err(_) => return Ok(false),
-            Ok(Err(_)) => return Err(ArchiveInspectionRuntimeErrorV1::Unavailable),
-            Ok(Ok(delivery)) => delivery,
+            None => return Ok(false),
+            Some(delivery) => delivery,
         };
         match consumer {
             ArchiveInspectionConsumerV1::Candidate => {

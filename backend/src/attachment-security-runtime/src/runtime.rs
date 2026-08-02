@@ -28,8 +28,8 @@ use hermes_communications_attachment_contract::{
 };
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
-    RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
-    request_managed_runtime_event_access_v2,
+    RuntimeSubscribePermitV1, request_managed_runtime_event_access_v2,
+    try_receive_runtime_pull_delivery,
 };
 use hermes_runtime_protocol::{
     managed_control::ManagedControlChannelV2,
@@ -77,7 +77,6 @@ const TEXT_DELEGATION_WORKER_ID: &str = "attachment-security-text-delegation";
 const TEXT_DELEGATION_LEASE_SECONDS: i64 = 30;
 const PREVIEW_DELEGATION_WORKER_ID: &str = "attachment-security-preview-delegation";
 const PREVIEW_DELEGATION_LEASE_SECONDS: i64 = 30;
-const EVENT_POLL_WAIT: Duration = Duration::from_millis(250);
 
 pub struct AttachmentSecurityRuntimeAdmissionV1 {
     pub logical_owner_id: String,
@@ -243,15 +242,12 @@ impl AttachmentSecurityRuntimeV1 {
             AttachmentSecurityConsumerV1::PreviewDelegation => &self.permits.preview_delegation,
             AttachmentSecurityConsumerV1::TextDelegation => &self.permits.text_delegation,
         };
-        let delivery = match tokio::time::timeout(
-            EVENT_POLL_WAIT,
-            receive_runtime_pull_delivery(&self.connection, permit),
-        )
-        .await
+        let delivery = match try_receive_runtime_pull_delivery(&self.connection, permit)
+            .await
+            .map_err(|_| AttachmentSecurityRuntimeErrorV1::Unavailable)?
         {
-            Err(_) => return Ok(false),
-            Ok(Err(_)) => return Err(AttachmentSecurityRuntimeErrorV1::Unavailable),
-            Ok(Ok(delivery)) => delivery,
+            None => return Ok(false),
+            Some(delivery) => delivery,
         };
         let result = match consumer {
             AttachmentSecurityConsumerV1::Candidate => {

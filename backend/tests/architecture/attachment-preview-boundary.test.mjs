@@ -554,7 +554,8 @@ test('managed Preview runtime composes public contracts without owning assembly 
   );
   assert.match(admission, /ClientBlob/);
   assert.match(admission, /ATTACHMENT_PREVIEW_MAX_VIDEO_BYTES_V1/);
-  assert.match(runtime, /receive_runtime_pull_delivery/);
+  assert.match(runtime, /try_receive_runtime_pull_delivery/);
+  assert.match(runtime, /None => return Ok\(false\)/);
   assert.match(runtime, /dispatch_attachment_preview_client_request_v1/);
   assert.match(runtime, /AttachmentPreviewNestedRequestDispatcherV1/);
   assert.match(

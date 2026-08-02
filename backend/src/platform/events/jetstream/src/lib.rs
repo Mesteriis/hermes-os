@@ -24,7 +24,7 @@ pub use connection::{
     RuntimePublishPermitV1, RuntimePullDeliveryErrorV1, RuntimePullDeliveryV1,
     RuntimeSchedulerReceiptDeliveryV1, RuntimeSchedulerReceiptPortV1, RuntimeSubscribePermitV1,
     canonical_message_id, receive_runtime_pull_delivery, request_managed_runtime_event_access,
-    request_managed_runtime_event_access_v2,
+    request_managed_runtime_event_access_v2, try_receive_runtime_pull_delivery,
 };
 pub use resolver::{
     NatsAccountJwtUpdateV1, NatsResolverAccountJwtPublisherV1, NatsResolverSystemCredentialsV1,

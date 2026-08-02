@@ -36,6 +36,18 @@ pub async fn receive_runtime_pull_delivery(
     connection: &RuntimeJetStreamConnection,
     permit: &RuntimeSubscribePermitV1,
 ) -> Result<RuntimePullDeliveryV1, RuntimePullDeliveryErrorV1> {
+    try_receive_runtime_pull_delivery(connection, permit)
+        .await?
+        .ok_or(RuntimePullDeliveryErrorV1::Unavailable)
+}
+
+/// Tries to receive one deadline-bounded delivery while keeping an idle pull
+/// distinct from Event Hub unavailability. Long-running runtimes use this
+/// contract so an empty, healthy consumer does not become an outage signal.
+pub async fn try_receive_runtime_pull_delivery(
+    connection: &RuntimeJetStreamConnection,
+    permit: &RuntimeSubscribePermitV1,
+) -> Result<Option<RuntimePullDeliveryV1>, RuntimePullDeliveryErrorV1> {
     tokio::time::timeout(RUNTIME_PULL_CALL_DEADLINE_V1, async {
         let consumer = connection
             .open_pull_consumer(permit)
@@ -48,19 +60,25 @@ pub async fn receive_runtime_pull_delivery(
             .messages()
             .await
             .map_err(|_| unavailable_at("fetch"))?;
-        messages
-            .next()
-            .await
-            .ok_or_else(|| unavailable_at("empty"))?
-            .map(|message| RuntimePullDeliveryV1 { message })
-            .map_err(|_| unavailable_at("delivery"))
+        classify_next_delivery(messages.next().await)
+            .map(|delivery| delivery.map(|message| RuntimePullDeliveryV1 { message }))
     })
     .await
     .map_err(|_| unavailable_at("deadline"))?
 }
 
+fn classify_next_delivery<T, E>(
+    next: Option<Result<T, E>>,
+) -> Result<Option<T>, RuntimePullDeliveryErrorV1> {
+    match next {
+        None => Ok(None),
+        Some(Ok(delivery)) => Ok(Some(delivery)),
+        Some(Err(_)) => Err(unavailable_at("delivery")),
+    }
+}
+
 fn unavailable_at(stage: &str) -> RuntimePullDeliveryErrorV1 {
-    if stage != "empty" && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
         eprintln!("developer_runtime_pull_delivery_unavailable stage={stage}");
     }
     RuntimePullDeliveryErrorV1::Unavailable
@@ -69,4 +87,22 @@ fn unavailable_at(stage: &str) -> RuntimePullDeliveryErrorV1 {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimePullDeliveryErrorV1 {
     Unavailable,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_pull_is_idle_not_unavailable() {
+        assert_eq!(classify_next_delivery::<u8, ()>(None), Ok(None));
+    }
+
+    #[test]
+    fn delivery_error_remains_unavailable() {
+        assert_eq!(
+            classify_next_delivery::<u8, ()>(Some(Err(()))),
+            Err(RuntimePullDeliveryErrorV1::Unavailable),
+        );
+    }
 }
