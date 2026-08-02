@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_persistence_v1',
+    'mail_contacts_sync_runtime_admission_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
@@ -233,6 +233,18 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'mail.smtp.credentials.v1',
       'mail.storage.v1',
       'mail.sync.v1',
+      'mail_contacts_sync.contacts.command.v1',
+      'mail_contacts_sync.contacts.rejected.v1',
+      'mail_contacts_sync.contacts.upserted.v1',
+      'mail_contacts_sync.mail.entry-observed.v1',
+      'mail_contacts_sync.mail.entry-upsert-rejected.v1',
+      'mail_contacts_sync.mail.entry-upserted.v1',
+      'mail_contacts_sync.mail.fetch-page.v1',
+      'mail_contacts_sync.mail.page-completed.v1',
+      'mail_contacts_sync.mail.page-rejected.v1',
+      'mail_contacts_sync.mail.upsert-entry.v1',
+      'mail_contacts_sync.scheduler.receipt.v1',
+      'mail_contacts_sync.scheduler.v1',
       'mail_contacts_sync.storage.v1',
       'review.communication-attention.command.v1',
       'review.communication-attention.query.v1',

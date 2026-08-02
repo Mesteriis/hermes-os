@@ -12,7 +12,9 @@ mod schema;
 #[cfg(feature = "conformance-test-support")]
 pub use conformance::MailContactsSyncPersistenceConformanceV1;
 pub use model::{
-    CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1, MailContactsSyncContactOutcomeV1,
+    AcceptScheduledMailContactsSyncDueOutcomeV1, AcceptScheduledMailContactsSyncDueV1,
+    AdvanceMailContactsSyncPageV1, CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1,
+    MailContactsSyncAdvanceOutcomeV1, MailContactsSyncContactOutcomeV1,
     MailContactsSyncEntryInputV1, MailContactsSyncEntryOutcomeInputV1,
     MailContactsSyncInboxOutcomeV1, MailContactsSyncPageProgressV1,
     MailContactsSyncPageResultInputV1, MailContactsSyncPersistenceErrorV1,

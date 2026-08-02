@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_contacts_sync_persistence_v1",
+    "currentSlice": "mail_contacts_sync_runtime_admission_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1524,6 +1524,12 @@
         "role": "workflow",
         "owner": "mail_contacts_sync",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-mail-contacts-sync-runtime",
+        "role": "workflow",
+        "owner": "mail_contacts_sync",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2416,8 +2422,22 @@
           "kind": "normal"
         }
       ],
-      "hermes-mail-address-book-contract": [],
-      "hermes-mail-contacts-sync-api": [],
+      "hermes-mail-address-book-contract": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-contacts-sync-api": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-mail-contacts-sync-core": [],
       "hermes-mail-contacts-sync-persistence": [
         {
@@ -2426,6 +2446,52 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-mail-contacts-sync-runtime": [
+        {
+          "name": "hermes-contacts-command-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-address-book-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-contacts-sync-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-contacts-sync-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-mail-contacts-sync-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-scheduler-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ],
@@ -8904,6 +8970,14 @@
           "features": []
         },
         {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
           "name": "prost-build",
           "kind": "build",
           "source": "crates_io",
@@ -8983,6 +9057,59 @@
             "runtime-tokio",
             "tls-rustls-ring"
           ]
+        }
+      ],
+      "hermes-mail-contacts-sync-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
         }
       ],
       "hermes-tasks-persistence": [
@@ -13421,6 +13548,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-mail-contacts-sync-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-tasks-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -13679,6 +13810,18 @@
         "mail.smtp.credentials.v1",
         "mail.storage.v1",
         "mail.sync.v1",
+        "mail_contacts_sync.contacts.command.v1",
+        "mail_contacts_sync.contacts.rejected.v1",
+        "mail_contacts_sync.contacts.upserted.v1",
+        "mail_contacts_sync.mail.entry-observed.v1",
+        "mail_contacts_sync.mail.entry-upsert-rejected.v1",
+        "mail_contacts_sync.mail.entry-upserted.v1",
+        "mail_contacts_sync.mail.fetch-page.v1",
+        "mail_contacts_sync.mail.page-completed.v1",
+        "mail_contacts_sync.mail.page-rejected.v1",
+        "mail_contacts_sync.mail.upsert-entry.v1",
+        "mail_contacts_sync.scheduler.receipt.v1",
+        "mail_contacts_sync.scheduler.v1",
         "mail_contacts_sync.storage.v1",
         "review.communication-attention.command.v1",
         "review.communication-attention.query.v1",

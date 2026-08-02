@@ -73,6 +73,11 @@ const files = {
     'src/mail-contacts-sync-persistence/migrations/0002_mail_contacts_sync_orchestration.sql',
     BACKEND_ROOT,
   ),
+  workflowRuntimeManifest: new URL('src/mail-contacts-sync-runtime/Cargo.toml', BACKEND_ROOT),
+  workflowRuntimeAdmission: new URL('src/mail-contacts-sync-runtime/src/admission.rs', BACKEND_ROOT),
+  workflowManagedRuntime: new URL('src/mail-contacts-sync-runtime/src/managed_runtime.rs', BACKEND_ROOT),
+  workflowRuntimeMain: new URL('src/mail-contacts-sync-runtime/src/main.rs', BACKEND_ROOT),
+  workflowScheduler: new URL('src/mail-contacts-sync-runtime/src/scheduler_due.rs', BACKEND_ROOT),
 };
 
 test('mail contacts sync agreement keeps integration workflow and domain separate', async () => {
@@ -108,7 +113,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_persistence_v1',
+    'mail_contacts_sync_runtime_admission_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -122,6 +127,32 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
       'mail.address-book.provider.v1',
     ),
   );
+});
+
+test('managed sync runtime uses staged settings and exact event-only owner contracts', async () => {
+  const [manifest, admission, runtime, main, scheduler] = await Promise.all([
+    readFile(files.workflowRuntimeManifest, 'utf8'),
+    readFile(files.workflowRuntimeAdmission, 'utf8'),
+    readFile(files.workflowManagedRuntime, 'utf8'),
+    readFile(files.workflowRuntimeMain, 'utf8'),
+    readFile(files.workflowScheduler, 'utf8'),
+  ]);
+  assert.match(manifest, /role = "workflow"/);
+  assert.match(manifest, /owner = "mail_contacts_sync"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.doesNotMatch(manifest, /hermes-mail-(?:runtime|persistence)|hermes-contacts-(?:runtime|persistence)/);
+  assert.match(admission, /SchedulerJobRequestV1/);
+  assert.match(admission, /DurableEnvelopeKindV1::Ack/);
+  assert.match(admission, /DurableEnvelopeKindV1::Result/);
+  assert.match(runtime, /request_managed_runtime_event_access_v2/);
+  assert.match(runtime, /StorageVaultLeaseAdapterV1/);
+  assert.match(main, /configuration_instance_id/);
+  assert.match(main, /settings_snapshot_bytes/);
+  assert.match(runtime, /pump_client_realtime_once/);
+  assert.doesNotMatch(runtime, /reqwest|provider_kind\s*==|SELECT .*contacts|SELECT .*mail/i);
+  assert.match(scheduler, /JOB_EXECUTE_CAPABILITY_V1/);
+  assert.match(scheduler, /configuration_instance_id/);
+  assert.doesNotMatch(scheduler, /account_id|provider_kind|access_token|refresh_token/);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

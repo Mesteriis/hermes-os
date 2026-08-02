@@ -4190,6 +4190,8 @@ dependencies = [
 name = "hermes-mail-address-book-contract"
 version = "0.1.0"
 dependencies = [
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
  "prost 0.14.4",
  "prost-build 0.14.4",
  "prost-types 0.14.4",
@@ -4238,6 +4240,7 @@ dependencies = [
 name = "hermes-mail-contacts-sync-api"
 version = "0.1.0"
 dependencies = [
+ "hermes-runtime-protocol",
  "prost 0.14.4",
  "prost-build 0.14.4",
  "protoc-bin-vendored",
@@ -4256,6 +4259,29 @@ dependencies = [
  "hermes-storage-protocol",
  "sha2 0.11.0",
  "sqlx",
+]
+
+[[package]]
+name = "hermes-mail-contacts-sync-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-contacts-command-api",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-mail-address-book-contract",
+ "hermes-mail-contacts-sync-api",
+ "hermes-mail-contacts-sync-core",
+ "hermes-mail-contacts-sync-persistence",
+ "hermes-runtime-protocol",
+ "hermes-scheduler-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "prost-types 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

@@ -308,7 +308,43 @@ pub(crate) fn start_reserved_workflow(
     supervisor: &ManagedRuntimeSupervisor,
     runtime_dir: &Path,
     reservation: ManagedLaunchReservation,
+    configuration: ManagedWorkflowRuntimeConfigurationV1,
+    granted_capability_ids: &[String],
+) -> Result<u64, String> {
+    start_reserved_workflow_inner(
+        supervisor,
+        runtime_dir,
+        reservation,
+        configuration,
+        None,
+        granted_capability_ids,
+    )
+}
+
+pub(crate) fn start_reserved_workflow_with_settings(
+    supervisor: &ManagedRuntimeSupervisor,
+    runtime_dir: &Path,
+    reservation: ManagedLaunchReservation,
+    configuration: ManagedWorkflowRuntimeConfigurationV1,
+    settings_snapshot_bytes: Vec<u8>,
+    granted_capability_ids: &[String],
+) -> Result<u64, String> {
+    start_reserved_workflow_inner(
+        supervisor,
+        runtime_dir,
+        reservation,
+        configuration,
+        Some(settings_snapshot_bytes),
+        granted_capability_ids,
+    )
+}
+
+fn start_reserved_workflow_inner(
+    supervisor: &ManagedRuntimeSupervisor,
+    runtime_dir: &Path,
+    reservation: ManagedLaunchReservation,
     mut configuration: ManagedWorkflowRuntimeConfigurationV1,
+    settings_snapshot_bytes: Option<Vec<u8>>,
     granted_capability_ids: &[String],
 ) -> Result<u64, String> {
     if configuration.registration_id != reservation.registration_id()
@@ -337,7 +373,7 @@ pub(crate) fn start_reserved_workflow(
         prepared_runtime,
         PreparedRuntimeContractInput {
             runtime_configuration_bytes: configuration.encode_to_vec(),
-            settings_snapshot_bytes: None,
+            settings_snapshot_bytes,
             host_bridge_configuration: None,
             cleanup: staged_runtime_artifact_cleanup(staged_runtime_artifacts),
             expected_module_kind: ModuleKindV1::Workflow,

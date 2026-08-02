@@ -540,6 +540,28 @@ fn start_reserved_workflow_runtime(
             .ok_or_else(|| "Event Hub topology is unavailable".to_owned())?;
         let granted_capability_ids =
             effective_granted_capability_ids(store, &request.registration_id, "managed workflow")?;
+        let selected_settings = if request.configuration_instance_id.is_empty() {
+            None
+        } else {
+            Some(
+                managed_integration_launch::admitted_settings_snapshot_for_target(
+                    store,
+                    &request.registration_id,
+                    &request.configuration_instance_id,
+                )?,
+            )
+        };
+        let configuration_instances = match selected_settings.as_ref() {
+            Some(snapshot) => {
+                managed_integration_launch::admitted_workflow_configuration_instances(
+                    store,
+                    &request.registration_id,
+                    &request.configuration_instance_id,
+                    &snapshot.bytes,
+                )?
+            }
+            None => Vec::new(),
+        };
         let configuration = ManagedWorkflowRuntimeConfigurationV1 {
             major: 1,
             logical_owner_id: logical_owner.owner_id().to_owned(),
@@ -551,16 +573,29 @@ fn start_reserved_workflow_runtime(
             event_hub_endpoint: event_topology.nats_endpoint().to_owned(),
             event_credential_revision: event_topology.credential_revision(),
             runtime_artifacts: Vec::new(),
+            configuration_instance_id: request.configuration_instance_id.clone(),
+            settings_revision: selected_settings.as_ref().map_or(0, |value| value.revision),
+            configuration_instances,
         };
         validate_managed_workflow_runtime_configuration(&configuration)
             .map_err(|_| "managed workflow runtime configuration is invalid".to_owned())?;
-        macos_managed_runtime_launch::start_reserved_workflow(
-            supervisor,
-            runtime_dir,
-            reservation,
-            configuration,
-            &granted_capability_ids,
-        )
+        match selected_settings {
+            Some(snapshot) => macos_managed_runtime_launch::start_reserved_workflow_with_settings(
+                supervisor,
+                runtime_dir,
+                reservation,
+                configuration,
+                snapshot.bytes,
+                &granted_capability_ids,
+            ),
+            None => macos_managed_runtime_launch::start_reserved_workflow(
+                supervisor,
+                runtime_dir,
+                reservation,
+                configuration,
+                &granted_capability_ids,
+            ),
+        }
     })()
     .map(|runtime_generation| {
         OwnerResult::StartReservedWorkflowRuntime(StartReservedWorkflowRuntimeResponseV1 {

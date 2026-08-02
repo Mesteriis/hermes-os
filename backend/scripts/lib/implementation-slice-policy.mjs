@@ -1278,6 +1278,11 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-mail-contacts-sync-persistence', role: 'workflow', owner: 'mail_contacts_sync', surface: 'persistence' },
 ];
 
+const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES = [
+  ...MAIL_CONTACTS_SYNC_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-mail-contacts-sync-runtime', role: 'workflow', owner: 'mail_contacts_sync', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3748,8 +3753,13 @@ const CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOW
 
 const MAIL_CONTACTS_SYNC_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...CONTACTS_MAIL_IDENTITY_COMMAND_RUNTIME_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
-  'hermes-mail-address-book-contract': [],
-  'hermes-mail-contacts-sync-api': [],
+  'hermes-mail-address-book-contract': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-mail-contacts-sync-api': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
   'hermes-mail-contacts-sync-core': [],
 };
 
@@ -3758,6 +3768,23 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-mail-contacts-sync-persistence': [
     { name: 'hermes-mail-contacts-sync-core', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
+const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-contacts-sync-runtime': [
+    { name: 'hermes-contacts-command-api', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-mail-address-book-contract', kind: 'normal' },
+    { name: 'hermes-mail-contacts-sync-api', kind: 'normal' },
+    { name: 'hermes-mail-contacts-sync-core', kind: 'normal' },
+    { name: 'hermes-mail-contacts-sync-persistence', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-scheduler-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
   ],
 };
 
@@ -5078,6 +5105,7 @@ const MAIL_CONTACTS_SYNC_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-mail-address-book-contract': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
@@ -5096,6 +5124,18 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-mail-contacts-sync-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-contacts-sync-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -5894,6 +5934,25 @@ const MAIL_CONTACTS_SYNC_PERSISTENCE_INVENTORY = {
   businessCapabilities: [
     ...MAIL_CONTACTS_SYNC_CONTRACT_CORE_INVENTORY.businessCapabilities,
     'mail_contacts_sync.storage.v1',
+  ].sort(),
+};
+
+const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY = {
+  ...MAIL_CONTACTS_SYNC_PERSISTENCE_INVENTORY,
+  businessCapabilities: [
+    ...MAIL_CONTACTS_SYNC_PERSISTENCE_INVENTORY.businessCapabilities,
+    'mail_contacts_sync.contacts.command.v1',
+    'mail_contacts_sync.contacts.rejected.v1',
+    'mail_contacts_sync.contacts.upserted.v1',
+    'mail_contacts_sync.mail.entry-observed.v1',
+    'mail_contacts_sync.mail.entry-upsert-rejected.v1',
+    'mail_contacts_sync.mail.entry-upserted.v1',
+    'mail_contacts_sync.mail.fetch-page.v1',
+    'mail_contacts_sync.mail.page-completed.v1',
+    'mail_contacts_sync.mail.page-rejected.v1',
+    'mail_contacts_sync.mail.upsert-entry.v1',
+    'mail_contacts_sync.scheduler.receipt.v1',
+    'mail_contacts_sync.scheduler.v1',
   ].sort(),
 };
 
@@ -7788,6 +7847,17 @@ function expectedSlice(currentSlice) {
       packages: MAIL_CONTACTS_SYNC_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_CONTACTS_SYNC_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_CONTACTS_SYNC_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'mail_contacts_sync_runtime_admission_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY,
+      cargoFeatures: MAIL_CONTACTS_SYNC_PERSISTENCE_CARGO_FEATURE_ALLOWLIST,
+      packages: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

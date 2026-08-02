@@ -114,7 +114,7 @@ test('Communications export is one exact workflow family with a public domain so
   const sourceSchema = sourceContract.replaceAll(/\/\/.*$/gm, '');
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_persistence_v1',
+    'mail_contacts_sync_runtime_admission_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'attachment_preview',
@@ -189,8 +189,9 @@ test('Kernel launches workflow through a distinct provider-neutral configuration
     /pub\(crate\) fn start_reserved_workflow\([\s\S]*?\n\}/,
   )?.[0] ?? '';
   assert.doesNotMatch(workflowLaunch, /ManagedIntegration|ManagedDomain/);
-  assert.match(workflowLaunch, /settings_snapshot_bytes: None/);
-  assert.match(workflowLaunch, /host_bridge_configuration: None/);
+  assert.match(workflowLaunch, /configuration,\s+None,\s+granted_capability_ids/);
+  assert.match(kernelLaunch, /fn start_reserved_workflow_with_settings/);
+  assert.doesNotMatch(workflowLaunch, /host_bridge_configuration/);
   assert.match(ownerControl, /StartReservedWorkflowRuntimeRequestV1/);
   assert.match(workflowRuntime, /ManagedWorkflowRuntimeConfigurationV1/);
   const eventAccess = workflowManagedRuntime.match(

@@ -11,7 +11,7 @@ message FetchMailAddressBookPageCommandV1 {
   bytes run_id = 2;
   string logical_owner_id = 3;
   string account_id = 4;
-  MailAddressBookProviderKindV1 provider_kind = 5;
+  reserved 5;
   optional bytes continuation_cursor = 6;
   uint32 page_size = 7;
 }

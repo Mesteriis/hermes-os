@@ -1,13 +1,14 @@
 use hermes_mail_contacts_sync_core::{
     MailContactsSyncDirectionV1, MailContactsSyncDraftV1, MailContactsSyncStateV1,
-    MailContactsSyncTransitionV1, MailContactsSyncTriggerV1,
+    MailContactsSyncTriggerV1,
 };
 use hermes_mail_contacts_sync_persistence::{
-    CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1, MailContactsSyncContactOutcomeV1,
+    AcceptScheduledMailContactsSyncDueOutcomeV1, AcceptScheduledMailContactsSyncDueV1,
+    AdvanceMailContactsSyncPageV1, CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1,
+    MailContactsSyncAdvanceOutcomeV1, MailContactsSyncContactOutcomeV1,
     MailContactsSyncEntryInputV1, MailContactsSyncEntryOutcomeInputV1,
-    MailContactsSyncInboxOutcomeV1, MailContactsSyncPageResultInputV1,
-    MailContactsSyncPersistenceConformanceV1, MailContactsSyncPersistenceErrorV1,
-    MailContactsSyncPersistenceOutcomeV1, MailContactsSyncTransitionInputV1, OutboxEnvelopeV1,
+    MailContactsSyncPageResultInputV1, MailContactsSyncPersistenceConformanceV1,
+    MailContactsSyncPersistenceErrorV1, MailContactsSyncPersistenceOutcomeV1, OutboxEnvelopeV1,
 };
 use sha2::{Digest, Sha256};
 
@@ -45,7 +46,7 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
         .unpublished_commands("owner-1", 10)
         .await
         .expect("load initial outbox");
-    assert_eq!(pending, vec![create.initial_command.clone()]);
+    assert_eq!(pending, create.initial_commands);
     persistence
         .mark_command_published(
             "owner-1",
@@ -62,36 +63,6 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
             .expect("load empty outbox")
             .is_empty()
     );
-
-    let transition = MailContactsSyncTransitionInputV1 {
-        logical_owner_id: "owner-1".to_owned(),
-        run_id: [1; 16],
-        direction: MailContactsSyncDirectionV1::ProviderToContacts,
-        message_id: [3; 16],
-        envelope_sha256: [4; 32],
-        transition: MailContactsSyncTransitionV1::BeginProviderPage,
-        next_command: Some(envelope(5, b"fetch-page-command")),
-        occurred_at_unix_millis: 1_800_000_000_200,
-    };
-    let applied = persistence
-        .apply_transition(transition.clone())
-        .await
-        .expect("apply transition");
-    let applied = match applied {
-        MailContactsSyncInboxOutcomeV1::Applied(run) => run,
-        MailContactsSyncInboxOutcomeV1::Duplicate(_) => panic!("first delivery cannot replay"),
-    };
-    assert_eq!(
-        applied.status.state,
-        MailContactsSyncStateV1::FetchingProviderPage
-    );
-    assert!(matches!(
-        persistence
-            .apply_transition(transition.clone())
-            .await
-            .expect("replay transition"),
-        MailContactsSyncInboxOutcomeV1::Duplicate(_)
-    ));
 
     let entry = MailContactsSyncEntryInputV1 {
         logical_owner_id: "owner-1".to_owned(),
@@ -117,6 +88,12 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
             .await
             .expect("replay provider entry"),
         MailContactsSyncPersistenceOutcomeV1::Duplicate
+    );
+    let mut conflicting_entry = entry.clone();
+    conflicting_entry.observation_envelope_sha256 = [29; 32];
+    assert_eq!(
+        persistence.accept_provider_entry(&conflicting_entry).await,
+        Err(MailContactsSyncPersistenceErrorV1::InboxConflict)
     );
     let outcome = MailContactsSyncEntryOutcomeInputV1 {
         logical_owner_id: "owner-1".to_owned(),
@@ -167,25 +144,33 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
     assert_eq!(progress.expected_entries, 1);
     assert_eq!(progress.recorded_entries, 1);
     assert_eq!(progress.accounted_entries, 1);
+    assert_eq!(
+        persistence
+            .advance_ready_page(&AdvanceMailContactsSyncPageV1 {
+                logical_owner_id: "owner-1".to_owned(),
+                run_id: [1; 16],
+                next_page_command: None,
+                occurred_at_unix_millis: 1_800_000_000_600,
+            })
+            .await
+            .expect("complete ready run"),
+        MailContactsSyncAdvanceOutcomeV1::Applied
+    );
+    assert_eq!(
+        persistence
+            .load_run("owner-1", &[1; 16])
+            .await
+            .expect("load completed run")
+            .status
+            .state,
+        MailContactsSyncStateV1::Completed
+    );
 
     let second = create_run(30);
     persistence
         .create_run(second)
         .await
         .expect("create concurrent-order run");
-    persistence
-        .apply_transition(MailContactsSyncTransitionInputV1 {
-            logical_owner_id: "owner-1".to_owned(),
-            run_id: [30; 16],
-            direction: MailContactsSyncDirectionV1::ProviderToContacts,
-            message_id: [41; 16],
-            envelope_sha256: [42; 32],
-            transition: MailContactsSyncTransitionV1::BeginProviderPage,
-            next_command: Some(envelope(43, b"second-fetch-page")),
-            occurred_at_unix_millis: 1_800_000_000_600,
-        })
-        .await
-        .expect("begin concurrent-order page");
     persistence
         .accept_provider_entry(&MailContactsSyncEntryInputV1 {
             logical_owner_id: "owner-1".to_owned(),
@@ -229,13 +214,19 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
         .await
         .expect("load concurrent-order run");
     assert_eq!(concurrent_run.status.counters.contacts_updated, 1);
-
-    let mut conflict = transition;
-    conflict.envelope_sha256 = [9; 32];
     assert_eq!(
-        persistence.apply_transition(conflict).await,
-        Err(MailContactsSyncPersistenceErrorV1::InboxConflict)
+        persistence
+            .advance_ready_page(&AdvanceMailContactsSyncPageV1 {
+                logical_owner_id: "owner-1".to_owned(),
+                run_id: [30; 16],
+                next_page_command: None,
+                occurred_at_unix_millis: 1_800_000_000_900,
+            })
+            .await
+            .expect("complete concurrent-order run"),
+        MailContactsSyncAdvanceOutcomeV1::Applied
     );
+
     let realtime = persistence
         .client_realtime_window("owner-1", None, 10)
         .await
@@ -244,12 +235,12 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
     assert_eq!(
         realtime.iter().map(|item| item.state).collect::<Vec<_>>(),
         [
-            MailContactsSyncStateV1::Accepted,
             MailContactsSyncStateV1::FetchingProviderPage,
             MailContactsSyncStateV1::ApplyingContacts,
-            MailContactsSyncStateV1::Accepted,
+            MailContactsSyncStateV1::Completed,
             MailContactsSyncStateV1::FetchingProviderPage,
             MailContactsSyncStateV1::ApplyingContacts,
+            MailContactsSyncStateV1::Completed,
         ]
     );
     assert_eq!(
@@ -258,6 +249,67 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
             .await
             .expect("resume SSE replay"),
         realtime[1..].to_vec()
+    );
+
+    let scheduled_launch = AcceptScheduledMailContactsSyncDueV1 {
+        logical_owner_id: "owner-1".to_owned(),
+        command_message_id: [60; 16],
+        command_envelope_sha256: [61; 32],
+        scheduler_run_id: [62; 16],
+        launch: Some(MailContactsSyncDraftV1 {
+            run_id: [62; 16],
+            operation_id: [62; 16],
+            account_id: "mail-account-2".to_owned(),
+            direction: MailContactsSyncDirectionV1::ProviderToContacts,
+            trigger: MailContactsSyncTriggerV1::Scheduled,
+        }),
+        durable_messages: vec![
+            envelope(63, b"scheduler-acceptance"),
+            envelope(64, b"scheduled-fetch"),
+            envelope(65, b"scheduler-terminal"),
+        ],
+        occurred_at_unix_millis: 1_800_000_001_000,
+    };
+    assert!(matches!(
+        persistence
+            .accept_scheduled_due(scheduled_launch.clone())
+            .await
+            .expect("launch scheduled run"),
+        AcceptScheduledMailContactsSyncDueOutcomeV1::Launched(_)
+    ));
+    assert!(matches!(
+        persistence
+            .accept_scheduled_due(scheduled_launch)
+            .await
+            .expect("replay scheduled due"),
+        AcceptScheduledMailContactsSyncDueOutcomeV1::Duplicate(Some(_))
+    ));
+
+    let disabled_due = AcceptScheduledMailContactsSyncDueV1 {
+        logical_owner_id: "owner-1".to_owned(),
+        command_message_id: [70; 16],
+        command_envelope_sha256: [71; 32],
+        scheduler_run_id: [72; 16],
+        launch: None,
+        durable_messages: vec![
+            envelope(73, b"disabled-scheduler-acceptance"),
+            envelope(74, b"disabled-scheduler-terminal"),
+        ],
+        occurred_at_unix_millis: 1_800_000_001_100,
+    };
+    assert_eq!(
+        persistence
+            .accept_scheduled_due(disabled_due.clone())
+            .await
+            .expect("persist disabled no-op"),
+        AcceptScheduledMailContactsSyncDueOutcomeV1::Skipped
+    );
+    assert_eq!(
+        persistence
+            .accept_scheduled_due(disabled_due)
+            .await
+            .expect("replay disabled no-op"),
+        AcceptScheduledMailContactsSyncDueOutcomeV1::Duplicate(None)
     );
 }
 
@@ -271,7 +323,7 @@ fn create_run(seed: u8) -> CreateMailContactsSyncRunV1 {
             direction: MailContactsSyncDirectionV1::ProviderToContacts,
             trigger: MailContactsSyncTriggerV1::Manual,
         },
-        initial_command: envelope(seed.wrapping_add(10), b"initial-command"),
+        initial_commands: vec![envelope(seed.wrapping_add(10), b"initial-command")],
         created_at_unix_millis: 1_800_000_000_000,
     }
 }

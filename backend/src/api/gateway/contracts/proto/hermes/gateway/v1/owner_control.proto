@@ -266,6 +266,7 @@ message StartReservedWorkflowRuntimeRequestV1 {
   string registration_id = 1;
   string storage_capability_id = 2;
   string owner_session_id = 3;
+  string configuration_instance_id = 4;
 }
 message StartReservedWorkflowRuntimeResponseV1 {
   string registration_id = 1;

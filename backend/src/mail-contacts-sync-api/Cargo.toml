@@ -13,6 +13,7 @@ owner = "mail_contacts_sync"
 surface = "contract"
 
 [dependencies]
+hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 prost = "=0.14.4"
 
 [build-dependencies]

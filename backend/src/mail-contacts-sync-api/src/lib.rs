@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+use hermes_runtime_protocol::v1::ContractReferenceV1;
+
 pub const PACKAGE: &str = "hermes-mail-contacts-sync-api";
 pub const MAIL_CONTACTS_SYNC_OWNER_ID_V1: &str = "mail_contacts_sync";
 pub const MAIL_CONTACTS_SYNC_MODULE_ID_V1: &str = "hermes-mail-contacts-sync-runtime";
@@ -11,6 +13,34 @@ pub const MAIL_CONTACTS_SYNC_QUERY_CONNECT_PATH_V1: &str =
 pub const MAIL_CONTACTS_SYNC_REALTIME_EVENT_KIND_V1: &str = "mail.contacts-sync.status-changed.v1";
 pub const MAIL_CONTACTS_SYNC_CONTRACT_MAJOR_V1: u32 = 1;
 pub const MAIL_CONTACTS_SYNC_CONTRACT_REVISION_V1: u32 = 1;
+pub const MAIL_CONTACTS_SYNC_START_CONTRACT_NAME_V1: &str = "mail_contacts_sync_start";
+pub const MAIL_CONTACTS_SYNC_QUERY_CONTRACT_NAME_V1: &str = "mail_contacts_sync_query";
+pub const MAIL_CONTACTS_SYNC_REALTIME_CONTRACT_NAME_V1: &str = "mail_contacts_sync_realtime";
+
+#[must_use]
+pub fn mail_contacts_sync_start_contract_v1() -> ContractReferenceV1 {
+    contract(MAIL_CONTACTS_SYNC_START_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn mail_contacts_sync_query_contract_v1() -> ContractReferenceV1 {
+    contract(MAIL_CONTACTS_SYNC_QUERY_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn mail_contacts_sync_realtime_contract_v1() -> ContractReferenceV1 {
+    contract(MAIL_CONTACTS_SYNC_REALTIME_CONTRACT_NAME_V1)
+}
+
+fn contract(name: &str) -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: MAIL_CONTACTS_SYNC_OWNER_ID_V1.to_owned(),
+        name: name.to_owned(),
+        major: MAIL_CONTACTS_SYNC_CONTRACT_MAJOR_V1,
+        revision: MAIL_CONTACTS_SYNC_CONTRACT_REVISION_V1,
+        schema_sha256: MAIL_CONTACTS_SYNC_SCHEMA_SHA256_V1.to_vec(),
+    }
+}
 
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/hermes.mail_contacts_sync.v1.rs"));

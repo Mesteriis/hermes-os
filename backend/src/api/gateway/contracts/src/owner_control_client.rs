@@ -504,6 +504,39 @@ impl OwnerControlClientV1 {
                     registration_id: registration_id.to_owned(),
                     storage_capability_id: storage_capability_id.to_owned(),
                     owner_session_id: owner_session_id.to_owned(),
+                    configuration_instance_id: String::new(),
+                },
+            ),
+        )?;
+        match response.result {
+            Some(owner_control_response_v1::Result::StartReservedWorkflowRuntime(value))
+                if value.registration_id == registration_id
+                    && value.runtime_generation > 0
+                    && value.launch_state == "accepted" =>
+            {
+                Ok(value)
+            }
+            _ => Err("managed workflow runtime start is unavailable".to_owned()),
+        }
+    }
+
+    pub fn start_reserved_workflow_configuration_runtime(
+        &self,
+        owner_session_id: &str,
+        registration_id: &str,
+        storage_capability_id: &str,
+        configuration_instance_id: &str,
+    ) -> Result<StartReservedWorkflowRuntimeResponseV1, String> {
+        if configuration_instance_id.is_empty() {
+            return Err("managed workflow configuration instance is required".to_owned());
+        }
+        let response = self.request(
+            owner_control_request_v1::Operation::StartReservedWorkflowRuntime(
+                StartReservedWorkflowRuntimeRequestV1 {
+                    registration_id: registration_id.to_owned(),
+                    storage_capability_id: storage_capability_id.to_owned(),
+                    owner_session_id: owner_session_id.to_owned(),
+                    configuration_instance_id: configuration_instance_id.to_owned(),
                 },
             ),
         )?;

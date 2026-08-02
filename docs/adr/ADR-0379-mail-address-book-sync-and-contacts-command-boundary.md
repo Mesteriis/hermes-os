@@ -10,9 +10,12 @@ owner-local persistence: отдельный Mail-owned provider contract, genera
 client API, pure lifecycle core, atomic inbox/state/outbox, relay ack и
 replayable realtime window. Additive orchestration ledger durably correlates
 provider observations, Contacts commands, early terminal results and page
-completion without cross-owner SQL or in-memory truth. Runtime, assembly, Scheduler binding, реальные
-Google/CardDAV adapters и managed/browser conformance ещё не реализованы,
-поэтому gate остаётся закрытым. Contacts command открыт только после exact five-unit inventory,
+completion without cross-owner SQL or in-memory truth. Отдельный managed
+workflow runtime, typed multi-instance Settings bootstrap и Scheduler due/receipt
+binding реализованы со статическим architecture и pre-commit evidence. Assembly,
+двусторонний Contacts-to-Mail path, реальные Google/CardDAV adapters и
+managed/browser conformance ещё не реализованы, поэтому gate остаётся закрытым.
+Contacts command открыт только после exact five-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
 legacy address-book service, Mail account UI или статических contracts не
 открывает workflow gate.

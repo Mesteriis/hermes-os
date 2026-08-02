@@ -4,6 +4,7 @@ use hermes_mail_contacts_sync_core::{
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::{
+    AdvanceMailContactsSyncPageV1, MailContactsSyncAdvanceOutcomeV1,
     MailContactsSyncContactOutcomeV1, MailContactsSyncEntryInputV1,
     MailContactsSyncEntryOutcomeInputV1, MailContactsSyncPageProgressV1,
     MailContactsSyncPageResultInputV1, MailContactsSyncPersistenceErrorV1,
@@ -15,6 +16,120 @@ use crate::{
 };
 
 impl MailContactsSyncPersistenceV1 {
+    pub async fn run_id_for_contact_command(
+        &self,
+        logical_owner_id: &str,
+        contact_command_id: &[u8; 16],
+    ) -> Result<[u8; 16], MailContactsSyncPersistenceErrorV1> {
+        if !valid_identity(logical_owner_id) || !nonzero(contact_command_id) {
+            return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+        }
+        sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT run_id FROM hermes_data.mail_contacts_sync_entries
+             WHERE logical_owner_id = $1 AND contact_command_id = $2",
+        )
+        .bind(logical_owner_id)
+        .bind(contact_command_id.as_slice())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .ok_or(MailContactsSyncPersistenceErrorV1::NotFound)?
+        .try_into()
+        .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidRow)
+    }
+
+    pub async fn advance_ready_page(
+        &self,
+        input: &AdvanceMailContactsSyncPageV1,
+    ) -> Result<MailContactsSyncAdvanceOutcomeV1, MailContactsSyncPersistenceErrorV1> {
+        if !valid_identity(&input.logical_owner_id)
+            || !nonzero(&input.run_id)
+            || input.occurred_at_unix_millis <= 0
+            || input
+                .next_page_command
+                .as_ref()
+                .is_some_and(|command| !valid_envelope(command))
+        {
+            return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+        }
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        let current =
+            load_for_update(&mut transaction, &input.logical_owner_id, &input.run_id).await?;
+        if current.status.state != MailContactsSyncStateV1::ApplyingContacts {
+            transaction.commit().await.map_err(storage)?;
+            return Ok(MailContactsSyncAdvanceOutcomeV1::Idle);
+        }
+        let counts = sqlx::query(
+            "SELECT expected_entries,
+                    (SELECT COUNT(*) FROM hermes_data.mail_contacts_sync_entries entries
+                     WHERE entries.logical_owner_id = pages.logical_owner_id
+                       AND entries.run_id = pages.run_id
+                       AND entries.page_sequence = pages.page_sequence
+                       AND entries.outcome_accounted) AS accounted_entries
+             FROM hermes_data.mail_contacts_sync_pages pages
+             WHERE logical_owner_id = $1 AND run_id = $2 AND page_sequence = $3",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.run_id.as_slice())
+        .bind(signed(current.status.page_sequence)?)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(storage)?
+        .ok_or(MailContactsSyncPersistenceErrorV1::NotFound)?;
+        if count32(&counts, "expected_entries")? != count32(&counts, "accounted_entries")? {
+            transaction.commit().await.map_err(storage)?;
+            return Ok(MailContactsSyncAdvanceOutcomeV1::PendingContacts);
+        }
+        let transition = if current.status.continuation_cursor.is_some() {
+            if input.next_page_command.is_none() {
+                return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+            }
+            MailContactsSyncTransitionV1::BeginProviderPage
+        } else if current.draft.direction
+            == hermes_mail_contacts_sync_core::MailContactsSyncDirectionV1::Bidirectional
+        {
+            if input.next_page_command.is_some() {
+                return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+            }
+            MailContactsSyncTransitionV1::BeginProviderWrite
+        } else {
+            if input.next_page_command.is_some() {
+                return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+            }
+            MailContactsSyncTransitionV1::Complete
+        };
+        let next =
+            transition_mail_contacts_sync_v1(&current.status, current.draft.direction, transition)
+                .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidTransition)?;
+        update_run(
+            &mut transaction,
+            &input.logical_owner_id,
+            &input.run_id,
+            &current,
+            &next,
+            input.occurred_at_unix_millis,
+        )
+        .await?;
+        if let Some(command) = input.next_page_command.as_ref() {
+            insert_outbox(
+                &mut transaction,
+                &input.logical_owner_id,
+                command,
+                input.occurred_at_unix_millis,
+            )
+            .await?;
+        }
+        insert_realtime(
+            &mut transaction,
+            &input.logical_owner_id,
+            &input.run_id,
+            input.occurred_at_unix_millis,
+        )
+        .await?;
+        transaction.commit().await.map_err(storage)?;
+        Ok(MailContactsSyncAdvanceOutcomeV1::Applied)
+    }
+
     pub async fn accept_provider_entry(
         &self,
         input: &MailContactsSyncEntryInputV1,

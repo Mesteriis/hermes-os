@@ -29,8 +29,19 @@ pub struct MailContactsSyncRealtimeTransitionV1 {
 pub struct CreateMailContactsSyncRunV1 {
     pub logical_owner_id: String,
     pub draft: MailContactsSyncDraftV1,
-    pub initial_command: OutboxEnvelopeV1,
+    pub initial_commands: Vec<OutboxEnvelopeV1>,
     pub created_at_unix_millis: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcceptScheduledMailContactsSyncDueV1 {
+    pub logical_owner_id: String,
+    pub command_message_id: [u8; 16],
+    pub command_envelope_sha256: [u8; 32],
+    pub scheduler_run_id: [u8; 16],
+    pub launch: Option<MailContactsSyncDraftV1>,
+    pub durable_messages: Vec<OutboxEnvelopeV1>,
+    pub occurred_at_unix_millis: i64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -62,6 +73,13 @@ pub enum CreateMailContactsSyncOutcomeV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AcceptScheduledMailContactsSyncDueOutcomeV1 {
+    Launched(PersistedMailContactsSyncRunV1),
+    Skipped,
+    Duplicate(Option<PersistedMailContactsSyncRunV1>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MailContactsSyncInboxOutcomeV1 {
     Applied(PersistedMailContactsSyncRunV1),
     Duplicate(PersistedMailContactsSyncRunV1),
@@ -71,6 +89,21 @@ pub enum MailContactsSyncInboxOutcomeV1 {
 pub enum MailContactsSyncPersistenceOutcomeV1 {
     Applied,
     Duplicate,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailContactsSyncAdvanceOutcomeV1 {
+    Applied,
+    Idle,
+    PendingContacts,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdvanceMailContactsSyncPageV1 {
+    pub logical_owner_id: String,
+    pub run_id: [u8; 16],
+    pub next_page_command: Option<OutboxEnvelopeV1>,
+    pub occurred_at_unix_millis: i64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

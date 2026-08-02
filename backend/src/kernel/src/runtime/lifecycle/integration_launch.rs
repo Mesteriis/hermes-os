@@ -10,7 +10,7 @@ use hermes_runtime_protocol::{
     SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID,
     v1::{
         ManagedIntegrationConfigurationInstanceV1, ManagedIntegrationHostBridgeConfigurationV1,
-        ManagedIntegrationRuntimeConfigurationV1,
+        ManagedIntegrationRuntimeConfigurationV1, ManagedWorkflowConfigurationInstanceV1,
     },
     validation::{
         descriptor::decode_settings_snapshot_v1,
@@ -265,6 +265,62 @@ fn admitted_configuration_instances(
     Ok(instances)
 }
 
+pub(crate) fn admitted_workflow_configuration_instances(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    selected_configuration_instance_id: &str,
+    selected_snapshot_bytes: &[u8],
+) -> Result<Vec<ManagedWorkflowConfigurationInstanceV1>, String> {
+    let selected_snapshot = decode_settings_snapshot_v1(selected_snapshot_bytes)
+        .map_err(|_| "managed workflow settings catalog is invalid".to_owned())?;
+    if selected_snapshot.target_id != selected_configuration_instance_id
+        || selected_snapshot.revision == 0
+    {
+        return Err("managed workflow settings catalog is invalid".to_owned());
+    }
+    let mut selected_found = false;
+    let mut instances = Vec::new();
+    for target in store
+        .settings_configuration_targets(registration_id)
+        .map_err(|_| "managed workflow settings catalog is unavailable".to_owned())?
+    {
+        let target_id = target.configuration_instance_id();
+        let snapshot_bytes = if target_id == selected_configuration_instance_id {
+            selected_found = true;
+            selected_snapshot_bytes.to_vec()
+        } else {
+            if !current_target(&target) {
+                continue;
+            }
+            let (revision, bytes) = store
+                .desired_settings_snapshot_for_target(registration_id, target_id)
+                .map_err(|_| "managed workflow settings catalog is unavailable".to_owned())?
+                .ok_or_else(|| "managed workflow settings catalog is unavailable".to_owned())?;
+            let snapshot = decode_settings_snapshot_v1(&bytes)
+                .map_err(|_| "managed workflow settings catalog is invalid".to_owned())?;
+            if revision != target.effective_revision()
+                || snapshot.target_id != target_id
+                || snapshot.revision != target.effective_revision()
+            {
+                return Err("managed workflow settings catalog is stale".to_owned());
+            }
+            bytes
+        };
+        instances.push(ManagedWorkflowConfigurationInstanceV1 {
+            configuration_instance_id: target_id.to_owned(),
+            settings_snapshot_bytes: snapshot_bytes,
+        });
+    }
+    if !selected_found {
+        return Err("managed workflow settings target is unavailable".to_owned());
+    }
+    instances.sort_by(|left, right| {
+        left.configuration_instance_id
+            .cmp(&right.configuration_instance_id)
+    });
+    Ok(instances)
+}
+
 fn host_bridge_configuration(
     requested: bool,
     runtime_dir: &Path,
@@ -342,7 +398,7 @@ pub(crate) fn admitted_settings_snapshot(
     admitted_settings_snapshot_for_target(store, registration_id, registration_id)
 }
 
-fn admitted_settings_snapshot_for_target(
+pub(crate) fn admitted_settings_snapshot_for_target(
     store: &SqliteControlStore,
     registration_id: &str,
     configuration_instance_id: &str,

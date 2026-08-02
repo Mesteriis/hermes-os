@@ -11,6 +11,7 @@ use sqlx::{
 };
 
 use crate::model::{
+    AcceptScheduledMailContactsSyncDueOutcomeV1, AcceptScheduledMailContactsSyncDueV1,
     CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1, MailContactsSyncInboxOutcomeV1,
     MailContactsSyncPersistenceErrorV1, MailContactsSyncTransitionInputV1, OutboxEnvelopeV1,
     PersistedMailContactsSyncRunV1, direction_code, nonzero, request_fingerprint, trigger_code,
@@ -76,6 +77,12 @@ impl MailContactsSyncPersistenceV1 {
     ) -> Result<CreateMailContactsSyncOutcomeV1, MailContactsSyncPersistenceErrorV1> {
         validate_create(&input)?;
         let fingerprint = request_fingerprint(&input.draft);
+        let initial_status = transition_mail_contacts_sync_v1(
+            &hermes_mail_contacts_sync_core::accepted_mail_contacts_sync_status_v1(),
+            input.draft.direction,
+            hermes_mail_contacts_sync_core::MailContactsSyncTransitionV1::BeginProviderPage,
+        )
+        .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidTransition)?;
         let mut transaction = self.pool.begin().await.map_err(storage_error)?;
         let inserted = sqlx::query(
             "INSERT INTO hermes_data.mail_contacts_sync_runs (
@@ -84,7 +91,7 @@ impl MailContactsSyncPersistenceV1 {
                page_sequence, provider_entries_seen, contacts_created,
                contacts_updated, contacts_unchanged, provider_entries_written,
                rejected_entries, created_at_unix_millis, updated_at_unix_millis
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 1, 0, 0, 0, 0, 0, 0, 0, $8, $8)
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 0, 0, 0, 0, 0, 0, $10, $10)
              ON CONFLICT (logical_owner_id, operation_id) DO NOTHING",
         )
         .bind(&input.logical_owner_id)
@@ -94,19 +101,23 @@ impl MailContactsSyncPersistenceV1 {
         .bind(&input.draft.account_id)
         .bind(direction_code(input.draft.direction))
         .bind(trigger_code(input.draft.trigger))
+        .bind(state_code(initial_status.state))
+        .bind(signed(initial_status.state_revision)?)
         .bind(input.created_at_unix_millis)
         .execute(&mut *transaction)
         .await
         .map_err(storage_error)?
         .rows_affected();
         if inserted == 1 {
-            insert_outbox(
-                &mut transaction,
-                &input.logical_owner_id,
-                &input.initial_command,
-                input.created_at_unix_millis,
-            )
-            .await?;
+            for command in &input.initial_commands {
+                insert_outbox(
+                    &mut transaction,
+                    &input.logical_owner_id,
+                    command,
+                    input.created_at_unix_millis,
+                )
+                .await?;
+            }
             insert_realtime(
                 &mut transaction,
                 &input.logical_owner_id,
@@ -127,6 +138,118 @@ impl MailContactsSyncPersistenceV1 {
         } else {
             CreateMailContactsSyncOutcomeV1::Existing(persisted)
         })
+    }
+
+    pub async fn accept_scheduled_due(
+        &self,
+        input: AcceptScheduledMailContactsSyncDueV1,
+    ) -> Result<AcceptScheduledMailContactsSyncDueOutcomeV1, MailContactsSyncPersistenceErrorV1>
+    {
+        validate_scheduled_due(&input)?;
+        let mut transaction = self.pool.begin().await.map_err(storage_error)?;
+        if let Some(row) = sqlx::query(
+            "SELECT envelope_sha256, run_id FROM hermes_data.mail_contacts_sync_inbox
+             WHERE logical_owner_id = $1 AND message_id = $2",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.command_message_id.as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(storage_error)?
+        {
+            let stored_hash: Vec<u8> = row.try_get("envelope_sha256").map_err(storage_error)?;
+            let stored_run: Vec<u8> = row.try_get("run_id").map_err(storage_error)?;
+            if stored_hash.as_slice() != input.command_envelope_sha256
+                || stored_run.as_slice() != input.scheduler_run_id
+            {
+                return Err(MailContactsSyncPersistenceErrorV1::InboxConflict);
+            }
+            transaction.commit().await.map_err(storage_error)?;
+            let run = self
+                .load_run(&input.logical_owner_id, &input.scheduler_run_id)
+                .await
+                .ok();
+            return Ok(AcceptScheduledMailContactsSyncDueOutcomeV1::Duplicate(run));
+        }
+
+        let mut launched = false;
+        if let Some(draft) = input.launch.as_ref() {
+            let fingerprint = request_fingerprint(draft);
+            let initial_status = transition_mail_contacts_sync_v1(
+                &hermes_mail_contacts_sync_core::accepted_mail_contacts_sync_status_v1(),
+                draft.direction,
+                hermes_mail_contacts_sync_core::MailContactsSyncTransitionV1::BeginProviderPage,
+            )
+            .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidTransition)?;
+            launched = sqlx::query(
+                "INSERT INTO hermes_data.mail_contacts_sync_runs (
+                   logical_owner_id, run_id, operation_id, request_fingerprint,
+                   account_id, direction, trigger_kind, state, state_revision,
+                   page_sequence, provider_entries_seen, contacts_created,
+                   contacts_updated, contacts_unchanged, provider_entries_written,
+                   rejected_entries, created_at_unix_millis, updated_at_unix_millis
+                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 0, 0, 0, 0, 0, 0, $10, $10)
+                 ON CONFLICT (logical_owner_id, operation_id) DO NOTHING",
+            )
+            .bind(&input.logical_owner_id)
+            .bind(draft.run_id.as_slice())
+            .bind(draft.operation_id.as_slice())
+            .bind(fingerprint.as_slice())
+            .bind(&draft.account_id)
+            .bind(direction_code(draft.direction))
+            .bind(trigger_code(draft.trigger))
+            .bind(state_code(initial_status.state))
+            .bind(signed(initial_status.state_revision)?)
+            .bind(input.occurred_at_unix_millis)
+            .execute(&mut *transaction)
+            .await
+            .map_err(storage_error)?
+            .rows_affected()
+                == 1;
+            if !launched {
+                return Err(MailContactsSyncPersistenceErrorV1::RequestConflict);
+            }
+        }
+
+        for message in &input.durable_messages {
+            insert_outbox(
+                &mut transaction,
+                &input.logical_owner_id,
+                message,
+                input.occurred_at_unix_millis,
+            )
+            .await?;
+        }
+        sqlx::query(
+            "INSERT INTO hermes_data.mail_contacts_sync_inbox (
+               logical_owner_id, message_id, envelope_sha256, run_id, processed_at_unix_millis
+             ) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.command_message_id.as_slice())
+        .bind(input.command_envelope_sha256.as_slice())
+        .bind(input.scheduler_run_id.as_slice())
+        .bind(input.occurred_at_unix_millis)
+        .execute(&mut *transaction)
+        .await
+        .map_err(storage_error)?;
+        if launched {
+            insert_realtime(
+                &mut transaction,
+                &input.logical_owner_id,
+                &input.scheduler_run_id,
+                input.occurred_at_unix_millis,
+            )
+            .await?;
+        }
+        transaction.commit().await.map_err(storage_error)?;
+        if launched {
+            self.load_run(&input.logical_owner_id, &input.scheduler_run_id)
+                .await
+                .map(AcceptScheduledMailContactsSyncDueOutcomeV1::Launched)
+        } else {
+            Ok(AcceptScheduledMailContactsSyncDueOutcomeV1::Skipped)
+        }
     }
 
     pub async fn apply_transition(
@@ -338,8 +461,53 @@ fn validate_create(
 ) -> Result<(), MailContactsSyncPersistenceErrorV1> {
     if !valid_identity(&input.logical_owner_id)
         || validate_mail_contacts_sync_draft_v1(&input.draft).is_err()
-        || !valid_envelope(&input.initial_command)
+        || input.initial_commands.is_empty()
+        || input.initial_commands.len() > 4
+        || input
+            .initial_commands
+            .iter()
+            .any(|command| !valid_envelope(command))
+        || {
+            let unique = input
+                .initial_commands
+                .iter()
+                .map(|command| command.message_id)
+                .collect::<std::collections::BTreeSet<_>>();
+            unique.len() != input.initial_commands.len()
+        }
         || input.created_at_unix_millis <= 0
+    {
+        return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+    }
+    Ok(())
+}
+
+fn validate_scheduled_due(
+    input: &AcceptScheduledMailContactsSyncDueV1,
+) -> Result<(), MailContactsSyncPersistenceErrorV1> {
+    let messages_are_valid = !input.durable_messages.is_empty()
+        && input.durable_messages.len() <= 4
+        && input.durable_messages.iter().all(valid_envelope)
+        && input
+            .durable_messages
+            .iter()
+            .map(|message| message.message_id)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            == input.durable_messages.len();
+    let launch_is_valid = input.launch.as_ref().is_none_or(|draft| {
+        validate_mail_contacts_sync_draft_v1(draft).is_ok()
+            && draft.trigger == MailContactsSyncTriggerV1::Scheduled
+            && draft.run_id == input.scheduler_run_id
+            && draft.operation_id == input.scheduler_run_id
+    });
+    if !valid_identity(&input.logical_owner_id)
+        || !nonzero(&input.command_message_id)
+        || !nonzero(&input.command_envelope_sha256)
+        || !nonzero(&input.scheduler_run_id)
+        || !messages_are_valid
+        || !launch_is_valid
+        || input.occurred_at_unix_millis <= 0
     {
         return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
     }
@@ -536,6 +704,8 @@ const SELECT_BY_OPERATION: &str = concat!(
 
 #[cfg(test)]
 mod tests {
+    use hermes_mail_contacts_sync_core::MailContactsSyncTransitionV1;
+
     use super::*;
 
     #[test]
@@ -569,10 +739,17 @@ mod tests {
     }
 
     #[test]
-    fn initial_state_matches_core_contract() {
+    fn initial_state_advances_when_the_first_fetch_command_is_committed() {
+        let accepted = hermes_mail_contacts_sync_core::accepted_mail_contacts_sync_status_v1();
+        let fetching = transition_mail_contacts_sync_v1(
+            &accepted,
+            MailContactsSyncDirectionV1::ProviderToContacts,
+            MailContactsSyncTransitionV1::BeginProviderPage,
+        )
+        .expect("fetching");
         assert_eq!(
-            hermes_mail_contacts_sync_core::accepted_mail_contacts_sync_status_v1().state,
-            MailContactsSyncStateV1::Accepted
+            fetching.state,
+            MailContactsSyncStateV1::FetchingProviderPage
         );
     }
 }

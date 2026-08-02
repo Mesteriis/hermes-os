@@ -5,6 +5,11 @@ package hermes.runtime.v1;
 import "hermes/runtime/v1/managed_storage_runtime.proto";
 import "hermes/runtime/v1/managed_runtime_artifact.proto";
 
+message ManagedWorkflowConfigurationInstanceV1 {
+  string configuration_instance_id = 1;
+  bytes settings_snapshot_bytes = 2;
+}
+
 // Provider-neutral workflow runtime bootstrap. It intentionally has no
 // integration configuration, host bridge, provider state or domain identity.
 message ManagedWorkflowRuntimeConfigurationV1 {
@@ -21,4 +26,7 @@ message ManagedWorkflowRuntimeConfigurationV1 {
   string event_hub_endpoint = 8;
   uint64 event_credential_revision = 9;
   repeated ManagedRuntimeArtifactBindingV1 runtime_artifacts = 10;
+  string configuration_instance_id = 11;
+  uint64 settings_revision = 12;
+  repeated ManagedWorkflowConfigurationInstanceV1 configuration_instances = 13;
 }
