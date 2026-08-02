@@ -188,10 +188,15 @@ mod attachment_text_extraction_managed_setup;
 mod attachment_text_extraction_persistence_fixture;
 #[path = "managed_storage_vault_docker/attachment_text_extraction_source_fixtures.rs"]
 mod attachment_text_extraction_source_fixtures;
+#[path = "managed_storage_vault_docker/attachment_translation_managed_flow.rs"]
+mod attachment_translation_managed_flow;
+#[path = "managed_storage_vault_docker/attachment_translation_managed_setup.rs"]
+mod attachment_translation_managed_setup;
 use archive_inspection_managed_setup::*;
 use attachment_preview_evidence_replay_managed_setup::*;
 use attachment_preview_managed_setup::*;
 use attachment_text_extraction_managed_setup::*;
+use attachment_translation_managed_setup::*;
 #[path = "managed_storage_vault_docker/archive_inspection_managed_flow.rs"]
 mod archive_inspection_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_security_persistence_fixture.rs"]

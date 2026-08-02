@@ -234,3 +234,54 @@ test('text extraction produces translation source only through durable target-ow
     'attachment_text_extraction.translation-source.v1',
   ));
 });
+
+test('attachment translation has an exact signed managed lifecycle and restart gate', async () => {
+  const [setup, flow, harness, runner, recovery, testkitManifest] = await Promise.all([
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_translation_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_translation_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(new URL('scripts/test-authenticated-storage.mjs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('src/attachment-translation-runtime/src/recovery.rs', BACKEND_ROOT), 'utf8'),
+    readFile(new URL('tests/support/kernel-recovery/Cargo.toml', BACKEND_ROOT), 'utf8'),
+  ]);
+
+  assert.match(setup, /installed_attachment_translation_ensemble_release_v1/);
+  assert.match(setup, /attachment_text_extraction_release_artifact_v1/);
+  assert.match(setup, /ollama_ai_release_artifact_v1/);
+  assert.match(setup, /ai_inference_release_artifact_v1/);
+  assert.match(setup, /attachment_translation_release_artifact_v1/);
+  assert.match(setup, /restart_attachment_translation_runtime_v1/);
+  assert.match(setup, /storage_successor::reserve/);
+  assert.match(flow, /managed_attachment_translation_runtime_starts_with_exact_signed_contracts/);
+  assert.match(flow, /Text Extraction workflow/);
+  assert.match(flow, /Attachment Translation restart must not restart/);
+  assert.match(harness, /mod attachment_translation_managed_setup/);
+  assert.match(harness, /mod attachment_translation_managed_flow/);
+  assert.match(runner, /hermes-attachment-translation-runtime/);
+  assert.match(runner, /HERMES_ATTACHMENT_TRANSLATION_RUNTIME_BIN/);
+  assert.match(
+    runner,
+    /managed_attachment_translation_runtime_starts_with_exact_signed_contracts/,
+  );
+  assert.match(recovery, /materialize_ai_source_from_authority_v1/);
+  assert.match(recovery, /refresh_runtime_bound_source/);
+  assert.match(recovery, /complete_source_cleanup/);
+  assert.match(testkitManifest, /hermes-attachment-translation-api/);
+  assert.match(testkitManifest, /hermes-attachment-translation-persistence/);
+  assert.match(testkitManifest, /hermes-attachment-translation-runtime/);
+});

@@ -19,8 +19,11 @@ actor-bound one-use ticket и shared SSE; assembly выдаёт отдельны
 runtime и Storage artifacts. Text Extraction теперь потребляет exact target-owned
 command, проверяет current ready run/revision, создаёт отдельную target-bound
 Blob-копию, атомарно сохраняет owner-local inbox/outbox и ACK'ает только после
-commit. Managed signed-release/live evidence ещё отсутствуют, поэтому
-`attachment_translation_v1` остаётся `planned`.
+commit. Signed managed lifecycle smoke gate уже материализует exact release,
+поднимает отдельные Text Extraction, Attachment Translation, AI Engine и Ollama
+processes через Vault/Storage/Blob/NATS и доказывает generation successor только
+для Translation. Полный Start/Get/Read/SSE и real-provider business contour ещё
+не закрыты, поэтому `attachment_translation_v1` остаётся `planned`.
 
 Restart recovery выделен из inference execution в отдельную функциональную
 единицу. Он не переиспользует сохранённый runtime-bound Blob proof: current

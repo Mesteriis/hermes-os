@@ -311,7 +311,7 @@ fn start_reserved_attachment_text_extraction_runtime_v1(
     }
 }
 
-fn attachment_text_extraction_release_artifact_v1() -> SignedRuntimeArtifact {
+pub(super) fn attachment_text_extraction_release_artifact_v1() -> SignedRuntimeArtifact {
     SignedRuntimeArtifact::new(
         ATTACHMENT_TEXT_EXTRACTION_RELEASE_ARTIFACT_ID_V1,
         attachment_text_extraction_binary(),
@@ -321,7 +321,7 @@ fn attachment_text_extraction_release_artifact_v1() -> SignedRuntimeArtifact {
     .with_settings_schema(attachment_text_extraction_settings_schema_bytes_v1())
 }
 
-fn attachment_text_extraction_runtime_resources_v1() -> [SignedRuntimeResource; 3] {
+pub(super) fn attachment_text_extraction_runtime_resources_v1() -> [SignedRuntimeResource; 3] {
     [
         SignedRuntimeResource::read_only_data(
             ATTACHMENT_TEXT_EXTRACTION_OCR_ENGLISH_ARTIFACT_ID_V1,
