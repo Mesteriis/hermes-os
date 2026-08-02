@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_contacts_sync_contract_core_v1",
+    "currentSlice": "mail_contacts_sync_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1518,6 +1518,12 @@
         "role": "workflow",
         "owner": "mail_contacts_sync",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-contacts-sync-persistence",
+        "role": "workflow",
+        "owner": "mail_contacts_sync",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2413,6 +2419,16 @@
       "hermes-mail-address-book-contract": [],
       "hermes-mail-contacts-sync-api": [],
       "hermes-mail-contacts-sync-core": [],
+      "hermes-mail-contacts-sync-persistence": [
+        {
+          "name": "hermes-mail-contacts-sync-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "hermes-storage-protocol",
@@ -8947,6 +8963,28 @@
         }
       ],
       "hermes-mail-contacts-sync-core": [],
+      "hermes-mail-contacts-sync-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "sha2",
@@ -12395,6 +12433,10 @@
         "default": [],
         "conformance-test-support": []
       },
+      "hermes-mail-contacts-sync-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-communication-cross-channel-forward-persistence": {
         "default": [],
         "conformance-test-support": []
@@ -13375,6 +13417,10 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-mail-contacts-sync-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-tasks-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -13633,6 +13679,7 @@
         "mail.smtp.credentials.v1",
         "mail.storage.v1",
         "mail.sync.v1",
+        "mail_contacts_sync.storage.v1",
         "review.communication-attention.command.v1",
         "review.communication-attention.query.v1",
         "review.communication-attention.realtime.v1",

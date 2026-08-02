@@ -21,6 +21,8 @@ const crossChannelForwardPostgresTest =
   process.env.HERMES_COMMUNICATION_CROSS_CHANNEL_FORWARD_POSTGRES_TEST_FILTER?.trim();
 const telegramCallsTest = process.env.HERMES_TELEGRAM_CALLS_POSTGRES_TEST_FILTER?.trim();
 const contactsPostgresTest = process.env.HERMES_CONTACTS_POSTGRES_TEST_FILTER?.trim();
+const mailContactsSyncPostgresTest =
+  process.env.HERMES_MAIL_CONTACTS_SYNC_POSTGRES_TEST_FILTER?.trim();
 const keepContour = process.env.HERMES_STORAGE_KEEP_CONTOUR === '1';
 const authenticatedTests = [
   'authenticated_revoke_fences_the_real_pool_and_postgres_role',
@@ -220,6 +222,10 @@ async function run_conformance(secrets) {
     }
     if (contactsPostgresTest) {
       await run_contacts_postgres_conformance(secrets, contactsPostgresTest);
+      return;
+    }
+    if (mailContactsSyncPostgresTest) {
+      await run_mail_contacts_sync_postgres_conformance(secrets, mailContactsSyncPostgresTest);
       return;
     }
     for (const test of focusedTest ? [focusedTest] : managedTest ? [] : authenticatedTests) {
@@ -430,6 +436,34 @@ async function run_contacts_postgres_conformance(secrets, test) {
       env: {
         ...process.env,
         HERMES_CONTACTS_POSTGRES_URL: await postgres_test_database_url(secrets),
+      },
+    });
+  } finally {
+    await stop_contour(secrets);
+  }
+}
+
+async function run_mail_contacts_sync_postgres_conformance(secrets, test) {
+  await start_contour(secrets);
+  try {
+    await run('cargo', [
+      `+${toolchain}`,
+      '--config',
+      'build.rustc-wrapper=""',
+      'test',
+      '--locked',
+      '-p',
+      'hermes-mail-contacts-sync-testkit',
+      '--test',
+      'postgres_live',
+      '--',
+      '--ignored',
+      test,
+      '--test-threads=1',
+    ], {
+      env: {
+        ...process.env,
+        HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL: await postgres_test_database_url(secrets),
       },
     });
   } finally {

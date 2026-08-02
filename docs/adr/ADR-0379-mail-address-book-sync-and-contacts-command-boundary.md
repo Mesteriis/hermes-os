@@ -5,11 +5,12 @@
 Дата: 2026-08-02
 
 Состояние реализации: `contacts_mail_identity_command_v1` implemented;
-`mail_contacts_sync_v1` planned. Для workflow реализован только foundation:
-отдельный Mail-owned provider contract, generated client API и pure lifecycle
-core. Persistence, runtime, assembly, Scheduler binding, реальные Google/CardDAV
-adapters и live/browser conformance ещё не реализованы, поэтому gate остаётся
-закрытым. Contacts command открыт только после exact five-unit inventory,
+`mail_contacts_sync_v1` planned. Для workflow реализован foundation и
+owner-local persistence: отдельный Mail-owned provider contract, generated
+client API, pure lifecycle core, atomic inbox/state/outbox, relay ack и
+replayable realtime window. Runtime, assembly, Scheduler binding, реальные
+Google/CardDAV adapters и managed/browser conformance ещё не реализованы,
+поэтому gate остаётся закрытым. Contacts command открыт только после exact five-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
 legacy address-book service, Mail account UI или статических contracts не
 открывает workflow gate.

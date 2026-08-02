@@ -84,6 +84,7 @@ members = [
   "src/mail-address-book-contract",
   "src/mail-contacts-sync-api",
   "src/mail-contacts-sync-core",
+  "src/mail-contacts-sync-persistence",
   "src/reviewed-task-candidate-promotion-core",
   "src/reviewed-task-candidate-promotion-persistence",
   "src/reviewed-task-candidate-promotion-runtime",
@@ -286,6 +287,7 @@ members = [
   "tests/support/mail-communications-slice",
   "tests/support/telegram-calls",
   "tests/support/contacts",
+  "tests/support/mail-contacts-sync",
 ]
 resolver = "2"
 

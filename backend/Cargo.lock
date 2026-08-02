@@ -4249,6 +4249,26 @@ name = "hermes-mail-contacts-sync-core"
 version = "0.1.0"
 
 [[package]]
+name = "hermes-mail-contacts-sync-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-contacts-sync-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-mail-contacts-sync-testkit"
+version = "0.1.0"
+dependencies = [
+ "hermes-mail-contacts-sync-core",
+ "hermes-mail-contacts-sync-persistence",
+ "sha2 0.11.0",
+ "tokio",
+]
+
+[[package]]
 name = "hermes-mail-core"
 version = "0.1.0"
 dependencies = [
