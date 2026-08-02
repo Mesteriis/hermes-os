@@ -300,6 +300,8 @@ test('producer consumers persist terminal result before Ack and retry infrastruc
     ]);
 
   for (const source of [communicationsConsumer, mailConsumer]) {
+    assert.match(source, /try_receive_runtime_pull_delivery/);
+    assert.match(source, /return Ok\(None\)/);
     const accept = source.indexOf('.accept_replay_command(');
     const replay = source.indexOf('replay_retained_', accept);
     const complete = source.indexOf('.complete_replay_command(', replay);
@@ -382,6 +384,7 @@ test('workflow command and result delivery preserves exact bytes and commit-befo
   assert.match(admission, /mail_replay_command_publish_request_v1/);
   assert.match(admission, /communications_replay_result_consume_request_v1/);
   assert.match(admission, /mail_replay_result_consume_request_v1/);
+  assert.match(consumer, /try_receive_runtime_pull_delivery/);
   assert.doesNotMatch(persistence, /communications_domain_outbox|mail_attachment_security_outbox/);
 });
 

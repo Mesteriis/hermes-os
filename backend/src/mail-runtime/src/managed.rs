@@ -2370,7 +2370,7 @@ impl MailAdmittedRuntime {
         )
         .await
         {
-            Ok(result) => result.map(|_| true),
+            Ok(result) => result.map(|outcome| outcome.is_some()),
             Err(_) => Ok(false),
         }
     }

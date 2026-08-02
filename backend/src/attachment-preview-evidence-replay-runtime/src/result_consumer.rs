@@ -4,7 +4,7 @@ use hermes_attachment_preview_evidence_replay_persistence::{
     ReplayResultInboxRecordV1,
 };
 use hermes_events_jetstream::{
-    RuntimeJetStreamConnection, RuntimeSubscribePermitV1, receive_runtime_pull_delivery,
+    RuntimeJetStreamConnection, RuntimeSubscribePermitV1, try_receive_runtime_pull_delivery,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,9 +57,12 @@ async fn consume_next_result(
     if accepted_at_unix_seconds <= 0 {
         return Err(ReplayResultConsumerErrorV1::InvalidTimestamp);
     }
-    let delivery = receive_runtime_pull_delivery(connection, permit)
+    let Some(delivery) = try_receive_runtime_pull_delivery(connection, permit)
         .await
-        .map_err(|_| ReplayResultConsumerErrorV1::EventUnavailable)?;
+        .map_err(|_| ReplayResultConsumerErrorV1::EventUnavailable)?
+    else {
+        return Ok(false);
+    };
     let record = ReplayResultInboxRecordV1::accept(delivery.exact_bytes().to_vec())
         .map_err(|_| ReplayResultConsumerErrorV1::InvalidEnvelope)?;
     persistence

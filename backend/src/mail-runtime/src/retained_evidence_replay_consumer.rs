@@ -2,7 +2,7 @@
 
 use hermes_events_jetstream::{
     RuntimeJetStreamConnection, RuntimePublishPermitV1, RuntimeSubscribePermitV1,
-    receive_runtime_pull_delivery,
+    try_receive_runtime_pull_delivery,
 };
 use hermes_events_protocol::{
     delivery::OutboxRecordV1, v1::durable_envelope_v1::Semantics,
@@ -79,10 +79,13 @@ pub async fn consume_next_mail_replay_command_v1(
     command_permit: &RuntimeSubscribePermitV1,
     original_contract_publish_permit: &RuntimePublishPermitV1,
     context: &MailReplayConsumerContextV1,
-) -> Result<MailReplayCommandConsumeOutcomeV1, MailReplayCommandConsumeErrorV1> {
-    let delivery = receive_runtime_pull_delivery(connection, command_permit)
+) -> Result<Option<MailReplayCommandConsumeOutcomeV1>, MailReplayCommandConsumeErrorV1> {
+    let Some(delivery) = try_receive_runtime_pull_delivery(connection, command_permit)
         .await
-        .map_err(|_| MailReplayCommandConsumeErrorV1::EventUnavailable)?;
+        .map_err(|_| MailReplayCommandConsumeErrorV1::EventUnavailable)?
+    else {
+        return Ok(None);
+    };
     let record = OutboxRecordV1::accept(delivery.exact_bytes().to_vec()).map_err(|_| {
         MailReplayCommandConsumeErrorV1::Decode(MailReplayCommandDecodeErrorV1::InvalidEnvelope)
     })?;
@@ -98,7 +101,7 @@ pub async fn consume_next_mail_replay_command_v1(
         .acknowledge()
         .await
         .map_err(|_| MailReplayCommandConsumeErrorV1::EventUnavailable)?;
-    Ok(outcome)
+    Ok(Some(outcome))
 }
 
 pub async fn accept_mail_replay_command_v1(
