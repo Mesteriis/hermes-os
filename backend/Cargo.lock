@@ -2365,6 +2365,7 @@ dependencies = [
  "hermes-attachment-text-extraction-pdf",
  "hermes-attachment-text-extraction-persistence",
  "hermes-attachment-text-extraction-plain",
+ "hermes-attachment-translation-ingress",
  "hermes-blob-client",
  "hermes-communications-attachment-contract",
  "hermes-events-jetstream",

@@ -148,6 +148,9 @@ fn serve_inherited(paths: InheritedPaths) -> Result<(), String> {
         if let Err(error) = executor.block_on(runtime.relay_custody_outbox(now_millis)) {
             diagnostic("custody-outbox", error);
         }
+        if let Err(error) = executor.block_on(runtime.relay_translation_source_outbox(now_millis)) {
+            diagnostic("translation-source-outbox", error);
+        }
         if let Err(error) = executor.block_on(runtime.process_next_job(now_millis)) {
             diagnostic("extract", error);
         }

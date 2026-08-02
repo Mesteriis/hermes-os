@@ -11,6 +11,7 @@ mod ocr_resources;
 mod outbox;
 mod parser;
 pub mod runtime;
+mod translation_source;
 
 pub use admission::{
     ATTACHMENT_TEXT_EXTRACTION_BLOB_CAPABILITY_ID_V1,

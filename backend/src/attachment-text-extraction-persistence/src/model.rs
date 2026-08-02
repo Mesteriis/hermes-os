@@ -133,6 +133,46 @@ pub struct TextExtractionRealtimeTransitionV1 {
     pub occurred_at_unix_millis: i64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TranslationSourceSnapshotV1 {
+    pub source_revision: u64,
+    pub artifact: PersistedAttachmentTextArtifactV1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TranslationSourceSnapshotOutcomeV1 {
+    Ready(TranslationSourceSnapshotV1),
+    NotReady,
+    StaleRevision,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PersistTranslationSourceResultV1 {
+    pub request_message_id: [u8; 16],
+    pub request_envelope_sha256: [u8; 32],
+    pub request_id: [u8; 16],
+    pub translation_run_id: [u8; 16],
+    pub source_extraction_run_id: [u8; 16],
+    pub expected_source_revision: u64,
+    pub result_message_id: [u8; 16],
+    pub result_envelope_sha256: [u8; 32],
+    pub exact_result_envelope_bytes: Vec<u8>,
+    pub processed_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PersistTranslationSourceResultOutcomeV1 {
+    Recorded,
+    Replayed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnpublishedTranslationSourceResultV1 {
+    pub message_id: [u8; 16],
+    pub envelope_sha256: [u8; 32],
+    pub exact_envelope_bytes: Vec<u8>,
+}
+
 #[must_use]
 pub fn attachment_text_extraction_run_id_v1(
     logical_owner_id: &str,

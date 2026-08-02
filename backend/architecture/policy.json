@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_translation_runtime_assembly_v1",
+    "currentSlice": "attachment_translation_source_producer_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -2990,6 +2990,10 @@
       "hermes-attachment-text-extraction-runtime": [
         {
           "name": "hermes-attachment-security-contract",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-attachment-translation-ingress",
           "kind": "normal"
         },
         {
@@ -13102,6 +13106,7 @@
         "attachment_security.text-extraction-delegation-result.publish.v1",
         "attachment_security.text-extraction-delegation.v1",
         "attachment_security.verdict.publish.v1",
+        "attachment_text_extraction.translation-source.v1",
         "attachment_translation.blob.v1",
         "attachment_translation.inference.v1",
         "attachment_translation.source_prepared.v1",

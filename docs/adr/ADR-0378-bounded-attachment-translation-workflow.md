@@ -5,7 +5,7 @@
 Дата: 2026-08-02
 
 Состояние реализации: частично реализовано. Phase gate
-`attachment_translation_runtime_assembly_v1` закрывает все шесть workflow production units:
+`attachment_translation_source_producer_v1` закрывает все шесть workflow production units:
 generated private-content-free client API, exact durable source ingress, pure
 lifecycle core, owner-local PostgreSQL persistence, managed runtime и release
 assembly. Persistence атомарно
@@ -16,8 +16,10 @@ use-case receipt, owner-local additive persistence и worker, переиспол
 только нижний `ai.provider.translate.v1`. Runtime реализует event-only source
 consumer, request-routed AI, result Blob materialization, Start/Get/Read,
 actor-bound one-use ticket и shared SSE; assembly выдаёт отдельные unsigned
-runtime и Storage artifacts. Text Extraction source producer и managed/live
-evidence ещё отсутствуют, поэтому
+runtime и Storage artifacts. Text Extraction теперь потребляет exact target-owned
+command, проверяет current ready run/revision, создаёт отдельную target-bound
+Blob-копию, атомарно сохраняет owner-local inbox/outbox и ACK'ает только после
+commit. Managed signed-release/live evidence ещё отсутствуют, поэтому
 `attachment_translation_v1` остаётся `planned`.
 
 Уточняет:
@@ -254,6 +256,15 @@ runtime/grant fences. `client_blob` использует отдельный gene
 одноразовый ticket, привязанный к logical owner, authenticated device, artifact
 revision, runtime generation и grant epoch. Этот gate ещё не утверждает source
 producer или live contour и не меняет reconstruction inventory.
+
+Phase gate `attachment_translation_source_producer_v1` добавляет только public
+ingress dependency в Text Extraction runtime, exact consume/publish capability,
+owner-local additive inbox/outbox migration и target-bound Blob source copy.
+Он не добавляет прямой workflow RPC, cross-owner SQL, provider identity или
+plaintext в PostgreSQL. Duplicate delivery переиспользует committed result,
+а durable Ack выполняется только после inbox/outbox commit. Этот gate ещё не
+утверждает signed managed release или live contour и не меняет reconstruction
+inventory.
 
 `attachment_translation_v1` становится `implemented` только атомарно после:
 

@@ -7,6 +7,7 @@ mod model;
 mod observations;
 mod repository;
 mod schema;
+mod translation_source;
 
 use hermes_storage_protocol::StorageBindingV1;
 use sqlx::{
@@ -19,13 +20,17 @@ pub use model::{
     CreateAttachmentTextExtractionRunOutcomeV1, CreateAttachmentTextExtractionRunV1,
     PendingAttachmentTextCustodyDelegationV1, PersistAttachmentTextCustodyDelegationV1,
     PersistAttachmentTextCustodyResultOutcomeV1, PersistAttachmentTextFactOutcomeV1,
+    PersistTranslationSourceResultOutcomeV1, PersistTranslationSourceResultV1,
     PersistedAttachmentTextArtifactV1, PersistedAttachmentTextExtractionRunV1,
     TextExtractionLeaseV1, TextExtractionRealtimeTransitionV1, TextExtractionTargetBlobReceiptV1,
-    UnpublishedAttachmentTextCustodyDelegationV1, attachment_text_extraction_job_id_v1,
-    attachment_text_extraction_request_fingerprint_v1, attachment_text_extraction_run_id_v1,
+    TranslationSourceSnapshotOutcomeV1, TranslationSourceSnapshotV1,
+    UnpublishedAttachmentTextCustodyDelegationV1, UnpublishedTranslationSourceResultV1,
+    attachment_text_extraction_job_id_v1, attachment_text_extraction_request_fingerprint_v1,
+    attachment_text_extraction_run_id_v1,
 };
 pub use schema::{
     ATTACHMENT_TEXT_EXTRACTION_SCHEMA_V1, ATTACHMENT_TEXT_EXTRACTION_STORAGE_BUNDLE_REVISION_V1,
+    ATTACHMENT_TEXT_EXTRACTION_TRANSLATION_SOURCE_SCHEMA_V1,
     attachment_text_extraction_storage_bundle_v1,
 };
 
@@ -81,7 +86,7 @@ impl AttachmentTextExtractionPersistenceV1 {
         &self,
     ) -> Result<(), AttachmentTextExtractionPersistenceErrorV1> {
         sqlx::query(
-            "SELECT 1 FROM hermes_data.attachment_text_extraction_runs, hermes_data.attachment_text_extraction_event_inbox, hermes_data.attachment_text_extraction_scan_candidates, hermes_data.attachment_text_extraction_safety_facts, hermes_data.attachment_text_extraction_custody_outbox, hermes_data.attachment_text_extraction_custody_result_inbox, hermes_data.attachment_text_extraction_jobs, hermes_data.attachment_text_extraction_artifacts, hermes_data.attachment_text_extraction_realtime LIMIT 0",
+            "SELECT 1 FROM hermes_data.attachment_text_extraction_runs, hermes_data.attachment_text_extraction_event_inbox, hermes_data.attachment_text_extraction_scan_candidates, hermes_data.attachment_text_extraction_safety_facts, hermes_data.attachment_text_extraction_custody_outbox, hermes_data.attachment_text_extraction_custody_result_inbox, hermes_data.attachment_text_extraction_jobs, hermes_data.attachment_text_extraction_artifacts, hermes_data.attachment_text_extraction_realtime, hermes_data.attachment_text_extraction_translation_source_inbox, hermes_data.attachment_text_extraction_translation_source_outbox LIMIT 0",
         )
         .execute(&self.pool)
         .await

@@ -90,7 +90,7 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(adr, /distinct capability/);
   assert.match(adr, /Source text и translated[\s\S]*не попадают в SQL workflow owner/);
   assert.match(adr, /inventory state остаётся `planned`/);
-  assert.equal(policy.implementation.currentSlice, 'attachment_translation_runtime_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_source_producer_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_translation'));
   for (const packageName of [
     'hermes-attachment-translation-api',
@@ -167,4 +167,64 @@ test('attachment translation agreement keeps workflow source engine and provider
     adr,
     /Communications owns attachment translation|legacy REST facade открывает gate|caller выбирает provider/,
   );
+});
+
+test('text extraction produces translation source only through durable target-owned events', async () => {
+  const [runtimeManifest, admission, runtime, source, persistence, migration, policySource] = await Promise.all([
+    readFile(
+      new URL('src/attachment-text-extraction-runtime/Cargo.toml', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-runtime/src/admission.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-runtime/src/runtime.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-runtime/src/translation_source.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL('src/attachment-text-extraction-persistence/src/translation_source.rs', BACKEND_ROOT),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'src/attachment-text-extraction-persistence/migrations/0002_translation_source.sql',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(new URL('architecture/policy.json', BACKEND_ROOT), 'utf8'),
+  ]);
+  const policy = JSON.parse(policySource);
+
+  assert.match(runtimeManifest, /hermes-attachment-translation-ingress/);
+  assert.doesNotMatch(
+    runtimeManifest,
+    /hermes-attachment-translation-(?:core|persistence|runtime|assembly)/,
+  );
+  assert.match(admission, /ATTACHMENT_TEXT_EXTRACTION_TRANSLATION_SOURCE_CAPABILITY_ID_V1/);
+  assert.match(admission, /attachment_translation_source_requested_consume_request_v1/);
+  assert.match(admission, /attachment_translation_source_prepared_publish_request_v1/);
+  assert.match(admission, /attachment_translation_source_rejected_publish_request_v1/);
+  assert.match(runtime, /ConsumerV1::TranslationSource/);
+  assert.match(runtime, /delivery\s*\.acknowledge\(\)/);
+  assert.match(source, /translation_source_request_already_processed/);
+  assert.match(source, /read_artifact_v1/);
+  assert.match(source, /write_translation_source_v1/);
+  assert.match(source, /persist_translation_source_result/);
+  assert.doesNotMatch(source, /query_rpc|client_rpc|postgres|sqlx/);
+  assert.match(persistence, /request_envelope_sha256/);
+  assert.match(persistence, /exact_result_envelope_bytes/);
+  assert.match(migration, /translation_source_inbox/);
+  assert.match(migration, /translation_source_outbox/);
+  assert.doesNotMatch(migration, /source_text|translated_text|provider_id|model_id|prompt/);
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_source_producer_v1');
+  assert(policy.implementation.ownerInventory.businessCapabilities.includes(
+    'attachment_text_extraction.translation-source.v1',
+  ));
 });

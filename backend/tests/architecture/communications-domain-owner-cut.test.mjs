@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_translation_runtime_assembly_v1',
+    'attachment_translation_source_producer_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'knowledge', 'review', 'tasks'],
@@ -108,6 +108,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'attachment_security.text-extraction-delegation-result.publish.v1',
       'attachment_security.text-extraction-delegation.v1',
       'attachment_security.verdict.publish.v1',
+      'attachment_text_extraction.translation-source.v1',
       'attachment_translation.blob.v1',
       'attachment_translation.inference.v1',
       'attachment_translation.source_prepared.v1',

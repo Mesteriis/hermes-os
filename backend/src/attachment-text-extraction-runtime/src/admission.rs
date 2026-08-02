@@ -18,6 +18,15 @@ use hermes_attachment_text_extraction_ingress::{
     attachment_text_custody_delegation_requested_contract_reference_v1,
     attachment_text_custody_delegation_requested_publish_request_v1,
 };
+use hermes_attachment_translation_ingress::{
+    ATTACHMENT_TEXT_EXTRACTION_TRANSLATION_SOURCE_CAPABILITY_ID_V1,
+    attachment_translation_source_prepared_contract_reference_v1,
+    attachment_translation_source_prepared_publish_request_v1,
+    attachment_translation_source_rejected_contract_reference_v1,
+    attachment_translation_source_rejected_publish_request_v1,
+    attachment_translation_source_requested_consume_request_v1,
+    attachment_translation_source_requested_contract_reference_v1,
+};
 use hermes_communications_attachment_contract::admission::{
     COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
     communication_attachment_safety_state_changed_contract_reference_v1,
@@ -106,6 +115,7 @@ pub fn attachment_text_extraction_module_descriptor_v1(build_id: &str) -> Module
                 COMMUNICATION_ATTACHMENT_MAX_IN_FLIGHT,
             ),
             storage_capability(),
+            translation_source_capability(),
         ],
         settings_schema_ref: Some(SettingsSchemaRefV1 {
             major: 1,
@@ -206,7 +216,7 @@ fn blob_capability() -> CapabilityDescriptorV1 {
         requests: vec![CapabilityRequestV1 {
             request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
                 max_bytes: hermes_attachment_text_extraction_core::ATTACHMENT_TEXT_EXTRACTION_MAX_SOURCE_BYTES_V1
-                    + ATTACHMENT_TEXT_EXTRACTION_MAX_DERIVED_BYTES_V1 as u64,
+                    + (ATTACHMENT_TEXT_EXTRACTION_MAX_DERIVED_BYTES_V1 as u64 * 2),
                 custody_scope_id: "attachment_text_extraction.content.v1".to_owned(),
                 allowed_operations: vec![
                     BlobQuotaOperationV1::ReadRange as i32,
@@ -321,6 +331,45 @@ fn storage_capability() -> CapabilityDescriptorV1 {
     }
 }
 
+fn translation_source_capability() -> CapabilityDescriptorV1 {
+    let contracts = [
+        (
+            ProvidedSurfaceKindV1::DurableConsumer,
+            attachment_translation_source_requested_contract_reference_v1(),
+            attachment_translation_source_requested_consume_request_v1(),
+        ),
+        (
+            ProvidedSurfaceKindV1::DurablePublisher,
+            attachment_translation_source_prepared_contract_reference_v1(),
+            attachment_translation_source_prepared_publish_request_v1(),
+        ),
+        (
+            ProvidedSurfaceKindV1::DurablePublisher,
+            attachment_translation_source_rejected_contract_reference_v1(),
+            attachment_translation_source_rejected_publish_request_v1(),
+        ),
+    ];
+    CapabilityDescriptorV1 {
+        capability_id: ATTACHMENT_TEXT_EXTRACTION_TRANSLATION_SOURCE_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: contracts
+            .iter()
+            .map(|(kind, contract, _)| ProvidedSurfaceV1 {
+                kind: *kind as i32,
+                contract: Some(contract.clone()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            })
+            .collect(),
+        requests: contracts
+            .into_iter()
+            .map(|(_, _, request)| request)
+            .collect(),
+        ..Default::default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use hermes_runtime_protocol::validation::descriptor::{
@@ -330,11 +379,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn descriptor_is_exact_eight_capability_workflow() {
+    fn descriptor_is_exact_nine_capability_workflow() {
         let descriptor = attachment_text_extraction_module_descriptor_v1("build-1");
         assert_eq!(validate_descriptor_v1(&descriptor), Ok(()));
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
-        assert_eq!(descriptor.capabilities.len(), 8);
+        assert_eq!(descriptor.capabilities.len(), 9);
         assert_eq!(
             validate_settings_schema_v1(&attachment_text_extraction_settings_schema_v1()),
             Ok(())

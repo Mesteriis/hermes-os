@@ -21,6 +21,7 @@ use hermes_attachment_text_extraction_persistence::{
     AttachmentTextExtractionPersistenceErrorV1, AttachmentTextExtractionPersistenceV1,
     PersistAttachmentTextCustodyDelegationV1, PersistedAttachmentTextArtifactV1,
 };
+use hermes_attachment_translation_ingress::attachment_translation_source_requested_contract_reference_v1;
 use hermes_communications_attachment_contract::admission::communication_attachment_safety_state_changed_contract_reference_v1;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
@@ -59,7 +60,8 @@ use crate::{
     event_decode::{
         DecodedCustodyResultV1, decode_candidate_v1, decode_custody_result_v1, decode_safety_v1,
     },
-    outbox::relay_custody_outbox_once_v1,
+    outbox::{relay_custody_outbox_once_v1, relay_translation_source_outbox_once_v1},
+    translation_source::process_translation_source_delivery_v1,
 };
 
 const WORKER_ID: &str = "attachment-text-extraction-runtime";
@@ -295,6 +297,30 @@ impl AttachmentTextExtractionManagedRuntimeV1 {
                         .map_err(persistence_error)?,
                 };
             }
+            ConsumerV1::TranslationSource => {
+                process_translation_source_delivery_v1(
+                    &self.persistence,
+                    &mut self.control_channel,
+                    delivery.exact_bytes(),
+                    &self.logical_human_owner_id,
+                    &self.runtime_instance_id,
+                    self.runtime_generation,
+                    consumed_at_unix_millis,
+                )
+                .await
+                .map_err(|error| match error {
+                    crate::translation_source::TranslationSourceDeliveryErrorV1::Unavailable => {
+                        AttachmentTextExtractionRuntimeErrorV1::Unavailable
+                    }
+                    crate::translation_source::TranslationSourceDeliveryErrorV1::InvalidEnvelope
+                    | crate::translation_source::TranslationSourceDeliveryErrorV1::InvalidPayload => {
+                        AttachmentTextExtractionRuntimeErrorV1::InvalidDelivery
+                    }
+                    crate::translation_source::TranslationSourceDeliveryErrorV1::Persistence => {
+                        AttachmentTextExtractionRuntimeErrorV1::InvalidJob
+                    }
+                })?;
+            }
         }
         delivery
             .acknowledge()
@@ -367,6 +393,21 @@ impl AttachmentTextExtractionManagedRuntimeV1 {
         now_unix_millis: i64,
     ) -> Result<usize, AttachmentTextExtractionRuntimeErrorV1> {
         relay_custody_outbox_once_v1(
+            &self.persistence,
+            &self.logical_human_owner_id,
+            &self.connection,
+            &self.publish_permit,
+            now_unix_millis,
+        )
+        .await
+        .map_err(|_| AttachmentTextExtractionRuntimeErrorV1::Unavailable)
+    }
+
+    pub async fn relay_translation_source_outbox(
+        &self,
+        now_unix_millis: i64,
+    ) -> Result<usize, AttachmentTextExtractionRuntimeErrorV1> {
+        relay_translation_source_outbox_once_v1(
             &self.persistence,
             &self.logical_human_owner_id,
             &self.connection,
@@ -582,6 +623,7 @@ struct SubscribePermitsV1 {
     safety: RuntimeSubscribePermitV1,
     delegated: RuntimeSubscribePermitV1,
     rejected: RuntimeSubscribePermitV1,
+    translation_source: RuntimeSubscribePermitV1,
 }
 
 impl SubscribePermitsV1 {
@@ -593,8 +635,9 @@ impl SubscribePermitsV1 {
             communication_attachment_safety_state_changed_contract_reference_v1(),
             attachment_text_custody_delegated_contract_reference_v1(),
             attachment_text_custody_delegation_rejected_contract_reference_v1(),
+            attachment_translation_source_requested_contract_reference_v1(),
         ];
-        let mut selected: [Option<RuntimeSubscribePermitV1>; 4] = [None, None, None, None];
+        let mut selected: [Option<RuntimeSubscribePermitV1>; 5] = [None, None, None, None, None];
         for permit in permits {
             let Some(contract) = permit.contract() else {
                 return Err(AttachmentTextExtractionRuntimeErrorV1::Admission);
@@ -609,12 +652,14 @@ impl SubscribePermitsV1 {
                 return Err(AttachmentTextExtractionRuntimeErrorV1::Admission);
             }
         }
-        let [candidate, safety, delegated, rejected] = selected;
+        let [candidate, safety, delegated, rejected, translation_source] = selected;
         Ok(Self {
             candidate: candidate.ok_or(AttachmentTextExtractionRuntimeErrorV1::Admission)?,
             safety: safety.ok_or(AttachmentTextExtractionRuntimeErrorV1::Admission)?,
             delegated: delegated.ok_or(AttachmentTextExtractionRuntimeErrorV1::Admission)?,
             rejected: rejected.ok_or(AttachmentTextExtractionRuntimeErrorV1::Admission)?,
+            translation_source: translation_source
+                .ok_or(AttachmentTextExtractionRuntimeErrorV1::Admission)?,
         })
     }
 
@@ -624,6 +669,7 @@ impl SubscribePermitsV1 {
             ConsumerV1::Safety => &self.safety,
             ConsumerV1::Delegated => &self.delegated,
             ConsumerV1::Rejected => &self.rejected,
+            ConsumerV1::TranslationSource => &self.translation_source,
         }
     }
 }
@@ -634,6 +680,7 @@ enum ConsumerV1 {
     Safety,
     Delegated,
     Rejected,
+    TranslationSource,
 }
 
 impl ConsumerV1 {
@@ -642,7 +689,8 @@ impl ConsumerV1 {
             Self::Candidate => Self::Safety,
             Self::Safety => Self::Delegated,
             Self::Delegated => Self::Rejected,
-            Self::Rejected => Self::Candidate,
+            Self::Rejected => Self::TranslationSource,
+            Self::TranslationSource => Self::Candidate,
         }
     }
 }

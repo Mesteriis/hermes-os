@@ -18,6 +18,7 @@ surface = "runtime"
 
 [dependencies]
 hermes-attachment-security-contract = { path = "../attachment-security-contract" }
+hermes-attachment-translation-ingress = { path = "../attachment-translation-ingress" }
 hermes-attachment-text-extraction-api = { path = "../attachment-text-extraction-api" }
 hermes-attachment-text-extraction-core = { path = "../attachment-text-extraction-core" }
 hermes-attachment-text-extraction-docx = { path = "../attachment-text-extraction-docx" }
