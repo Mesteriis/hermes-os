@@ -61,7 +61,10 @@ impl MailRetainedEvidenceReplayPersistenceV1 {
 
     pub async fn verify_storage_ready(&self) -> Result<(), RetainedMailReplayErrorV1> {
         sqlx::query(
-            "SELECT attachment_anchor_id FROM hermes_data.mail_retained_evidence_replay_index WHERE FALSE",
+            "SELECT replay.attachment_anchor_id, scan.message_id \
+             FROM hermes_data.mail_retained_evidence_replay_index replay, \
+                  hermes_data.mail_retained_evidence_replay_scan scan \
+             WHERE FALSE",
         )
         .execute(&self.pool)
         .await
@@ -80,9 +83,9 @@ impl MailRetainedEvidenceReplayPersistenceV1 {
         let rows = sqlx::query(
             "SELECT outbox.exact_envelope_bytes \
              FROM hermes_data.mail_attachment_security_outbox outbox \
-             LEFT JOIN hermes_data.mail_retained_evidence_replay_index replay \
-               ON replay.message_id = outbox.message_id \
-             WHERE replay.message_id IS NULL \
+             LEFT JOIN hermes_data.mail_retained_evidence_replay_scan scan \
+               ON scan.message_id = outbox.message_id \
+             WHERE scan.message_id IS NULL \
              ORDER BY outbox.created_at_unix_seconds ASC, outbox.message_id ASC \
              LIMIT $1",
         )
@@ -96,11 +99,15 @@ impl MailRetainedEvidenceReplayPersistenceV1 {
             let record = OutboxRecordV1::accept(exact_bytes).map_err(row_error)?;
             let envelope = decode_envelope_v1(record.exact_bytes()).map_err(row_error)?;
             if !is_scan_candidate_contract(envelope.contract.as_ref()) {
+                self.mark_scanned(*record.message_id(), indexed_at_unix_seconds)
+                    .await?;
                 continue;
             }
             let attachment_anchor_id = id16(&envelope.partition_key)
                 .map_err(|_| RetainedMailReplayErrorV1::WrongContract)?;
             self.index_verified(attachment_anchor_id, &record, indexed_at_unix_seconds)
+                .await?;
+            self.mark_scanned(*record.message_id(), indexed_at_unix_seconds)
                 .await?;
             indexed += 1;
         }
@@ -262,6 +269,24 @@ impl MailRetainedEvidenceReplayPersistenceV1 {
             && existing.record.envelope_sha256() == record.envelope_sha256())
         .then_some(())
         .ok_or(RetainedMailReplayErrorV1::Conflict)
+    }
+
+    async fn mark_scanned(
+        &self,
+        message_id: [u8; 16],
+        scanned_at_unix_seconds: i64,
+    ) -> Result<(), RetainedMailReplayErrorV1> {
+        sqlx::query(
+            "INSERT INTO hermes_data.mail_retained_evidence_replay_scan \
+                (message_id, scanned_at_unix_seconds) VALUES ($1, $2) \
+             ON CONFLICT (message_id) DO NOTHING",
+        )
+        .bind(message_id.as_slice())
+        .bind(scanned_at_unix_seconds)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(storage_error)
     }
 }
 

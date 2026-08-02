@@ -6,6 +6,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hermes_communications_retained_evidence_replay_persistence::RetainedCommunicationsReplayErrorV1;
 use hermes_communications_runtime::{
     admission::{communications_module_descriptor_v1, communications_settings_schema_bytes_v1},
     consumer::CommunicationsDeliveryErrorV1,
@@ -242,6 +243,23 @@ async fn consume_or_tick(
 }
 
 async fn run_maintenance_tick(runtime: &mut CommunicationsEventRuntimeV1) -> Result<(), String> {
+    let indexed_at_unix_seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
+        .ok_or_else(|| "Communications runtime replay index clock is unavailable".to_owned())?;
+    match runtime
+        .index_retained_attachment_safety_events(indexed_at_unix_seconds)
+        .await
+    {
+        Ok(_) | Err(RetainedCommunicationsReplayErrorV1::StorageUnavailable) => {}
+        Err(error) => {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_communications_runtime_replay_index_error={error:?}");
+            }
+            return Err("Communications runtime replay index maintenance failed".to_owned());
+        }
+    }
     let custody_processed = runtime
         .process_next_body_custody_transfer()
         .await

@@ -179,7 +179,9 @@ use hermes_mail_persistence::{
     MailQueuedMessagePermanentDeleteCommandV1, MailSyncRunStartOutcomeV1, initial_imap_message_id,
 };
 use hermes_mail_retained_evidence_replay_contract::mail_replay_command_contract_reference_v1;
-use hermes_mail_retained_evidence_replay_persistence::MailRetainedEvidenceReplayPersistenceV1;
+use hermes_mail_retained_evidence_replay_persistence::{
+    MailRetainedEvidenceReplayPersistenceV1, RetainedMailReplayErrorV1,
+};
 use hermes_mail_smtp::SmtpAdapterErrorV1;
 
 use crate::gmail_sync_worker::{
@@ -235,6 +237,7 @@ pub struct MailAdmittedRuntime {
     pub(crate) runtime_instance_id: String,
     pub(crate) runtime_generation: u64,
     logical_owner_id: String,
+    logical_human_owner_id: String,
     module_registration_id: String,
     grant_epoch: u64,
 }
@@ -451,6 +454,7 @@ pub async fn open_admitted_runtime_catalog(
         || settings_schema_bytes.is_empty()
         || admissions.len() > hermes_mail_api::account::MAX_MAIL_ACCOUNT_CATALOG_ENTRIES
         || admission.runtime_instance_id.trim().is_empty()
+        || admission.logical_human_owner_id.trim().is_empty()
         || event_hub_endpoint.trim().is_empty()
         || event_credential_revision == 0
     {
@@ -462,6 +466,7 @@ pub async fn open_admitted_runtime_catalog(
     if admissions.iter().any(|candidate| {
         !valid_account_configuration(&candidate.account)
             || candidate.logical_owner_id != admission.logical_owner_id
+            || candidate.logical_human_owner_id != admission.logical_human_owner_id
             || candidate.module_registration_id != admission.module_registration_id
             || candidate.runtime_instance_id != admission.runtime_instance_id
             || candidate.runtime_generation != admission.runtime_generation
@@ -700,6 +705,7 @@ pub async fn open_admitted_runtime_catalog(
         runtime_instance_id: admission.runtime_instance_id.clone(),
         runtime_generation: admission.runtime_generation,
         logical_owner_id: admission.logical_owner_id.clone(),
+        logical_human_owner_id: admission.logical_human_owner_id.clone(),
         module_registration_id: admission.module_registration_id.clone(),
         grant_epoch: admission.grant_epoch,
     })
@@ -2357,7 +2363,7 @@ impl MailAdmittedRuntime {
                 &self.replay_command_subscribe_permit,
                 &self.event_publish_permit,
                 &MailReplayConsumerContextV1 {
-                    logical_owner_id: self.logical_owner_id.clone(),
+                    logical_owner_id: self.logical_human_owner_id.clone(),
                     producer_registration_id: self.module_registration_id.clone(),
                     runtime_instance_id: self.runtime_instance_id.clone(),
                     runtime_generation: self.runtime_generation,
@@ -2386,6 +2392,15 @@ impl MailAdmittedRuntime {
             published_at_unix_seconds,
         )
         .await
+    }
+
+    pub async fn index_retained_attachment_scan_candidates(
+        &self,
+        indexed_at_unix_seconds: i64,
+    ) -> Result<usize, RetainedMailReplayErrorV1> {
+        self.replay_persistence
+            .index_existing_scan_candidates(256, indexed_at_unix_seconds)
+            .await
     }
 
     pub async fn relay_attachment_security_outbox(

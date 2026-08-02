@@ -164,6 +164,8 @@ use attachment_preview_persistence_fixture::*;
 mod attachment_preview_evidence_replay_managed_flow;
 #[path = "managed_storage_vault_docker/attachment_preview_evidence_replay_managed_setup.rs"]
 mod attachment_preview_evidence_replay_managed_setup;
+#[path = "managed_storage_vault_docker/attachment_preview_evidence_replay_persistence_fixture.rs"]
+mod attachment_preview_evidence_replay_persistence_fixture;
 #[path = "managed_storage_vault_docker/attachment_preview_managed_setup.rs"]
 mod attachment_preview_managed_setup;
 #[path = "managed_storage_vault_docker/attachment_security_blob_fixture.rs"]

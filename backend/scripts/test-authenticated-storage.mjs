@@ -512,6 +512,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_attachment_text_extraction_completes_through_gateway_and_replays_after_restart',
     'managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart',
     'managed_attachment_preview_evidence_replay_runtime_starts_with_exact_signed_contracts',
+    'managed_attachment_preview_evidence_replay_restores_expired_sources_to_browser_preview',
     'managed_review_attention_reaches_gateway_sse_and_replays_after_restart',
     'managed_task_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart',
     'managed_note_candidate_approve_reject_reaches_gateway_sse_and_replays_after_restart',

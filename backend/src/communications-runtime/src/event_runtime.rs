@@ -29,7 +29,9 @@ use hermes_communications_note_source_api::communication_note_source_prepare_con
 use hermes_communications_persistence::CommunicationsDurablePersistence;
 use hermes_communications_recipient_source_api::communication_recipient_source_prepare_contract_reference_v1;
 use hermes_communications_retained_evidence_replay_contract::communications_replay_command_contract_reference_v1;
-use hermes_communications_retained_evidence_replay_persistence::CommunicationsRetainedEvidenceReplayPersistenceV1;
+use hermes_communications_retained_evidence_replay_persistence::{
+    CommunicationsRetainedEvidenceReplayPersistenceV1, RetainedCommunicationsReplayErrorV1,
+};
 use hermes_communications_task_source_api::communication_task_source_prepare_contract_reference_v1;
 use hermes_events_jetstream::{
     JetStreamClient, RuntimeJetStreamConnection, RuntimeNatsIdentity, RuntimePublishPermitV1,
@@ -1269,6 +1271,15 @@ impl CommunicationsEventRuntimeV1 {
             published_at_unix_seconds,
         )
         .await
+    }
+
+    pub async fn index_retained_attachment_safety_events(
+        &self,
+        indexed_at_unix_seconds: i64,
+    ) -> Result<usize, RetainedCommunicationsReplayErrorV1> {
+        self.replay_persistence
+            .index_existing_attachment_safety_events(256, indexed_at_unix_seconds)
+            .await
     }
 }
 

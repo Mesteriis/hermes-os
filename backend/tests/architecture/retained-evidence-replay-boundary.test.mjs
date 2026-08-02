@@ -266,6 +266,58 @@ test('replay delivery migrations are additive exact successor revisions', async 
   assert.match(mailSchema, /append_mail_retained_evidence_replay_delivery_storage_v1/);
 });
 
+test('producer replay indexing uses bounded owner-local scan ledgers', async () => {
+  const [communicationsSchema, communicationsMigration, communicationsRepository,
+    communicationsRuntime, communicationsMain, communicationsBundle,
+    mailSchema, mailMigration, mailRepository, mailRuntime, mailMain, mailBundle] =
+    await Promise.all([
+      read('src/communications-retained-evidence-replay-persistence/src/schema.rs'),
+      read('src/communications-retained-evidence-replay-persistence/migrations/0003_retained_evidence_replay_scan.sql'),
+      read('src/communications-retained-evidence-replay-persistence/src/repository.rs'),
+      read('src/communications-runtime/src/event_runtime.rs'),
+      read('src/communications-runtime/src/main.rs'),
+      read('src/communications-runtime/src/storage_bundle.rs'),
+      read('src/mail-retained-evidence-replay-persistence/src/schema.rs'),
+      read('src/mail-retained-evidence-replay-persistence/migrations/0003_retained_evidence_replay_scan.sql'),
+      read('src/mail-retained-evidence-replay-persistence/src/repository.rs'),
+      read('src/mail-runtime/src/managed.rs'),
+      read('src/mail-runtime/src/main.rs'),
+      read('src/mail-runtime/src/storage_bundle.rs'),
+    ]);
+
+  assert.match(
+    communicationsSchema,
+    /COMMUNICATIONS_RETAINED_EVIDENCE_REPLAY_SCAN_STORAGE_BUNDLE_REVISION_V1: u32 = 19/,
+  );
+  assert.match(
+    mailSchema,
+    /MAIL_RETAINED_EVIDENCE_REPLAY_SCAN_STORAGE_BUNDLE_REVISION_V1: u32 = 25/,
+  );
+  assert.match(
+    communicationsBundle,
+    /append_communications_retained_evidence_replay_scan_storage_v1/,
+  );
+  assert.match(mailBundle, /append_mail_retained_evidence_replay_scan_storage_v1/);
+
+  for (const [migration, repository] of [
+    [communicationsMigration, communicationsRepository],
+    [mailMigration, mailRepository],
+  ]) {
+    assert.match(migration, /message_id BYTEA PRIMARY KEY REFERENCES hermes_data\./);
+    assert.doesNotMatch(migration, /subject|payload|exact_envelope_bytes/);
+    assert.doesNotMatch(migration, /\b(?:UPDATE|DELETE)\b/);
+    assert.match(repository, /LEFT JOIN hermes_data\..*_retained_evidence_replay_scan scan/);
+    assert.match(repository, /LIMIT \$1/);
+    assert.match(repository, /mark_scanned/);
+  }
+  assert.match(communicationsRuntime, /index_retained_attachment_safety_events/);
+  assert.match(communicationsMain, /index_retained_attachment_safety_events/);
+  assert.match(mailRuntime, /index_retained_attachment_scan_candidates/);
+  assert.match(mailMain, /index_retained_attachment_scan_candidates/);
+  assert.doesNotMatch(communicationsMigration, /mail_/);
+  assert.doesNotMatch(mailMigration, /communications_/);
+});
+
 test('producer contracts build exact workflow commands and causal terminal results', async () => {
   const [communications, mail] = await Promise.all([
     read('src/communications-retained-evidence-replay-contract/src/envelope.rs'),
@@ -437,4 +489,27 @@ test('replay workflow is an admitted managed runtime with exact event grants', a
   assert.match(managedFlow, /managed_attachment_preview_evidence_replay_runtime_starts_with_exact_signed_contracts/);
   assert.match(managedFlow, /runtime_generation, 2/);
   assert.match(managedScript, /HERMES_ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_RUNTIME_BIN/);
+});
+
+test('managed recovery gate expires broker history and proves SSE plus client blob delivery', async () => {
+  const [managedFlow, persistenceFixture, communicationsSetup, mailRuntime] =
+    await Promise.all([
+      read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_evidence_replay_managed_flow.rs'),
+      read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_evidence_replay_persistence_fixture.rs'),
+      read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communications_setup.rs'),
+      read('src/mail-runtime/src/managed.rs'),
+    ]);
+
+  assert.match(managedFlow, /wait_for_communications_jetstream_subject_expiry/);
+  assert.match(managedFlow, /wait_for_retained_preview_replay_terminal_v1/);
+  assert.match(managedFlow, /read_terminal_attachment_preview_sse_event_v1/);
+  assert.match(managedFlow, /read_attachment_preview_blob_v1/);
+  assert.match(persistenceFixture, /communications_retained_evidence_replay_index/);
+  assert.match(persistenceFixture, /mail_retained_evidence_replay_index/);
+  assert.match(persistenceFixture, /attachment_preview_evidence_replay_result_inbox/);
+  assert.match(communicationsSetup, /max_age = Duration::from_millis\(250\)/);
+  assert.match(communicationsSetup, /update_stream\(expiring\.clone\(\)\)/);
+  assert.match(communicationsSetup, /get_last_raw_message_by_subject/);
+  assert.match(mailRuntime, /logical_human_owner_id/);
+  assert.match(mailRuntime, /logical_owner_id: self\.logical_human_owner_id\.clone\(\)/);
 });

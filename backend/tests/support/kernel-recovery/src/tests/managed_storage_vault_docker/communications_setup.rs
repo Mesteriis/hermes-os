@@ -1,5 +1,7 @@
 use super::*;
 
+use std::time::Instant;
+
 use crate::runtime::lifecycle::control::{
     ManagedRuntimeBlobSessionHandler, ManagedRuntimeExpectation,
 };
@@ -237,6 +239,22 @@ pub(super) fn communications_storage_binding(
 }
 
 pub(super) fn configure_communications_jetstream(store: &SqliteControlStore) {
+    configure_communications_jetstream_with_limits(store, None);
+}
+
+pub(super) fn configure_communications_jetstream_for_retained_replay_test(
+    store: &SqliteControlStore,
+) {
+    configure_communications_jetstream_with_limits(
+        store,
+        Some((Duration::ZERO, Duration::from_millis(100))),
+    );
+}
+
+fn configure_communications_jetstream_with_limits(
+    store: &SqliteControlStore,
+    replay_limits: Option<(Duration, Duration)>,
+) {
     let configuration = store
         .platform_event_hub_topology()
         .expect("read Event Hub topology")
@@ -254,10 +272,13 @@ pub(super) fn configure_communications_jetstream(store: &SqliteControlStore) {
             );
             for stream in plan.streams() {
                 let (name, subject) = communications_stream_details(stream.kind());
+                let (max_age, duplicate_window) = replay_limits.unwrap_or_default();
                 context
                     .create_stream(async_nats::jetstream::stream::Config {
                         name: name.to_owned(),
                         subjects: vec![subject.to_owned()],
+                        max_age,
+                        duplicate_window,
                         ..Default::default()
                     })
                     .await
@@ -283,6 +304,59 @@ pub(super) fn configure_communications_jetstream(store: &SqliteControlStore) {
                     )
                     .await
                     .expect("create Communications Event consumer");
+            }
+        });
+}
+
+pub(super) fn wait_for_communications_jetstream_subject_expiry(
+    store: &SqliteControlStore,
+    subject: &str,
+) {
+    let endpoint = store
+        .platform_event_hub_topology()
+        .expect("read Event Hub topology")
+        .expect("Event Hub topology")
+        .nats_endpoint()
+        .to_owned();
+    let stream_name = communications_stream_for_subject(subject).to_owned();
+    let subject = subject.to_owned();
+    tokio::runtime::Runtime::new()
+        .expect("retained evidence expiry runtime")
+        .block_on(async move {
+            let context = async_nats::jetstream::new(
+                async_nats::connect(endpoint)
+                    .await
+                    .expect("connect retained evidence expiry observer"),
+            );
+            let stream = context
+                .get_stream(stream_name)
+                .await
+                .expect("read retained evidence stream");
+            let mut expiring = stream.cached_info().config.clone();
+            expiring.max_age = Duration::from_millis(250);
+            context
+                .update_stream(expiring.clone())
+                .await
+                .expect("apply retained evidence expiry window");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if stream
+                    .get_last_raw_message_by_subject(&subject)
+                    .await
+                    .is_err()
+                {
+                    expiring.max_age = Duration::ZERO;
+                    context
+                        .update_stream(expiring)
+                        .await
+                        .expect("restore retained evidence stream retention");
+                    return;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "retained evidence subject did not expire from JetStream"
+                );
+                tokio::time::sleep(Duration::from_millis(25)).await;
             }
         });
 }

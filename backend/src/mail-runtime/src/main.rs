@@ -6,6 +6,7 @@ use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use hermes_mail_retained_evidence_replay_persistence::RetainedMailReplayErrorV1;
 use hermes_mail_runtime::managed::{
     CompletedImapSyncProviderOperationV1, ImapSyncProviderPageDeliveryV1,
     MailDeliveryDispatchErrorV1, MailMessageFlagDispatchErrorV1,
@@ -146,6 +147,7 @@ where
             let settings = settings::decode(&snapshot)?;
             Ok(MailRuntimeAdmission {
                 logical_owner_id: configuration.logical_owner_id.clone(),
+                logical_human_owner_id: configuration.logical_human_owner_id.clone(),
                 configuration_instance_id,
                 module_registration_id: configuration.registration_id.clone(),
                 runtime_instance_id: configuration.runtime_instance_id.clone(),
@@ -180,6 +182,7 @@ where
     > = None;
     let mut imap_sync_provider_operation: Option<ActiveImapSyncProviderOperationV1> = None;
     let mut gmail_sync_provider_operation: Option<ActiveGmailSyncProviderOperationV1> = None;
+    let mut replay_indexed_at_unix_seconds = 0;
     loop {
         drain_client_deliveries(&runtime, &mut admitted)?;
         let now = SystemTime::now()
@@ -187,6 +190,16 @@ where
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
         let now = i64::try_from(now.as_secs())
             .map_err(|_| "Mail runtime clock is unavailable".to_owned())?;
+        if now > replay_indexed_at_unix_seconds {
+            match runtime.block_on(admitted.index_retained_attachment_scan_candidates(now)) {
+                Ok(_) => replay_indexed_at_unix_seconds = now,
+                Err(RetainedMailReplayErrorV1::StorageUnavailable) => {}
+                Err(error) => {
+                    developer_diagnostic(&format!("developer_mail_replay_index_error={error:?}"));
+                    return Err("Mail retained evidence replay index failed".to_owned());
+                }
+            }
+        }
         expire_pending_sync_operations(&runtime, &mut admitted, now)?;
         expire_active_gmail_sync_operation(
             &runtime,

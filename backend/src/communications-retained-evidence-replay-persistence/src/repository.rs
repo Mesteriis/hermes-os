@@ -1,5 +1,9 @@
-use hermes_communications_attachment_contract::COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256;
+use hermes_communications_attachment_contract::{
+    COMMUNICATIONS_ATTACHMENT_LIFECYCLE_SCHEMA_SHA256,
+    lifecycle_v1::{AttachmentSafetyStateChangedV1, AttachmentSafetyStateV1},
+};
 use hermes_events_protocol::{delivery::OutboxRecordV1, validation::envelope::decode_envelope_v1};
+use prost::Message;
 use sqlx::{PgPool, Row};
 
 const SAFETY_CONTRACT_OWNER: &str = "communications";
@@ -60,7 +64,10 @@ impl CommunicationsRetainedEvidenceReplayPersistenceV1 {
 
     pub async fn verify_storage_ready(&self) -> Result<(), RetainedCommunicationsReplayErrorV1> {
         sqlx::query(
-            "SELECT attachment_anchor_id FROM hermes_data.communications_retained_evidence_replay_index WHERE FALSE",
+            "SELECT replay.attachment_anchor_id, scan.message_id \
+             FROM hermes_data.communications_retained_evidence_replay_index replay, \
+                  hermes_data.communications_retained_evidence_replay_scan scan \
+             WHERE FALSE",
         )
         .execute(&self.pool)
         .await
@@ -79,9 +86,9 @@ impl CommunicationsRetainedEvidenceReplayPersistenceV1 {
         let rows = sqlx::query(
             "SELECT outbox.exact_envelope_bytes \
              FROM hermes_data.communications_domain_outbox outbox \
-             LEFT JOIN hermes_data.communications_retained_evidence_replay_index replay \
-               ON replay.message_id = outbox.message_id \
-             WHERE replay.message_id IS NULL \
+             LEFT JOIN hermes_data.communications_retained_evidence_replay_scan scan \
+               ON scan.message_id = outbox.message_id \
+             WHERE scan.message_id IS NULL \
              ORDER BY outbox.created_at_unix_seconds ASC, outbox.message_id ASC \
              LIMIT $1",
         )
@@ -94,14 +101,15 @@ impl CommunicationsRetainedEvidenceReplayPersistenceV1 {
             let exact_bytes: Vec<u8> = row.try_get("exact_envelope_bytes").map_err(row_error)?;
             let record = OutboxRecordV1::accept(exact_bytes).map_err(row_error)?;
             let envelope = decode_envelope_v1(record.exact_bytes()).map_err(row_error)?;
-            if !is_safety_contract(envelope.contract.as_ref()) {
-                continue;
+            if is_safe_for_delivery_event(&envelope)? {
+                let attachment_anchor_id = id16(&envelope.partition_key)
+                    .map_err(|_| RetainedCommunicationsReplayErrorV1::WrongContract)?;
+                self.index_verified(attachment_anchor_id, &record, indexed_at_unix_seconds)
+                    .await?;
+                indexed += 1;
             }
-            let attachment_anchor_id = id16(&envelope.partition_key)
-                .map_err(|_| RetainedCommunicationsReplayErrorV1::WrongContract)?;
-            self.index_verified(attachment_anchor_id, &record, indexed_at_unix_seconds)
+            self.mark_scanned(*record.message_id(), indexed_at_unix_seconds)
                 .await?;
-            indexed += 1;
         }
         Ok(indexed)
     }
@@ -264,6 +272,24 @@ impl CommunicationsRetainedEvidenceReplayPersistenceV1 {
         .then_some(())
         .ok_or(RetainedCommunicationsReplayErrorV1::Conflict)
     }
+
+    async fn mark_scanned(
+        &self,
+        message_id: [u8; 16],
+        scanned_at_unix_seconds: i64,
+    ) -> Result<(), RetainedCommunicationsReplayErrorV1> {
+        sqlx::query(
+            "INSERT INTO hermes_data.communications_retained_evidence_replay_scan \
+                (message_id, scanned_at_unix_seconds) VALUES ($1, $2) \
+             ON CONFLICT (message_id) DO NOTHING",
+        )
+        .bind(message_id.as_slice())
+        .bind(scanned_at_unix_seconds)
+        .execute(&self.pool)
+        .await
+        .map(|_| ())
+        .map_err(storage_error)
+    }
 }
 
 fn verify_record(
@@ -276,12 +302,23 @@ fn verify_record(
         return Err(RetainedCommunicationsReplayErrorV1::HashMismatch);
     }
     let envelope = decode_envelope_v1(record.exact_bytes()).map_err(row_error)?;
-    if !is_safety_contract(envelope.contract.as_ref())
+    if !is_safe_for_delivery_event(&envelope)?
         || envelope.partition_key.as_slice() != attachment_anchor_id
     {
         return Err(RetainedCommunicationsReplayErrorV1::WrongContract);
     }
     Ok(())
+}
+
+fn is_safe_for_delivery_event(
+    envelope: &hermes_events_protocol::v1::DurableEnvelopeV1,
+) -> Result<bool, RetainedCommunicationsReplayErrorV1> {
+    if !is_safety_contract(envelope.contract.as_ref()) {
+        return Ok(false);
+    }
+    let payload =
+        AttachmentSafetyStateChangedV1::decode(envelope.payload.as_slice()).map_err(row_error)?;
+    Ok(payload.next_state == AttachmentSafetyStateV1::SafeForDelivery as i32)
 }
 
 fn is_safety_contract(contract: Option<&hermes_events_protocol::v1::ContractRefV1>) -> bool {
@@ -413,7 +450,14 @@ mod tests {
                         nanos: 0,
                     }),
                 })),
-                payload: vec![1],
+                payload: AttachmentSafetyStateChangedV1 {
+                    attachment_anchor_id: anchor.to_vec(),
+                    expected_state: AttachmentSafetyStateV1::BlobAdmitted as i32,
+                    next_state: AttachmentSafetyStateV1::SafeForDelivery as i32,
+                    evidence_id: vec![4; 16],
+                    observed_at_unix_seconds: 1,
+                }
+                .encode_to_vec(),
             }
             .encode_to_vec(),
         )

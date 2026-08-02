@@ -6,11 +6,11 @@
 
 Состояние реализации: protocol, producer-local persistence, exact-byte adapters,
 durable delivery foundations и отдельный workflow API/core/persistence/runtime
-component/assembly contour implemented; workflow managed runtime implemented,
-producer managed loops and development ensemble implemented; live gate pending.
-Диагностический browser gate Preview подтвердил, что generated Start/Get
-проходят через Core Gateway и один shared SSE stream, но source events старше
-bounded JetStream retention уже отсутствуют в broker. Отдельный workflow-owned
+component/assembly contour implemented; workflow managed runtime, producer
+managed loops и development ensemble implemented. Managed happy-path gate
+подтвердил expired-retention recovery до terminal Preview через один shared SSE
+stream и client_blob; negative/restart/privacy и полный pre-push gate ещё не
+выполнены. Отдельный workflow-owned
 build unit `hermes-retained-evidence-replay-protocol` реализует bounded exact
 message selection, producer registration, owner-device actor hash,
 runtime/grant fences и sanitized terminal result без subject/query/payload
@@ -31,7 +31,14 @@ registration/runtime/grant fences, получают original owner-local bytes,
 исходного outbox publish state. Additive Communications revision 18 и Mail
 revision 24 добавляют раздельные owner-local command inbox и terminal result
 outbox: command ID/hash conflict проверяется до исполнения, а completed state и
-exact result bytes сохраняются атомарно. Owner-specific contract units теперь
+exact result bytes сохраняются атомарно. Producer storage bundles также имеют
+additive owner-local bounded scan ledgers: Communications revision
+19 и Mail revision 25. Managed runtime loops последовательно индексируют только
+собственные outbox records; каждый проверенный record отмечается в owner-local
+scan ledger, поэтому посторонние lifecycle records не блокируют bounded scan, а
+исходный outbox не изменяется. Communications допускает в replay index только
+terminal `SafeForDelivery`, Mail — только exact scan-candidate observation.
+Owner-specific contract units теперь
 также строят exact workflow command и causally-bound terminal result envelopes.
 Communications и Mail имеют раздельные durable consumer components: они
 проверяют exact workflow source/capability/owner, повторно не исполняют completed
@@ -51,9 +58,13 @@ command outbox и два commit-before-Ack result inbox. Communications и Mail
 descriptors запрашивают только свои exact command-consume/result-publish routes;
 их managed process loops используют отдельные owner-local replay persistence
 build units, сохраняют terminal result до Ack и публикуют result outbox exact
-bytes. Workflow runtime/storage assembly включён отдельной единицей в signed
-development release и монотонный development module plan. Live conformance ещё
-не выполнен.
+bytes. Mail отдельно держит integration/storage owner и logical human owner;
+replay-команда проверяется по human owner, а storage/Vault authority остаётся у
+integration owner. Workflow runtime/storage assembly включён отдельной единицей
+в signed development release и монотонный development module plan. Managed
+conformance доказал восстановление после фактического истечения обоих source
+subjects, два producer result, terminal Preview SSE и чтение через client_blob.
+Полный phase gate ещё не закрыт.
 Никакая SQL-правка исходного publish state не считается реализацией этого
 решения.
 
