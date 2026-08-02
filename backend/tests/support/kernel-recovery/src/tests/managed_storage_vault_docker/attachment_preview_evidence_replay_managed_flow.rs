@@ -223,7 +223,7 @@ fn managed_attachment_preview_evidence_replay_restores_expired_sources_to_browse
         admitted_mail,
         imap.port(),
     );
-    let _replay = start_attachment_preview_evidence_replay_runtime_v1(
+    let mut replay_runtime = start_attachment_preview_evidence_replay_runtime_v1(
         &supervisor,
         &store,
         &root.join("runtime"),
@@ -283,31 +283,26 @@ fn managed_attachment_preview_evidence_replay_restores_expired_sources_to_browse
     );
 
     let replay_operation_id = [0xD2; 16];
-    let replay = post_attachment_preview_proto_v1::<
-        _,
-        StartAttachmentPreviewEvidenceReplayResponseV1,
-    >(
+    let communications_replay = ReplayProducerFixtureSelectionV1 {
+        registration_id: COMMUNICATIONS_REGISTRATION.to_owned(),
+        runtime_generation: communications_generation,
+        grant_epoch: producer_grant_epoch_v1(&store, COMMUNICATIONS_REGISTRATION),
+        message_ids: vec![message_ids.communications],
+    };
+    let mail_replay = ReplayProducerFixtureSelectionV1 {
+        registration_id: mail.registration_id.clone(),
+        runtime_generation: mail.runtime_generation,
+        grant_epoch: mail.grant_epoch,
+        message_ids: vec![message_ids.mail],
+    };
+    let replay = post_retained_preview_replay_v1(
         &router,
         &gateway_runtime,
         &cookie,
-        ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_CONNECT_PATH_V1,
-        StartAttachmentPreviewEvidenceReplayRequestV1 {
-            protocol_major: 1,
-            operation_id: replay_operation_id.to_vec(),
-            attachment_anchor_id: attachment_anchor_id.to_vec(),
-            communications: Some(ReplayProducerSelectionV1 {
-                producer_registration_id: COMMUNICATIONS_REGISTRATION.to_owned(),
-                producer_runtime_generation: communications_generation,
-                producer_grant_epoch: producer_grant_epoch_v1(&store, COMMUNICATIONS_REGISTRATION),
-                original_message_ids: vec![message_ids.communications.to_vec()],
-            }),
-            mail: Some(ReplayProducerSelectionV1 {
-                producer_registration_id: mail.registration_id.clone(),
-                producer_runtime_generation: mail.runtime_generation,
-                producer_grant_epoch: mail.grant_epoch,
-                original_message_ids: vec![message_ids.mail.to_vec()],
-            }),
-        },
+        replay_operation_id,
+        attachment_anchor_id,
+        &communications_replay,
+        &mail_replay,
     );
     assert_eq!(
         replay.error,
@@ -325,6 +320,8 @@ fn managed_attachment_preview_evidence_replay_restores_expired_sources_to_browse
     );
     assert_eq!(replay_diagnostics.error, 0);
     assert_eq!(replay_diagnostics.producer_results, 2);
+    assert_eq!(replay_diagnostics.communications_failure, 0);
+    assert_eq!(replay_diagnostics.mail_failure, 0);
     assert_eq!(replay_diagnostics.communications_published_audits, 1);
     assert_eq!(replay_diagnostics.mail_published_audits, 1);
 
@@ -365,6 +362,201 @@ fn managed_attachment_preview_evidence_replay_restores_expired_sources_to_browse
     );
     assert_eq!(status, StatusCode::OK);
     assert!(!body.is_empty());
+    assert_replay_control_payload_is_private(event.payload.as_slice());
+    assert_replay_control_payload_is_private(replay.encode_to_vec().as_slice());
+
+    let duplicate_operation_id = [0xD3; 16];
+    let duplicate = post_retained_preview_replay_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        duplicate_operation_id,
+        attachment_anchor_id,
+        &communications_replay,
+        &mail_replay,
+    );
+    assert_eq!(
+        duplicate.error,
+        AttachmentPreviewEvidenceReplayErrorV1::Unspecified as i32
+    );
+    let duplicate_diagnostics =
+        wait_for_retained_preview_replay_terminal_v1(duplicate_operation_id);
+    assert_eq!(
+        duplicate_diagnostics.state,
+        AttachmentPreviewEvidenceReplayStateV1::Completed as i16
+    );
+    assert_eq!(duplicate_diagnostics.producer_results, 2);
+    assert_eq!(duplicate_diagnostics.communications_published_audits, 1);
+    assert_eq!(duplicate_diagnostics.mail_published_audits, 1);
+    assert_eq!(
+        get_attachment_preview_v1(&router, &gateway_runtime, &cookie, &ready.run_id).state,
+        AttachmentPreviewStateV1::Ready as i32
+    );
+
+    let partial_operation_id = [0xD4; 16];
+    let missing_mail = ReplayProducerFixtureSelectionV1 {
+        message_ids: vec![[0xE4; 16]],
+        ..mail_replay.clone()
+    };
+    let partial = post_retained_preview_replay_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        partial_operation_id,
+        attachment_anchor_id,
+        &communications_replay,
+        &missing_mail,
+    );
+    assert_eq!(
+        partial.error,
+        AttachmentPreviewEvidenceReplayErrorV1::Unspecified as i32
+    );
+    let partial_diagnostics = wait_for_retained_preview_replay_terminal_v1(partial_operation_id);
+    assert_eq!(
+        partial_diagnostics.state,
+        AttachmentPreviewEvidenceReplayStateV1::Unavailable as i16
+    );
+    assert_eq!(
+        partial_diagnostics.error,
+        AttachmentPreviewEvidenceReplayErrorV1::ProducerUnavailable as i16
+    );
+    assert_eq!(partial_diagnostics.producer_results, 2);
+    assert_eq!(partial_diagnostics.communications_failure, 0);
+    assert_eq!(partial_diagnostics.mail_failure, 1);
+    assert_eq!(partial_diagnostics.communications_published_audits, 1);
+    assert_eq!(partial_diagnostics.mail_published_audits, 0);
+    assert_replay_control_payload_is_private(partial.encode_to_vec().as_slice());
+
+    let stale_operation_id = [0xD5; 16];
+    let stale_mail = ReplayProducerFixtureSelectionV1 {
+        runtime_generation: mail_replay.runtime_generation + 1,
+        ..mail_replay.clone()
+    };
+    let stale = post_retained_preview_replay_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        stale_operation_id,
+        attachment_anchor_id,
+        &communications_replay,
+        &stale_mail,
+    );
+    assert_eq!(
+        stale.error,
+        AttachmentPreviewEvidenceReplayErrorV1::Unspecified as i32
+    );
+    let stale_diagnostics = wait_for_retained_preview_replay_terminal_v1(stale_operation_id);
+    assert_eq!(
+        stale_diagnostics.state,
+        AttachmentPreviewEvidenceReplayStateV1::Rejected as i16
+    );
+    assert_eq!(
+        stale_diagnostics.error,
+        AttachmentPreviewEvidenceReplayErrorV1::StaleProducerFence as i16
+    );
+    assert_eq!(stale_diagnostics.producer_results, 2);
+    assert_eq!(stale_diagnostics.communications_failure, 0);
+    assert_eq!(stale_diagnostics.mail_failure, 4);
+    assert_eq!(stale_diagnostics.mail_published_audits, 0);
+    assert_replay_control_payload_is_private(stale.encode_to_vec().as_slice());
+
+    let event_endpoint = store
+        .platform_event_hub_topology()
+        .expect("read replay outage Event Hub topology")
+        .expect("replay outage Event Hub topology")
+        .nats_endpoint()
+        .to_owned();
+    let outage_observer = gateway_runtime
+        .block_on(async_nats::connect(event_endpoint))
+        .expect("connect replay outage observer");
+    super::nats_outage_fixture::set_authenticated_nats_container_running(false);
+    let outage_operation_id = [0xD6; 16];
+    let outage = post_retained_preview_replay_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        outage_operation_id,
+        attachment_anchor_id,
+        &communications_replay,
+        &mail_replay,
+    );
+    assert_eq!(
+        outage.error,
+        AttachmentPreviewEvidenceReplayErrorV1::Unspecified as i32
+    );
+    let replay_successor = reserve_attachment_preview_evidence_replay_successor_v1(
+        &supervisor,
+        &store,
+        replay_runtime,
+    );
+    super::nats_outage_fixture::set_authenticated_nats_container_running(true);
+    super::nats_outage_fixture::wait_for_authenticated_nats_reconnect(
+        &gateway_runtime,
+        &outage_observer,
+        "retained evidence replay observer",
+    );
+    replay_runtime = start_attachment_preview_evidence_replay_runtime_v1(
+        &supervisor,
+        &store,
+        &root.join("runtime"),
+        replay_successor,
+    );
+    assert_eq!(replay_runtime.runtime_generation, 2);
+    let outage_diagnostics = wait_for_retained_preview_replay_terminal_v1(outage_operation_id);
+    assert_eq!(
+        outage_diagnostics.state,
+        AttachmentPreviewEvidenceReplayStateV1::Completed as i16
+    );
+    assert_eq!(outage_diagnostics.producer_results, 2);
+    assert_eq!(outage_diagnostics.communications_published_audits, 1);
+    assert_eq!(outage_diagnostics.mail_published_audits, 1);
+    assert_replay_control_payload_is_private(outage.encode_to_vec().as_slice());
+
+    let mismatched_mail = restart_mail_runtime_without_smtp_for_human_owner(
+        &supervisor,
+        &store,
+        &data,
+        &root.join("runtime"),
+        mail,
+        imap.port(),
+        "owner-2",
+    );
+    let wrong_owner_operation_id = [0xD7; 16];
+    let wrong_owner_mail = ReplayProducerFixtureSelectionV1 {
+        registration_id: mismatched_mail.registration_id,
+        runtime_generation: mismatched_mail.runtime_generation,
+        grant_epoch: mismatched_mail.grant_epoch,
+        message_ids: mail_replay.message_ids.clone(),
+    };
+    let wrong_owner = post_retained_preview_replay_v1(
+        &router,
+        &gateway_runtime,
+        &cookie,
+        wrong_owner_operation_id,
+        attachment_anchor_id,
+        &communications_replay,
+        &wrong_owner_mail,
+    );
+    assert_eq!(
+        wrong_owner.error,
+        AttachmentPreviewEvidenceReplayErrorV1::Unspecified as i32
+    );
+    let wrong_owner_diagnostics =
+        wait_for_retained_preview_replay_terminal_v1(wrong_owner_operation_id);
+    assert_eq!(
+        wrong_owner_diagnostics.state,
+        AttachmentPreviewEvidenceReplayStateV1::Rejected as i16
+    );
+    assert_eq!(
+        wrong_owner_diagnostics.error,
+        AttachmentPreviewEvidenceReplayErrorV1::StaleProducerFence as i16
+    );
+    assert_eq!(wrong_owner_diagnostics.producer_results, 2);
+    assert_eq!(wrong_owner_diagnostics.communications_failure, 0);
+    assert_eq!(wrong_owner_diagnostics.mail_failure, 6);
+    assert_eq!(wrong_owner_diagnostics.communications_published_audits, 1);
+    assert_eq!(wrong_owner_diagnostics.mail_published_audits, 0);
+    assert_replay_control_payload_is_private(wrong_owner.encode_to_vec().as_slice());
 
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
@@ -382,6 +574,65 @@ fn producer_grant_epoch_v1(store: &SqliteControlStore, registration_id: &str) ->
         .effective_grants()
         .expect("approved replay producer grants")
         .grant_epoch()
+}
+
+#[derive(Clone)]
+struct ReplayProducerFixtureSelectionV1 {
+    registration_id: String,
+    runtime_generation: u64,
+    grant_epoch: u64,
+    message_ids: Vec<[u8; 16]>,
+}
+
+fn post_retained_preview_replay_v1(
+    router: &attachment_preview_gateway_fixture::AttachmentPreviewGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    operation_id: [u8; 16],
+    attachment_anchor_id: [u8; 16],
+    communications: &ReplayProducerFixtureSelectionV1,
+    mail: &ReplayProducerFixtureSelectionV1,
+) -> StartAttachmentPreviewEvidenceReplayResponseV1 {
+    post_attachment_preview_proto_v1(
+        router,
+        runtime,
+        cookie,
+        ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_CONNECT_PATH_V1,
+        StartAttachmentPreviewEvidenceReplayRequestV1 {
+            protocol_major: 1,
+            operation_id: operation_id.to_vec(),
+            attachment_anchor_id: attachment_anchor_id.to_vec(),
+            communications: Some(replay_selection_v1(communications)),
+            mail: Some(replay_selection_v1(mail)),
+        },
+    )
+}
+
+fn replay_selection_v1(selection: &ReplayProducerFixtureSelectionV1) -> ReplayProducerSelectionV1 {
+    ReplayProducerSelectionV1 {
+        producer_registration_id: selection.registration_id.clone(),
+        producer_runtime_generation: selection.runtime_generation,
+        producer_grant_epoch: selection.grant_epoch,
+        original_message_ids: selection
+            .message_ids
+            .iter()
+            .map(|message_id| message_id.to_vec())
+            .collect(),
+    }
+}
+
+fn assert_replay_control_payload_is_private(bytes: &[u8]) {
+    for private_marker in [
+        b"managed Mail body".as_slice(),
+        b"Y2xlYW4tcm9vbS1hdHRhY2htZW50".as_slice(),
+    ] {
+        assert!(
+            !bytes
+                .windows(private_marker.len())
+                .any(|window| window == private_marker),
+            "retained evidence replay control payload exposed private source content"
+        );
+    }
 }
 
 fn wait_for_retained_preview_attachment_state_v1(

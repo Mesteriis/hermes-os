@@ -111,15 +111,16 @@ pub async fn accept_mail_replay_command_v1(
     record: &OutboxRecordV1,
     context: &MailReplayConsumerContextV1,
 ) -> Result<MailReplayCommandConsumeOutcomeV1, MailReplayCommandConsumeErrorV1> {
-    let decoded = decode_mail_replay_command_v1(record, &context.logical_owner_id)
+    let decoded = decode_mail_replay_command_envelope_v1(record)
         .map_err(MailReplayCommandConsumeErrorV1::Decode)?;
+    let owner_mismatch = decoded.command.logical_owner_id != context.logical_owner_id;
     let operation_id =
         id16(&decoded.command.operation_id).map_err(MailReplayCommandConsumeErrorV1::Decode)?;
     let admission = MailReplayCommandAdmissionV1 {
         command_message_id: decoded.command_message_id,
         command_envelope_sha256: decoded.command_envelope_sha256,
         operation_id,
-        logical_owner_id: decoded.command.logical_owner_id.clone(),
+        logical_owner_id: context.logical_owner_id.clone(),
     };
     let inbox = persistence
         .accept_replay_command(&admission, context.completed_at_unix_seconds)
@@ -128,24 +129,28 @@ pub async fn accept_mail_replay_command_v1(
     if inbox == MailReplayCommandInboxOutcomeV1::DuplicateCompleted {
         return Ok(MailReplayCommandConsumeOutcomeV1::DuplicateCompleted);
     }
-    let result = match replay_retained_mail_evidence_v1(
-        persistence,
-        connection,
-        original_contract_publish_permit,
-        &decoded.command,
-        &MailReplayExecutionContextV1 {
-            registration_id: &context.producer_registration_id,
-            runtime_generation: context.runtime_generation,
-            grant_epoch: context.grant_epoch,
-            logical_attempt: context.execution_attempt,
-            recorded_at_unix_seconds: context.completed_at_unix_seconds,
-        },
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(error) => terminal_result(&decoded.command, error)
-            .ok_or(MailReplayCommandConsumeErrorV1::ReplayRetryable)?,
+    let result = if owner_mismatch {
+        owner_mismatch_result(&decoded.command)
+    } else {
+        match replay_retained_mail_evidence_v1(
+            persistence,
+            connection,
+            original_contract_publish_permit,
+            &decoded.command,
+            &MailReplayExecutionContextV1 {
+                registration_id: &context.producer_registration_id,
+                runtime_generation: context.runtime_generation,
+                grant_epoch: context.grant_epoch,
+                logical_attempt: context.execution_attempt,
+                recorded_at_unix_seconds: context.completed_at_unix_seconds,
+            },
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => terminal_result(&decoded.command, error)
+                .ok_or(MailReplayCommandConsumeErrorV1::ReplayRetryable)?,
+        }
     };
     let result_record = build_mail_replay_result_outbox_v1(
         decoded.command_message_id,
@@ -173,6 +178,16 @@ pub async fn accept_mail_replay_command_v1(
 pub fn decode_mail_replay_command_v1(
     record: &OutboxRecordV1,
     expected_logical_owner_id: &str,
+) -> Result<DecodedMailReplayCommandV1, MailReplayCommandDecodeErrorV1> {
+    let decoded = decode_mail_replay_command_envelope_v1(record)?;
+    if decoded.command.logical_owner_id != expected_logical_owner_id {
+        return Err(MailReplayCommandDecodeErrorV1::OwnerMismatch);
+    }
+    Ok(decoded)
+}
+
+fn decode_mail_replay_command_envelope_v1(
+    record: &OutboxRecordV1,
 ) -> Result<DecodedMailReplayCommandV1, MailReplayCommandDecodeErrorV1> {
     let envelope = decode_envelope_v1(record.exact_bytes())
         .map_err(|_| MailReplayCommandDecodeErrorV1::InvalidEnvelope)?;
@@ -203,9 +218,6 @@ pub fn decode_mail_replay_command_v1(
         .map_err(|_| MailReplayCommandDecodeErrorV1::InvalidPayload)?;
     validate_mail_replay_command_v1(&command)
         .map_err(|_| MailReplayCommandDecodeErrorV1::InvalidPayload)?;
-    if command.logical_owner_id != expected_logical_owner_id {
-        return Err(MailReplayCommandDecodeErrorV1::OwnerMismatch);
-    }
     let operation_id = id16(&command.operation_id)?;
     let command_message_id = id16(&envelope.message_id)?;
     if metadata.command_id.as_slice() != operation_id
@@ -219,6 +231,15 @@ pub fn decode_mail_replay_command_v1(
         command_envelope_sha256: *record.envelope_sha256(),
         command,
     })
+}
+
+fn owner_mismatch_result(command: &ReplayMailEvidenceCommandV1) -> ReplayMailEvidenceResultV1 {
+    ReplayMailEvidenceResultV1 {
+        operation_id: command.operation_id.clone(),
+        outcome: ReplayMailEvidenceOutcomeV1::Rejected as i32,
+        original_message_ids: command.original_message_ids.clone(),
+        failure: ReplayMailEvidenceFailureV1::OwnerMismatch as i32,
+    }
 }
 
 fn terminal_result(
@@ -329,6 +350,15 @@ mod tests {
                 MailRetainedEvidenceReplayErrorV1::PublishUnavailable,
             )
             .is_none()
+        );
+        let wrong_owner = owner_mismatch_result(&command());
+        assert_eq!(
+            wrong_owner.failure,
+            ReplayMailEvidenceFailureV1::OwnerMismatch as i32
+        );
+        assert_eq!(
+            wrong_owner.outcome,
+            ReplayMailEvidenceOutcomeV1::Rejected as i32
         );
     }
 

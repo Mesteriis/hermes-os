@@ -21,6 +21,12 @@ pub(super) struct RetainedPreviewReplayDiagnosticsV1 {
     pub(super) state: i16,
     pub(super) error: i16,
     pub(super) producer_results: i64,
+    pub(super) communications_results: i64,
+    pub(super) mail_results: i64,
+    pub(super) communications_result_published: bool,
+    pub(super) mail_result_published: bool,
+    pub(super) communications_failure: i16,
+    pub(super) mail_failure: i16,
     pub(super) communications_published_audits: i64,
     pub(super) mail_published_audits: i64,
 }
@@ -70,7 +76,10 @@ pub(super) fn wait_for_retained_preview_replay_terminal_v1(
     operation_id: [u8; 16],
 ) -> RetainedPreviewReplayDiagnosticsV1 {
     let runtime = tokio::runtime::Runtime::new().expect("retained Preview diagnostics runtime");
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // Communications deliberately rotates across fourteen isolated durable
+    // consumers. Each idle pull is bounded to 500 ms, so one complete fair
+    // turn plus both producer relays and result consumers can exceed 10 s.
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let diagnostics = runtime.block_on(async {
             let pool = retained_preview_diagnostics_pool_v1().await;
@@ -88,6 +97,48 @@ pub(super) fn wait_for_retained_preview_replay_terminal_v1(
             .fetch_one(&pool)
             .await
             .expect("count retained Preview replay producer results");
+            let communications_results: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_result_inbox WHERE operation_id=$1 AND producer=1",
+            )
+            .bind(operation_id.as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("count retained Communications replay results");
+            let mail_results: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM hermes_data.attachment_preview_evidence_replay_result_inbox WHERE operation_id=$1 AND producer=2",
+            )
+            .bind(operation_id.as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("count retained Mail replay results");
+            let communications_result_published: bool = sqlx::query_scalar(
+                "SELECT COALESCE((SELECT published_at_unix_seconds IS NOT NULL FROM hermes_data.communications_retained_evidence_replay_result_outbox WHERE operation_id=$1),FALSE)",
+            )
+            .bind(operation_id.as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("read retained Communications result publish state");
+            let mail_result_published: bool = sqlx::query_scalar(
+                "SELECT COALESCE((SELECT published_at_unix_seconds IS NOT NULL FROM hermes_data.mail_retained_evidence_replay_result_outbox WHERE operation_id=$1),FALSE)",
+            )
+            .bind(operation_id.as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("read retained Mail result publish state");
+            let communications_failure: i16 = sqlx::query_scalar(
+                "SELECT failure FROM hermes_data.attachment_preview_evidence_replay_producers WHERE operation_id=$1 AND producer=1",
+            )
+            .bind(operation_id.as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("read retained Communications replay failure");
+            let mail_failure: i16 = sqlx::query_scalar(
+                "SELECT failure FROM hermes_data.attachment_preview_evidence_replay_producers WHERE operation_id=$1 AND producer=2",
+            )
+            .bind(operation_id.as_slice())
+            .fetch_one(&pool)
+            .await
+            .expect("read retained Mail replay failure");
             let communications_published_audits: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM hermes_data.communications_retained_evidence_replay_audit WHERE operation_id=$1 AND phase=2",
             )
@@ -106,16 +157,24 @@ pub(super) fn wait_for_retained_preview_replay_terminal_v1(
                 state: operation.try_get("state").expect("replay operation state"),
                 error: operation.try_get("error").expect("replay operation error"),
                 producer_results,
+                communications_results,
+                mail_results,
+                communications_result_published,
+                mail_result_published,
+                communications_failure,
+                mail_failure,
                 communications_published_audits,
                 mail_published_audits,
             }
         });
-        if diagnostics.state == 3 || diagnostics.state == 4 || diagnostics.state == 5 {
+        if (diagnostics.state == 3 || diagnostics.state == 4 || diagnostics.state == 5)
+            && diagnostics.producer_results == 2
+        {
             return diagnostics;
         }
         assert!(
             Instant::now() < deadline,
-            "retained Preview replay operation did not become terminal"
+            "retained Preview replay operation did not become terminal: operation_id={operation_id:02x?}, diagnostics={diagnostics:?}"
         );
         std::thread::sleep(Duration::from_millis(25));
     }

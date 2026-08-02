@@ -1750,21 +1750,17 @@ impl MailAdmittedRuntime {
         let Some(permit) = &self.attachment_anchor_subscribe_permit else {
             return Ok(false);
         };
-        match tokio::time::timeout(
-            Duration::from_millis(25),
-            consume_next_attachment_anchor_recorded_v1(
-                &self.durable,
-                &self.event_connection,
-                permit,
-                consumed_at_unix_seconds,
-            ),
+        match consume_next_attachment_anchor_recorded_v1(
+            &self.durable,
+            &self.event_connection,
+            permit,
+            consumed_at_unix_seconds,
         )
         .await
         {
-            Ok(Ok(_)) => Ok(true),
-            Ok(Err(MailAttachmentAnchorMappingErrorV1::Unavailable)) => Ok(false),
-            Ok(Err(error)) => Err(map_attachment_anchor_mapping_error(error)),
-            Err(_) => Ok(false),
+            Ok(_) => Ok(true),
+            Err(MailAttachmentAnchorMappingErrorV1::Unavailable) => Ok(false),
+            Err(error) => Err(map_attachment_anchor_mapping_error(error)),
         }
     }
 
@@ -1775,21 +1771,17 @@ impl MailAdmittedRuntime {
         let Some(permit) = &self.attachment_safety_subscribe_permit else {
             return Ok(false);
         };
-        match tokio::time::timeout(
-            Duration::from_millis(25),
-            consume_next_attachment_safety_state_changed_v1(
-                &self.durable,
-                &self.event_connection,
-                permit,
-                consumed_at_unix_seconds,
-            ),
+        match consume_next_attachment_safety_state_changed_v1(
+            &self.durable,
+            &self.event_connection,
+            permit,
+            consumed_at_unix_seconds,
         )
         .await
         {
-            Ok(Ok(_)) => Ok(true),
-            Ok(Err(MailAttachmentSafetyProjectionErrorV1::Unavailable)) => Ok(false),
-            Ok(Err(error)) => Err(map_attachment_safety_projection_error(error)),
-            Err(_) => Ok(false),
+            Ok(_) => Ok(true),
+            Err(MailAttachmentSafetyProjectionErrorV1::Unavailable) => Ok(false),
+            Err(error) => Err(map_attachment_safety_projection_error(error)),
         }
     }
 
@@ -2355,30 +2347,27 @@ impl MailAdmittedRuntime {
         &self,
         consumed_at_unix_seconds: i64,
     ) -> Result<bool, MailReplayCommandConsumeErrorV1> {
-        match tokio::time::timeout(
-            Duration::from_millis(25),
-            consume_next_mail_replay_command_v1(
-                &self.replay_persistence,
-                &self.event_connection,
-                &self.replay_command_subscribe_permit,
-                &self.event_publish_permit,
-                &MailReplayConsumerContextV1 {
-                    logical_owner_id: self.logical_human_owner_id.clone(),
-                    producer_registration_id: self.module_registration_id.clone(),
-                    runtime_instance_id: self.runtime_instance_id.clone(),
-                    runtime_generation: self.runtime_generation,
-                    grant_epoch: self.grant_epoch,
-                    execution_attempt: 1,
-                    completed_at_unix_seconds: consumed_at_unix_seconds,
-                    completed_at_nanos: 0,
-                },
-            ),
+        // Event Hub owns the bounded pull deadline. Cancelling its future from
+        // this integration before the server-side pull expires can strand a
+        // delivered command as unacknowledged until redelivery.
+        consume_next_mail_replay_command_v1(
+            &self.replay_persistence,
+            &self.event_connection,
+            &self.replay_command_subscribe_permit,
+            &self.event_publish_permit,
+            &MailReplayConsumerContextV1 {
+                logical_owner_id: self.logical_human_owner_id.clone(),
+                producer_registration_id: self.module_registration_id.clone(),
+                runtime_instance_id: self.runtime_instance_id.clone(),
+                runtime_generation: self.runtime_generation,
+                grant_epoch: self.grant_epoch,
+                execution_attempt: 1,
+                completed_at_unix_seconds: consumed_at_unix_seconds,
+                completed_at_nanos: 0,
+            },
         )
         .await
-        {
-            Ok(result) => result.map(|outcome| outcome.is_some()),
-            Err(_) => Ok(false),
-        }
+        .map(|outcome| outcome.is_some())
     }
 
     pub async fn relay_replay_result(

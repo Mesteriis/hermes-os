@@ -309,10 +309,10 @@ async fn bounded_consume<F>(
 where
     F: Future<Output = Result<bool, ReplayResultConsumerErrorV1>>,
 {
-    match tokio::time::timeout(Duration::from_millis(25), future).await {
-        Ok(result) => result.map_err(consumer_error),
-        Err(_) => Ok(false),
-    }
+    // The Event Hub pull adapter owns the bounded 500 ms delivery deadline.
+    // Cancelling it here before its server-side pull expires can strand an
+    // already assigned message as unacknowledged until JetStream redelivery.
+    future.await.map_err(consumer_error)
 }
 
 fn exact_permit(
@@ -496,5 +496,21 @@ fn relay_error(
         ReplayCommandRelayErrorV1::EventUnavailable => {
             AttachmentPreviewEvidenceReplayManagedRuntimeErrorV1::EventUnavailable
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn result_consume_is_not_cancelled_before_the_transport_deadline() {
+        let consumed = bounded_consume(async {
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            Ok::<bool, ReplayResultConsumerErrorV1>(true)
+        })
+        .await;
+
+        assert_eq!(consumed, Ok(true));
     }
 }

@@ -117,15 +117,16 @@ pub async fn accept_communications_replay_command_v1(
     context: &CommunicationsReplayConsumerContextV1,
 ) -> Result<CommunicationsReplayCommandConsumeOutcomeV1, CommunicationsReplayCommandConsumeErrorV1>
 {
-    let decoded = decode_communications_replay_command_v1(record, &context.logical_owner_id)
+    let decoded = decode_communications_replay_command_envelope_v1(record)
         .map_err(CommunicationsReplayCommandConsumeErrorV1::Decode)?;
+    let owner_mismatch = decoded.command.logical_owner_id != context.logical_owner_id;
     let operation_id = id16(&decoded.command.operation_id)
         .map_err(CommunicationsReplayCommandConsumeErrorV1::Decode)?;
     let admission = CommunicationsReplayCommandAdmissionV1 {
         command_message_id: decoded.command_message_id,
         command_envelope_sha256: decoded.command_envelope_sha256,
         operation_id,
-        logical_owner_id: decoded.command.logical_owner_id.clone(),
+        logical_owner_id: context.logical_owner_id.clone(),
     };
     let inbox = persistence
         .accept_replay_command(&admission, context.completed_at_unix_seconds)
@@ -134,24 +135,28 @@ pub async fn accept_communications_replay_command_v1(
     if inbox == CommunicationsReplayCommandInboxOutcomeV1::DuplicateCompleted {
         return Ok(CommunicationsReplayCommandConsumeOutcomeV1::DuplicateCompleted);
     }
-    let result = match replay_retained_communications_evidence_v1(
-        persistence,
-        connection,
-        original_contract_publish_permit,
-        &decoded.command,
-        &CommunicationsReplayExecutionContextV1 {
-            registration_id: &context.producer_registration_id,
-            runtime_generation: context.runtime_generation,
-            grant_epoch: context.grant_epoch,
-            logical_attempt: context.execution_attempt,
-            recorded_at_unix_seconds: context.completed_at_unix_seconds,
-        },
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(error) => terminal_result(&decoded.command, error)
-            .ok_or(CommunicationsReplayCommandConsumeErrorV1::ReplayRetryable)?,
+    let result = if owner_mismatch {
+        owner_mismatch_result(&decoded.command)
+    } else {
+        match replay_retained_communications_evidence_v1(
+            persistence,
+            connection,
+            original_contract_publish_permit,
+            &decoded.command,
+            &CommunicationsReplayExecutionContextV1 {
+                registration_id: &context.producer_registration_id,
+                runtime_generation: context.runtime_generation,
+                grant_epoch: context.grant_epoch,
+                logical_attempt: context.execution_attempt,
+                recorded_at_unix_seconds: context.completed_at_unix_seconds,
+            },
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => terminal_result(&decoded.command, error)
+                .ok_or(CommunicationsReplayCommandConsumeErrorV1::ReplayRetryable)?,
+        }
     };
     let result_record = build_communications_replay_result_outbox_v1(
         decoded.command_message_id,
@@ -179,6 +184,16 @@ pub async fn accept_communications_replay_command_v1(
 pub fn decode_communications_replay_command_v1(
     record: &OutboxRecordV1,
     expected_logical_owner_id: &str,
+) -> Result<DecodedCommunicationsReplayCommandV1, CommunicationsReplayCommandDecodeErrorV1> {
+    let decoded = decode_communications_replay_command_envelope_v1(record)?;
+    if decoded.command.logical_owner_id != expected_logical_owner_id {
+        return Err(CommunicationsReplayCommandDecodeErrorV1::OwnerMismatch);
+    }
+    Ok(decoded)
+}
+
+fn decode_communications_replay_command_envelope_v1(
+    record: &OutboxRecordV1,
 ) -> Result<DecodedCommunicationsReplayCommandV1, CommunicationsReplayCommandDecodeErrorV1> {
     let envelope = decode_envelope_v1(record.exact_bytes())
         .map_err(|_| CommunicationsReplayCommandDecodeErrorV1::InvalidEnvelope)?;
@@ -209,9 +224,6 @@ pub fn decode_communications_replay_command_v1(
         .map_err(|_| CommunicationsReplayCommandDecodeErrorV1::InvalidPayload)?;
     validate_communications_replay_command_v1(&command)
         .map_err(|_| CommunicationsReplayCommandDecodeErrorV1::InvalidPayload)?;
-    if command.logical_owner_id != expected_logical_owner_id {
-        return Err(CommunicationsReplayCommandDecodeErrorV1::OwnerMismatch);
-    }
     let operation_id = id16(&command.operation_id)?;
     let command_message_id = id16(&envelope.message_id)?;
     if metadata.command_id.as_slice() != operation_id
@@ -225,6 +237,17 @@ pub fn decode_communications_replay_command_v1(
         command_envelope_sha256: *record.envelope_sha256(),
         command,
     })
+}
+
+fn owner_mismatch_result(
+    command: &ReplayCommunicationsEvidenceCommandV1,
+) -> ReplayCommunicationsEvidenceResultV1 {
+    ReplayCommunicationsEvidenceResultV1 {
+        operation_id: command.operation_id.clone(),
+        outcome: ReplayCommunicationsEvidenceOutcomeV1::Rejected as i32,
+        original_message_ids: command.original_message_ids.clone(),
+        failure: ReplayCommunicationsEvidenceFailureV1::OwnerMismatch as i32,
+    }
 }
 
 fn terminal_result(
@@ -334,6 +357,15 @@ mod tests {
                 CommunicationsRetainedEvidenceReplayErrorV1::PublishUnavailable,
             )
             .is_none()
+        );
+        let wrong_owner = owner_mismatch_result(&command());
+        assert_eq!(
+            wrong_owner.failure,
+            ReplayCommunicationsEvidenceFailureV1::OwnerMismatch as i32
+        );
+        assert_eq!(
+            wrong_owner.outcome,
+            ReplayCommunicationsEvidenceOutcomeV1::Rejected as i32
         );
     }
 

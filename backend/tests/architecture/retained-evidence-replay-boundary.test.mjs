@@ -369,6 +369,9 @@ test('producer consumers persist terminal result before Ack and retry infrastruc
     assert.match(source, /PublishUnavailable => return None/);
     assert.match(source, /StorageUnavailable[\s\S]{0,80}return None/);
     assert.match(source, /ReplayRetryable/);
+    assert.match(source, /let owner_mismatch = decoded\.command\.logical_owner_id != context\.logical_owner_id/);
+    assert.match(source, /let result = if owner_mismatch/);
+    assert.match(source, /owner_mismatch_result\(&decoded\.command\)/);
     assert.match(source, /SOURCE_MODULE_ID_V1/);
     assert.doesNotMatch(source, /UPDATE|DELETE|domain_outbox|attachment_security_outbox/);
   }
@@ -492,11 +495,12 @@ test('replay workflow is an admitted managed runtime with exact event grants', a
 });
 
 test('managed recovery gate expires broker history and proves SSE plus client blob delivery', async () => {
-  const [managedFlow, persistenceFixture, communicationsSetup, mailRuntime] =
+  const [managedFlow, persistenceFixture, communicationsSetup, workflowRuntime, mailRuntime] =
     await Promise.all([
       read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_evidence_replay_managed_flow.rs'),
       read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_evidence_replay_persistence_fixture.rs'),
       read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/communications_setup.rs'),
+      read('src/attachment-preview-evidence-replay-runtime/src/managed_runtime.rs'),
       read('src/mail-runtime/src/managed.rs'),
     ]);
 
@@ -504,6 +508,14 @@ test('managed recovery gate expires broker history and proves SSE plus client bl
   assert.match(managedFlow, /wait_for_retained_preview_replay_terminal_v1/);
   assert.match(managedFlow, /read_terminal_attachment_preview_sse_event_v1/);
   assert.match(managedFlow, /read_attachment_preview_blob_v1/);
+  assert.match(managedFlow, /duplicate_operation_id/);
+  assert.match(managedFlow, /missing_mail/);
+  assert.match(managedFlow, /stale_mail/);
+  assert.match(managedFlow, /set_authenticated_nats_container_running\(false\)/);
+  assert.match(managedFlow, /reserve_attachment_preview_evidence_replay_successor_v1/);
+  assert.match(managedFlow, /restart_mail_runtime_without_smtp_for_human_owner/);
+  assert.match(managedFlow, /wrong_owner_diagnostics\.mail_failure, 6/);
+  assert.match(managedFlow, /assert_replay_control_payload_is_private/);
   assert.match(persistenceFixture, /communications_retained_evidence_replay_index/);
   assert.match(persistenceFixture, /mail_retained_evidence_replay_index/);
   assert.match(persistenceFixture, /attachment_preview_evidence_replay_result_inbox/);
@@ -512,4 +524,13 @@ test('managed recovery gate expires broker history and proves SSE plus client bl
   assert.match(communicationsSetup, /get_last_raw_message_by_subject/);
   assert.match(mailRuntime, /logical_human_owner_id/);
   assert.match(mailRuntime, /logical_owner_id: self\.logical_human_owner_id\.clone\(\)/);
+  assert.match(workflowRuntime, /future\.await\.map_err\(consumer_error\)/);
+  assert.doesNotMatch(
+    workflowRuntime,
+    /timeout\(Duration::from_millis\(25\), future\)/,
+  );
+  assert.doesNotMatch(
+    mailRuntime,
+    /timeout\(\s*Duration::from_millis\(25\),\s*consume_next_(?:mail_replay_command|attachment_anchor_recorded|attachment_safety_state_changed)_v1/,
+  );
 });

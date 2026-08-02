@@ -633,6 +633,27 @@ pub(super) fn restart_mail_runtime_without_smtp(
     predecessor: StartedMailRuntime,
     imap_port: u16,
 ) -> StartedMailRuntime {
+    restart_mail_runtime_without_smtp_for_human_owner(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        predecessor,
+        imap_port,
+        "owner-1",
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn restart_mail_runtime_without_smtp_for_human_owner(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    predecessor: StartedMailRuntime,
+    imap_port: u16,
+    logical_human_owner_id: &str,
+) -> StartedMailRuntime {
     let predecessor_generation = predecessor.runtime_generation;
     let predecessor_binding = store
         .platform_storage_binding(&predecessor.registration_id, MAIL_STORAGE_CAPABILITY_ID)
@@ -650,7 +671,7 @@ pub(super) fn restart_mail_runtime_without_smtp(
     .expect("reserve successor Mail launch and Storage binding");
     crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
         .expect("provision successor Mail Storage binding");
-    let successor = start_mail_runtime_with_settings(
+    let successor = start_mail_runtime_with_settings_for_human_owner(
         supervisor,
         store,
         kernel_data,
@@ -663,6 +684,7 @@ pub(super) fn restart_mail_runtime_without_smtp(
             port: imap_port,
             smtp: None,
         },
+        logical_human_owner_id,
     );
     assert_eq!(
         successor.runtime_generation,
@@ -757,6 +779,27 @@ fn start_mail_runtime_with_settings(
     admitted: AdmittedMailRuntime,
     settings: MailSettingsProfileV1,
 ) -> StartedMailRuntime {
+    start_mail_runtime_with_settings_for_human_owner(
+        supervisor,
+        store,
+        kernel_data,
+        runtime_dir,
+        admitted,
+        settings,
+        "owner-1",
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn start_mail_runtime_with_settings_for_human_owner(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    kernel_data: &Path,
+    runtime_dir: &Path,
+    admitted: AdmittedMailRuntime,
+    settings: MailSettingsProfileV1,
+    logical_human_owner_id: &str,
+) -> StartedMailRuntime {
     let reservation = managed_launch::load(supervisor, store, &admitted.registration_id)
         .expect("load Mail managed launch reservation");
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
@@ -796,7 +839,7 @@ fn start_mail_runtime_with_settings(
         runtime_artifacts: Vec::new(),
         integration_state_root: None,
         configuration_instances: Vec::new(),
-        logical_human_owner_id: "owner-1".to_owned(),
+        logical_human_owner_id: logical_human_owner_id.to_owned(),
     };
     managed_launch::start_reserved_integration(
         supervisor,

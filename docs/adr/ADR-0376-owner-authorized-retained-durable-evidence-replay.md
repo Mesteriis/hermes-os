@@ -9,8 +9,17 @@ durable delivery foundations и отдельный workflow API/core/persistence
 component/assembly contour implemented; workflow managed runtime, producer
 managed loops и development ensemble implemented. Managed happy-path gate
 подтвердил expired-retention recovery до terminal Preview через один shared SSE
-stream и client_blob; negative/restart/privacy и полный pre-push gate ещё не
-выполнены. Отдельный workflow-owned
+stream и client_blob. Managed negative/restart/privacy gate также подтверждает
+already-consumed no-op, missing producer evidence, partial success, stale
+generation, wrong human owner, реальную остановку/возврат NATS и restart
+workflow generation без выдачи private payload. Полный pre-push gate прошёл,
+включая workspace-wide clippy,
+оба nextest-профиля, dependency/supply-chain gates, frontend unit/visual tests
+и production build. Live browser проверка существующего safe attachment
+подтвердила один SSE transport и accepted Preview request, но terminal
+состояние не было достигнуто: generated frontend replay client и
+provider-neutral acquisition exact producer selection пока отсутствуют.
+Поэтому phase gate и inventory остаются `planned`. Отдельный workflow-owned
 build unit `hermes-retained-evidence-replay-protocol` реализует bounded exact
 message selection, producer registration, owner-device actor hash,
 runtime/grant fences и sanitized terminal result без subject/query/payload
@@ -64,7 +73,12 @@ integration owner. Workflow runtime/storage assembly включён отдель
 в signed development release и монотонный development module plan. Managed
 conformance доказал восстановление после фактического истечения обоих source
 subjects, два producer result, terminal Preview SSE и чтение через client_blob.
-Полный phase gate ещё не закрыт.
+Он также обнаружил и закрыл гонку premature cancellation: workflow и Mail
+больше не оборачивают bounded Event Hub pull собственным 25 ms timeout, который
+мог оставить уже назначенное сообщение unacknowledged до JetStream redelivery.
+Deadline принадлежит одному transport adapter; consumer отвечает только за
+commit-before-Ack обработку.
+Полный phase gate ещё не закрыт из-за browser replay acquisition gap.
 Никакая SQL-правка исходного publish state не считается реализацией этого
 решения.
 

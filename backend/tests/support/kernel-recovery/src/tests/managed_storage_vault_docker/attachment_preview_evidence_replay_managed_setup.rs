@@ -157,6 +157,16 @@ pub(super) fn restart_attachment_preview_evidence_replay_runtime_v1(
     runtime_dir: &Path,
     predecessor: StartedAttachmentPreviewEvidenceReplayRuntimeV1,
 ) -> StartedAttachmentPreviewEvidenceReplayRuntimeV1 {
+    let admitted =
+        reserve_attachment_preview_evidence_replay_successor_v1(supervisor, store, predecessor);
+    start_attachment_preview_evidence_replay_runtime_v1(supervisor, store, runtime_dir, admitted)
+}
+
+pub(super) fn reserve_attachment_preview_evidence_replay_successor_v1(
+    supervisor: &ManagedRuntimeSupervisor,
+    store: &SqliteControlStore,
+    predecessor: StartedAttachmentPreviewEvidenceReplayRuntimeV1,
+) -> AdmittedAttachmentPreviewEvidenceReplayRuntimeV1 {
     let binding = store
         .platform_storage_binding(
             &predecessor.registration_id,
@@ -166,7 +176,7 @@ pub(super) fn restart_attachment_preview_evidence_replay_runtime_v1(
         .expect("predecessor retained Preview evidence replay Storage binding");
     let issue = storage_successor::issue_after(&binding)
         .expect("derive retained Preview evidence replay Storage successor");
-    let (reservation, binding) = storage_successor::reserve(
+    let (_reservation, binding) = storage_successor::reserve(
         supervisor,
         store,
         &predecessor.registration_id,
@@ -176,13 +186,10 @@ pub(super) fn restart_attachment_preview_evidence_replay_runtime_v1(
     .expect("reserve retained Preview evidence replay successor");
     crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)
         .expect("provision retained Preview evidence replay successor Storage binding");
-    start_reserved_attachment_preview_evidence_replay_runtime_v1(
-        supervisor,
-        store,
-        runtime_dir,
-        reservation,
-        predecessor.capability_ids,
-    )
+    AdmittedAttachmentPreviewEvidenceReplayRuntimeV1 {
+        registration_id: predecessor.registration_id,
+        capability_ids: predecessor.capability_ids,
+    }
 }
 
 fn start_reserved_attachment_preview_evidence_replay_runtime_v1(
