@@ -2,6 +2,14 @@
 
 use std::collections::HashSet;
 
+mod envelope;
+
+pub use envelope::{
+    CommunicationsReplayCommandEnvelopeContextV1, CommunicationsReplayCommandEnvelopeErrorV1,
+    CommunicationsReplayResultEnvelopeContextV1, CommunicationsReplayResultEnvelopeErrorV1,
+    build_communications_replay_command_outbox_v1, build_communications_replay_result_outbox_v1,
+};
+
 use hermes_runtime_protocol::v1::{
     CapabilityRequestV1, ContractReferenceV1, DurableEnvelopeKindV1, EventRouteDirectionV1,
     EventRouteRequestV1, EventSubscriptionRequirementV1, capability_request_v1::Request,
@@ -21,6 +29,8 @@ pub const COMMUNICATIONS_REPLAY_DESCRIPTOR_SET_V1: &[u8] =
 
 pub const PACKAGE: &str = "hermes-communications-retained-evidence-replay-contract";
 pub const COMMUNICATIONS_REPLAY_OWNER_ID_V1: &str = "communications";
+pub const COMMUNICATIONS_REPLAY_SOURCE_MODULE_ID_V1: &str =
+    "hermes-attachment-preview-evidence-replay-runtime";
 pub const COMMUNICATIONS_REPLAY_TARGET_MODULE_ID_V1: &str = "hermes-communications-runtime";
 pub const COMMUNICATIONS_REPLAY_CAPABILITY_ID_V1: &str =
     "communications.retained-evidence-replay.v1";

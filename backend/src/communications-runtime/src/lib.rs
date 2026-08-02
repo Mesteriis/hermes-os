@@ -28,6 +28,8 @@ pub mod query_module_port;
 pub mod query_port;
 mod recipient_source;
 pub mod retained_evidence_replay;
+pub mod retained_evidence_replay_consumer;
+pub mod retained_evidence_replay_result;
 pub mod saved_search_port;
 pub mod search_access;
 pub mod search_digest;

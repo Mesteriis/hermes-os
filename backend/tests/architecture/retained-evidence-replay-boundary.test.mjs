@@ -265,3 +265,63 @@ test('replay delivery migrations are additive exact successor revisions', async 
   );
   assert.match(mailSchema, /append_mail_retained_evidence_replay_delivery_storage_v1/);
 });
+
+test('producer contracts build exact workflow commands and causal terminal results', async () => {
+  const [communications, mail] = await Promise.all([
+    read('src/communications-retained-evidence-replay-contract/src/envelope.rs'),
+    read('src/mail-retained-evidence-replay-contract/src/envelope.rs'),
+  ]);
+
+  for (const source of [communications, mail]) {
+    assert.match(source, /Semantics::Command\(CommandMetadataV1/);
+    assert.match(source, /kind: ActorKindV1::OwnerDevice/);
+    assert.match(source, /SOURCE_MODULE_ID_V1[\s\S]{0,80}\.as_bytes\(\)/);
+    assert.match(source, /target_capability: .*REPLAY_CAPABILITY_ID_V1/);
+    assert.match(source, /Semantics::Result\(ResultMetadataV1/);
+    assert.match(source, /causation_message_id: command_message_id\.to_vec\(\)/);
+    assert.match(source, /validate_envelope_v1/);
+    assert.match(source, /OutboxRecordV1::accept/);
+    assert.doesNotMatch(source, /subject|predicate|payload_bytes|map</);
+  }
+  assert.doesNotMatch(communications, /hermes_mail|mail_/);
+  assert.doesNotMatch(mail, /hermes_communications|communications_/);
+});
+
+test('producer consumers persist terminal result before Ack and retry infrastructure outage', async () => {
+  const [communicationsConsumer, communicationsRelay, mailConsumer, mailRelay] =
+    await Promise.all([
+      read('src/communications-runtime/src/retained_evidence_replay_consumer.rs'),
+      read('src/communications-runtime/src/retained_evidence_replay_result.rs'),
+      read('src/mail-runtime/src/retained_evidence_replay_consumer.rs'),
+      read('src/mail-runtime/src/retained_evidence_replay_result.rs'),
+    ]);
+
+  for (const source of [communicationsConsumer, mailConsumer]) {
+    const accept = source.indexOf('.accept_replay_command(');
+    const replay = source.indexOf('replay_retained_', accept);
+    const complete = source.indexOf('.complete_replay_command(', replay);
+    const acknowledge = source.indexOf('.acknowledge()');
+    assert.ok(accept >= 0 && replay > accept && complete > replay);
+    assert.ok(acknowledge >= 0);
+    assert.match(
+      source,
+      /let outcome = accept_[\s\S]+?\.await\?;[\s\S]+?delivery\s*\.acknowledge\(\)/,
+    );
+    assert.match(source, /DuplicateCompleted/);
+    assert.match(source, /PublishUnavailable => return None/);
+    assert.match(source, /StorageUnavailable[\s\S]{0,80}return None/);
+    assert.match(source, /ReplayRetryable/);
+    assert.match(source, /SOURCE_MODULE_ID_V1/);
+    assert.doesNotMatch(source, /UPDATE|DELETE|domain_outbox|attachment_security_outbox/);
+  }
+
+  for (const relay of [communicationsRelay, mailRelay]) {
+    assert.match(relay, /pending_replay_results\(1\)/);
+    assert.match(relay, /publish_exact\(permit, record\.exact_bytes\(\)\)/);
+    assert.ok(
+      relay.indexOf('publish_exact') < relay.indexOf('mark_replay_result_published'),
+    );
+  }
+  assert.doesNotMatch(communicationsConsumer, /hermes_mail|mail_/);
+  assert.doesNotMatch(mailConsumer, /hermes_communications|communications_/);
+});

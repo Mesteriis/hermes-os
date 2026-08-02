@@ -29,8 +29,15 @@ registration/runtime/grant fences, получают original owner-local bytes,
 исходного outbox publish state. Additive Communications revision 18 и Mail
 revision 24 добавляют раздельные owner-local command inbox и terminal result
 outbox: command ID/hash conflict проверяется до исполнения, а completed state и
-exact result bytes сохраняются атомарно. Durable command consumers, result
-relays, workflow runtime/assembly и live conformance ещё не реализованы.
+exact result bytes сохраняются атомарно. Owner-specific contract units теперь
+также строят exact workflow command и causally-bound terminal result envelopes.
+Communications и Mail имеют раздельные durable consumer components: они
+проверяют exact workflow source/capability/owner, повторно не исполняют completed
+inbox, сохраняют terminal result до Ack, а NATS/Storage outage оставляют для
+redelivery. Отдельные result relay components публикуют только сохранённые exact
+bytes и отмечают только собственный result outbox. Эти components ещё не
+подключены к runtime admission/event loops; workflow runtime/assembly и live
+conformance также не реализованы.
 Никакая SQL-правка исходного publish state не считается реализацией этого
 решения.
 

@@ -14,7 +14,8 @@ use hermes_mail_retained_evidence_replay_persistence::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailRetainedEvidenceReplayErrorV1 {
     InvalidCommand,
-    StaleFence,
+    StaleRuntimeFence,
+    StaleGrantFence,
     Persistence(RetainedMailReplayErrorV1),
     PublishUnavailable,
 }
@@ -34,9 +35,11 @@ pub async fn replay_retained_mail_evidence_v1(
         .map_err(|_| MailRetainedEvidenceReplayErrorV1::InvalidCommand)?;
     if command.producer_registration_id != current_registration_id
         || command.producer_runtime_generation != current_runtime_generation
-        || command.producer_grant_epoch != current_grant_epoch
     {
-        return Err(MailRetainedEvidenceReplayErrorV1::StaleFence);
+        return Err(MailRetainedEvidenceReplayErrorV1::StaleRuntimeFence);
+    }
+    if command.producer_grant_epoch != current_grant_epoch {
+        return Err(MailRetainedEvidenceReplayErrorV1::StaleGrantFence);
     }
     let operation_id = id16(&command.operation_id)?;
     let actor_sha256 = sha256(&command.owner_device_actor_sha256)?;

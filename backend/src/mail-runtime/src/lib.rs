@@ -16,6 +16,8 @@ pub mod gmail_oauth;
 pub mod gmail_sync_worker;
 pub mod managed;
 pub mod retained_evidence_replay;
+pub mod retained_evidence_replay_consumer;
+pub mod retained_evidence_replay_result;
 pub mod settings;
 pub mod storage_bundle;
 

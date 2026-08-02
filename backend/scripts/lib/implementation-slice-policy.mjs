@@ -3548,9 +3548,11 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_WORKSPACE_DEPENDENCY_ALLOWLIST
     { name: 'hermes-mail-retained-evidence-replay-contract', kind: 'normal' },
   ],
   'hermes-communications-retained-evidence-replay-contract': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
   'hermes-mail-retained-evidence-replay-contract': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
 };
@@ -4743,14 +4745,18 @@ const ATTACHMENT_PREVIEW_RETAINED_EVIDENCE_REPLAY_THIRD_PARTY_DEPENDENCY_ALLOWLI
   ],
   'hermes-communications-retained-evidence-replay-contract': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
   'hermes-mail-retained-evidence-replay-contract': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
   ],
 };
