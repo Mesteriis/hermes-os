@@ -1,0 +1,74 @@
+CREATE TABLE hermes_data.attachment_preview_evidence_replay_operations (
+    operation_id BYTEA PRIMARY KEY CHECK (octet_length(operation_id) = 16),
+    attachment_anchor_id BYTEA NOT NULL CHECK (octet_length(attachment_anchor_id) = 16),
+    logical_owner_id TEXT NOT NULL CHECK (length(logical_owner_id) BETWEEN 1 AND 128),
+    owner_device_actor_sha256 BYTEA NOT NULL CHECK (
+        octet_length(owner_device_actor_sha256) = 32
+    ),
+    request_fingerprint BYTEA NOT NULL CHECK (octet_length(request_fingerprint) = 32),
+    state SMALLINT NOT NULL CHECK (state BETWEEN 1 AND 5),
+    error SMALLINT NOT NULL CHECK (error BETWEEN 0 AND 5),
+    state_revision BIGINT NOT NULL CHECK (state_revision > 0),
+    accepted_at_unix_seconds BIGINT NOT NULL CHECK (accepted_at_unix_seconds > 0),
+    completed_at_unix_seconds BIGINT CHECK (
+        completed_at_unix_seconds IS NULL OR completed_at_unix_seconds > 0
+    )
+);
+
+CREATE TABLE hermes_data.attachment_preview_evidence_replay_producers (
+    operation_id BYTEA NOT NULL REFERENCES
+        hermes_data.attachment_preview_evidence_replay_operations (operation_id),
+    producer SMALLINT NOT NULL CHECK (producer BETWEEN 1 AND 2),
+    producer_registration_id TEXT NOT NULL CHECK (
+        length(producer_registration_id) BETWEEN 1 AND 128
+    ),
+    producer_runtime_generation BIGINT NOT NULL CHECK (producer_runtime_generation > 0),
+    producer_grant_epoch BIGINT NOT NULL CHECK (producer_grant_epoch > 0),
+    outcome SMALLINT NOT NULL DEFAULT 0 CHECK (outcome BETWEEN 0 AND 4),
+    failure SMALLINT NOT NULL DEFAULT 0 CHECK (failure BETWEEN 0 AND 7),
+    PRIMARY KEY (operation_id, producer)
+);
+
+CREATE TABLE hermes_data.attachment_preview_evidence_replay_message_selection (
+    operation_id BYTEA NOT NULL,
+    producer SMALLINT NOT NULL,
+    ordinal SMALLINT NOT NULL CHECK (ordinal BETWEEN 0 AND 15),
+    original_message_id BYTEA NOT NULL CHECK (octet_length(original_message_id) = 16),
+    PRIMARY KEY (operation_id, producer, ordinal),
+    UNIQUE (operation_id, producer, original_message_id),
+    FOREIGN KEY (operation_id, producer) REFERENCES
+        hermes_data.attachment_preview_evidence_replay_producers (operation_id, producer)
+);
+
+CREATE TABLE hermes_data.attachment_preview_evidence_replay_command_outbox (
+    message_id BYTEA PRIMARY KEY CHECK (octet_length(message_id) = 16),
+    envelope_sha256 BYTEA NOT NULL CHECK (octet_length(envelope_sha256) = 32),
+    exact_envelope_bytes BYTEA NOT NULL CHECK (octet_length(exact_envelope_bytes) > 0),
+    operation_id BYTEA NOT NULL,
+    producer SMALLINT NOT NULL,
+    created_at_unix_seconds BIGINT NOT NULL CHECK (created_at_unix_seconds > 0),
+    published_at_unix_seconds BIGINT CHECK (
+        published_at_unix_seconds IS NULL OR published_at_unix_seconds > 0
+    ),
+    UNIQUE (operation_id, producer),
+    FOREIGN KEY (operation_id, producer) REFERENCES
+        hermes_data.attachment_preview_evidence_replay_producers (operation_id, producer)
+);
+
+CREATE INDEX attachment_preview_evidence_replay_command_pending_idx
+ON hermes_data.attachment_preview_evidence_replay_command_outbox (
+    created_at_unix_seconds,
+    message_id
+)
+WHERE published_at_unix_seconds IS NULL;
+
+CREATE TABLE hermes_data.attachment_preview_evidence_replay_result_inbox (
+    message_id BYTEA PRIMARY KEY CHECK (octet_length(message_id) = 16),
+    envelope_sha256 BYTEA NOT NULL CHECK (octet_length(envelope_sha256) = 32),
+    operation_id BYTEA NOT NULL,
+    producer SMALLINT NOT NULL,
+    accepted_at_unix_seconds BIGINT NOT NULL CHECK (accepted_at_unix_seconds > 0),
+    UNIQUE (operation_id, producer),
+    FOREIGN KEY (operation_id, producer) REFERENCES
+        hermes_data.attachment_preview_evidence_replay_producers (operation_id, producer)
+);

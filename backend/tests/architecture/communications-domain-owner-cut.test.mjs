@@ -86,6 +86,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'ai.provider.explain.v1',
       'ai.provider.translate.v1',
       'ai.translation.request.v1',
+      'attachment-preview-evidence-replay.command.v1',
       'attachment.archive_inspection.v1',
       'attachment.preview.v1',
       'attachment.text_extraction.v1',

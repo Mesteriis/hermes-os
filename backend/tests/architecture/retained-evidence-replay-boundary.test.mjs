@@ -325,3 +325,55 @@ test('producer consumers persist terminal result before Ack and retry infrastruc
   assert.doesNotMatch(communicationsConsumer, /hermes_mail|mail_/);
   assert.doesNotMatch(mailConsumer, /hermes_communications|communications_/);
 });
+
+test('replay coordination is a separate workflow with owner-local operation storage', async () => {
+  const [api, coreManifest, persistenceManifest, migration, runtimeManifest, assemblyManifest] =
+    await Promise.all([
+      read('src/attachment-preview-evidence-replay-api/proto/hermes/attachment_preview_evidence_replay/v1/replay.proto'),
+      read('src/attachment-preview-evidence-replay-core/Cargo.toml'),
+      read('src/attachment-preview-evidence-replay-persistence/Cargo.toml'),
+      read('src/attachment-preview-evidence-replay-persistence/migrations/0001_attachment_preview_evidence_replay.sql'),
+      read('src/attachment-preview-evidence-replay-runtime/Cargo.toml'),
+      read('src/attachment-preview-evidence-replay-assembly/Cargo.toml'),
+    ]);
+
+  for (const manifest of [coreManifest, persistenceManifest, runtimeManifest, assemblyManifest]) {
+    assert.match(manifest, /role = "workflow"/);
+    assert.match(manifest, /owner = "attachment_preview_evidence_replay"/);
+    assert.doesNotMatch(manifest, /hermes-(?:communications-runtime|mail-runtime|kernel)/);
+  }
+  assert.doesNotMatch(api, /logical_owner_id|owner_device_actor|subject|predicate|payload_bytes|map</);
+  assert.match(api, /ReplayProducerSelectionV1 communications/);
+  assert.match(api, /ReplayProducerSelectionV1 mail/);
+  assert.match(migration, /attachment_preview_evidence_replay_command_outbox/);
+  assert.match(migration, /attachment_preview_evidence_replay_result_inbox/);
+  assert.doesNotMatch(migration, /communications_domain_outbox|mail_attachment_security_outbox/);
+  assert.doesNotMatch(migration, /provider|subject|payload_bytes|blob/);
+});
+
+test('workflow command and result delivery preserves exact bytes and commit-before-Ack', async () => {
+  const [client, persistence, relay, consumer, admission] = await Promise.all([
+    read('src/attachment-preview-evidence-replay-runtime/src/client_port.rs'),
+    read('src/attachment-preview-evidence-replay-persistence/src/repository.rs'),
+    read('src/attachment-preview-evidence-replay-runtime/src/outbox.rs'),
+    read('src/attachment-preview-evidence-replay-runtime/src/result_consumer.rs'),
+    read('src/attachment-preview-evidence-replay-runtime/src/admission.rs'),
+  ]);
+
+  assert.match(client, /module_request\.logical_owner_id\.clone\(\)/);
+  assert.match(client, /authenticated_device_id/);
+  assert.match(client, /build_communications_replay_command_outbox_v1/);
+  assert.match(client, /build_mail_replay_command_outbox_v1/);
+  assert.ok(client.indexOf('command_records(&request') < client.indexOf('.create_operation('));
+  assert.match(persistence, /ON CONFLICT \(operation_id\) DO NOTHING/);
+  assert.match(persistence, /FOR UPDATE/);
+  assert.match(persistence, /request_fingerprint_v1/);
+  assert.match(relay, /publish_exact\(permit, &command\.exact_envelope_bytes\)/);
+  assert.ok(relay.indexOf('publish_exact') < relay.indexOf('mark_command_published'));
+  assert.ok(consumer.indexOf('.accept_producer_result(') < consumer.indexOf('.acknowledge()'));
+  assert.match(admission, /communications_replay_command_publish_request_v1/);
+  assert.match(admission, /mail_replay_command_publish_request_v1/);
+  assert.match(admission, /communications_replay_result_consume_request_v1/);
+  assert.match(admission, /mail_replay_result_consume_request_v1/);
+  assert.doesNotMatch(persistence, /communications_domain_outbox|mail_attachment_security_outbox/);
+});

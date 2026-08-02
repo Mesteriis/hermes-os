@@ -4,8 +4,9 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: protocol, producer-local persistence, exact-byte adapters
-и durable delivery foundations implemented; gate planned.
+Состояние реализации: protocol, producer-local persistence, exact-byte adapters,
+durable delivery foundations и отдельный workflow API/core/persistence/runtime
+component/assembly contour implemented; managed gate planned.
 Диагностический browser gate Preview подтвердил, что generated Start/Get
 проходят через Core Gateway и один shared SSE stream, но source events старше
 bounded JetStream retention уже отсутствуют в broker. Отдельный workflow-owned
@@ -35,9 +36,16 @@ Communications и Mail имеют раздельные durable consumer componen
 проверяют exact workflow source/capability/owner, повторно не исполняют completed
 inbox, сохраняют terminal result до Ack, а NATS/Storage outage оставляют для
 redelivery. Отдельные result relay components публикуют только сохранённые exact
-bytes и отмечают только собственный result outbox. Эти components ещё не
-подключены к runtime admission/event loops; workflow runtime/assembly и live
-conformance также не реализованы.
+bytes и отмечают только собственный result outbox. Workflow
+`attachment_preview_evidence_replay` теперь имеет отдельные generated Start API,
+pure coordination core, owner-local PostgreSQL operation/selection/command
+outbox/result inbox, authenticated client component, два exact publisher и два
+commit-before-Ack result consumer, descriptor и unsigned release assembly.
+Client payload не принимает owner/device claims: они выводятся из
+`ModuleClientRequestV1`. Workflow storage не читает Communications или Mail SQL.
+Producer components и workflow components ещё не подключены к managed process
+event loops/dev ensemble; runtime executable пока предоставляет только export
+surface, а live conformance не выполнен.
 Никакая SQL-правка исходного publish state не считается реализацией этого
 решения.
 

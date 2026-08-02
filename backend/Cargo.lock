@@ -2012,6 +2012,67 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-attachment-preview-evidence-replay-api"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-attachment-preview-evidence-replay-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-evidence-replay-persistence",
+ "hermes-attachment-preview-evidence-replay-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hermes-attachment-preview-evidence-replay-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-evidence-replay-api",
+]
+
+[[package]]
+name = "hermes-attachment-preview-evidence-replay-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-evidence-replay-api",
+ "hermes-attachment-preview-evidence-replay-core",
+ "hermes-communications-retained-evidence-replay-contract",
+ "hermes-events-protocol",
+ "hermes-mail-retained-evidence-replay-contract",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
+name = "hermes-attachment-preview-evidence-replay-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-attachment-preview-evidence-replay-api",
+ "hermes-attachment-preview-evidence-replay-core",
+ "hermes-attachment-preview-evidence-replay-persistence",
+ "hermes-communications-retained-evidence-replay-contract",
+ "hermes-events-jetstream",
+ "hermes-mail-retained-evidence-replay-contract",
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-attachment-preview-image"
 version = "0.1.0"
 dependencies = [

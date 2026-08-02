@@ -1382,6 +1382,36 @@
         "surface": "contract"
       },
       {
+        "name": "hermes-attachment-preview-evidence-replay-api",
+        "role": "workflow",
+        "owner": "attachment_preview_evidence_replay",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-attachment-preview-evidence-replay-core",
+        "role": "workflow",
+        "owner": "attachment_preview_evidence_replay",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-attachment-preview-evidence-replay-persistence",
+        "role": "workflow",
+        "owner": "attachment_preview_evidence_replay",
+        "surface": "persistence"
+      },
+      {
+        "name": "hermes-attachment-preview-evidence-replay-runtime",
+        "role": "workflow",
+        "owner": "attachment_preview_evidence_replay",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-attachment-preview-evidence-replay-assembly",
+        "role": "workflow",
+        "owner": "attachment_preview_evidence_replay",
+        "surface": "assembly"
+      },
+      {
         "name": "hermes-communications-retained-evidence-replay-persistence",
         "role": "domain",
         "owner": "communications",
@@ -1409,6 +1439,34 @@
     "workspaceDependencyAllowlist": {
       "hermes-events-protocol": [],
       "hermes-retained-evidence-replay-protocol": [],
+      "hermes-attachment-preview-evidence-replay-api": [],
+      "hermes-attachment-preview-evidence-replay-core": [
+        { "name": "hermes-attachment-preview-evidence-replay-api", "kind": "normal" }
+      ],
+      "hermes-attachment-preview-evidence-replay-persistence": [
+        { "name": "hermes-attachment-preview-evidence-replay-api", "kind": "normal" },
+        { "name": "hermes-attachment-preview-evidence-replay-core", "kind": "normal" },
+        { "name": "hermes-communications-retained-evidence-replay-contract", "kind": "normal" },
+        { "name": "hermes-events-protocol", "kind": "normal" },
+        { "name": "hermes-mail-retained-evidence-replay-contract", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
+      "hermes-attachment-preview-evidence-replay-runtime": [
+        { "name": "hermes-attachment-preview-evidence-replay-api", "kind": "normal" },
+        { "name": "hermes-attachment-preview-evidence-replay-core", "kind": "normal" },
+        { "name": "hermes-attachment-preview-evidence-replay-persistence", "kind": "normal" },
+        { "name": "hermes-communications-retained-evidence-replay-contract", "kind": "normal" },
+        { "name": "hermes-events-jetstream", "kind": "normal" },
+        { "name": "hermes-mail-retained-evidence-replay-contract", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" }
+      ],
+      "hermes-attachment-preview-evidence-replay-assembly": [
+        { "name": "hermes-attachment-preview-evidence-replay-persistence", "kind": "normal" },
+        { "name": "hermes-attachment-preview-evidence-replay-runtime", "kind": "normal" },
+        { "name": "hermes-runtime-protocol", "kind": "normal" },
+        { "name": "hermes-storage-protocol", "kind": "normal" }
+      ],
       "hermes-communications-retained-evidence-replay-persistence": [
         {
           "name": "hermes-communications-attachment-contract",
@@ -4182,6 +4240,27 @@
         { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
         { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
         { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-attachment-preview-evidence-replay-api": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "prost-build", "kind": "build", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "protoc-bin-vendored", "kind": "build", "source": "crates_io", "version": "=3.2.0", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "build", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-attachment-preview-evidence-replay-core": [],
+      "hermes-attachment-preview-evidence-replay-persistence": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] },
+        { "name": "sqlx", "kind": "normal", "source": "crates_io", "version": "=0.9.0", "defaultFeatures": false, "features": ["postgres", "runtime-tokio", "tls-rustls-ring"] }
+      ],
+      "hermes-attachment-preview-evidence-replay-runtime": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "sha2", "kind": "normal", "source": "crates_io", "version": "=0.11.0", "defaultFeatures": false, "features": [] }
+      ],
+      "hermes-attachment-preview-evidence-replay-assembly": [
+        { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
+        { "name": "serde", "kind": "normal", "source": "crates_io", "version": "=1.0.228", "defaultFeatures": false, "features": ["derive", "std"] },
+        { "name": "serde_json", "kind": "normal", "source": "crates_io", "version": "=1.0.150", "defaultFeatures": true, "features": [] }
       ],
       "hermes-communications-retained-evidence-replay-persistence": [
         { "name": "prost", "kind": "normal", "source": "crates_io", "version": "=0.14.4", "defaultFeatures": true, "features": [] },
@@ -9620,6 +9699,26 @@
         "primaryKind": "lib",
         "customBuildAllowed": true
       },
+      "hermes-attachment-preview-evidence-replay-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-attachment-preview-evidence-replay-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-evidence-replay-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-evidence-replay-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-attachment-preview-evidence-replay-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
       "hermes-communications-retained-evidence-replay-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -10578,6 +10677,7 @@
         "ai.provider.explain.v1",
         "ai.provider.translate.v1",
         "ai.translation.request.v1",
+        "attachment-preview-evidence-replay.command.v1",
         "attachment.archive_inspection.v1",
         "attachment.preview.v1",
         "attachment.text_extraction.v1",

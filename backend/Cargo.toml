@@ -2,6 +2,11 @@
 members = [
   "src/platform/events",
   "src/attachment-preview-evidence-replay-protocol",
+  "src/attachment-preview-evidence-replay-api",
+  "src/attachment-preview-evidence-replay-core",
+  "src/attachment-preview-evidence-replay-persistence",
+  "src/attachment-preview-evidence-replay-runtime",
+  "src/attachment-preview-evidence-replay-assembly",
   "src/platform/events/jetstream",
   "src/platform/events/authority",
   "src/platform/events/authority/runtime",
