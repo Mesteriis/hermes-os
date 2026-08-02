@@ -66,7 +66,11 @@ custody proof после замены source grant epoch, exact source-receipt m
 закрытый enum runtime diagnostic stages, bounded sanitized reason codes без
 `Debug` исходной ошибки, metadata-only client errors/SSE, identifier-only
 managed readiness, отсутствие owner health endpoint и отсутствие telemetry
-capability/signal у Preview. Browser evidence ещё не реализовано.
+capability/signal у Preview. Authenticated managed Gateway gate теперь также
+доказывает exact same-origin SSE continuation через browser-defined
+`Last-Event-ID`: после известного cursor возвращается новый terminal Preview
+event без повтора старого cursor или private source bytes. Generated browser
+workflow adapter и live browser evidence ещё не реализованы.
 Inventory gate `attachment_preview_v1` остаётся `planned`.
 
 Зависит от:

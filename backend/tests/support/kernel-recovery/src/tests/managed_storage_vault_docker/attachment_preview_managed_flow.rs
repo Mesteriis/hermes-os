@@ -5,8 +5,8 @@ use super::{
     attachment_preview_gateway_fixture::{
         AttachmentPreviewGateway, attachment_preview_gateway_v1, get_attachment_preview_v1,
         post_attachment_preview_proto_status_v1, post_attachment_preview_proto_v1,
-        read_attachment_preview_blob_v1, read_terminal_attachment_preview_sse_event_v1,
-        wait_for_ready_attachment_preview_v1,
+        read_attachment_preview_blob_v1, read_terminal_attachment_preview_sse_event_after_v1,
+        read_terminal_attachment_preview_sse_event_v1, wait_for_ready_attachment_preview_v1,
     },
     attachment_preview_managed_formats::assert_managed_attachment_preview_formats_v1,
     attachment_preview_persistence_fixture::{
@@ -752,6 +752,27 @@ fn managed_attachment_preview_reaches_gateway_blob_sse_and_replays_after_restart
         &restarted_cookie,
         &post_restart.run_id,
         "post-restart Vault outage",
+    );
+    let continued_event = read_terminal_attachment_preview_sse_event_after_v1(
+        &restarted_router,
+        &gateway_runtime,
+        &restarted_cookie,
+        Some(&first_cursor),
+        &post_restart.run_id,
+    );
+    assert_ne!(continued_event.cursor, first_cursor);
+    let continued_payload =
+        AttachmentPreviewStatusChangedV1::decode(continued_event.payload.as_slice())
+            .expect("continued Attachment Preview realtime payload");
+    assert_eq!(continued_payload.run_id, post_restart.run_id);
+    assert_eq!(
+        continued_payload.state,
+        AttachmentPreviewStateV1::Ready as i32
+    );
+    assert_private_preview_source_absent_v1(
+        &continued_event.encode_to_vec(),
+        PRIVATE_SOURCE,
+        "Last-Event-ID continuation",
     );
     let vault_outage_ticket = issue_attachment_preview_ticket_v1(
         &restarted_router,

@@ -36,14 +36,14 @@ test('attachment preview is a planned workflow and not a Communications facade',
     state: 'planned',
     dependsOn: ['blob_v1', 'attachment_security_engine_v1'],
   });
-  assert.equal(policy.implementation.currentSlice, 'attachment_preview_privacy_fences_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_preview_sse_cursor_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_preview'));
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment.preview.v1',
   ));
   assert.match(adr, /Состояние реализации: managed multi-format Gateway\/client Blob\/SSE slice/);
   assert.match(adr, /Следующий managed\s+authority gate[\s\S]*source-receipt mismatch/);
-  assert.match(adr, /Privacy-negative gate[\s\S]*Browser evidence ещё не реализовано/);
+  assert.match(adr, /Privacy-negative gate[\s\S]*Last-Event-ID[\s\S]*live browser evidence ещё не реализованы/);
   assert.match(rendererAdmissionAdr, /availability является admission invariant/);
   assert.match(rendererAdmissionAdr, /environment test hook или fake outage не вводятся/);
   assert.match(adr, /Workflow не вызывает Communications или Attachment Security RPC/);
@@ -541,10 +541,17 @@ test('development release builds and signs the exact Preview assembly fragment',
 });
 
 test('Preview has an authenticated exact signed managed admission gate', async () => {
-  const [setup, flow, formats, persistence, harness] = await Promise.all([
+  const [setup, gateway, flow, formats, persistence, harness] = await Promise.all([
     readFile(
       new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_managed_setup.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_gateway_fixture.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -593,6 +600,11 @@ test('Preview has an authenticated exact signed managed admission gate', async (
   assert.match(flow, /mismatched Preview source receipt/);
   assert.match(flow, /Blob outage/);
   assert.match(flow, /Vault outage/);
+  assert.match(flow, /read_terminal_attachment_preview_sse_event_after_v1/);
+  assert.match(gateway, /header\("last-event-id", after_cursor\)/);
+  assert.match(flow, /Some\(&first_cursor\)/);
+  assert.match(flow, /assert_ne!\(continued_event\.cursor, first_cursor\)/);
+  assert.match(flow, /Last-Event-ID continuation/);
   assert.match(formats, /preview-bad-pdf/);
   assert.match(formats, /preview-active-pdf/);
   assert.match(formats, /preview-bad-png/);

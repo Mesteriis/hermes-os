@@ -7126,7 +7126,7 @@ function expectedSlice(currentSlice) {
     || currentSlice === 'attachment_preview_failure_boundaries_v1'
     || currentSlice === 'attachment_preview_stale_outage_input_boundaries_v1'
     || currentSlice === 'attachment_preview_job_authority_fences_v1'
-    || currentSlice === 'attachment_preview_privacy_fences_v1'
+    || currentSlice === 'attachment_preview_sse_cursor_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

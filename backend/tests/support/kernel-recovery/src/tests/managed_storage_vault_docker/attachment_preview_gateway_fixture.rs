@@ -231,12 +231,26 @@ pub(super) fn read_terminal_attachment_preview_sse_event_v1(
     cookie: &str,
     run_id: &[u8],
 ) -> ClientRealtimeEventV1 {
+    read_terminal_attachment_preview_sse_event_after_v1(router, runtime, cookie, None, run_id)
+}
+
+pub(super) fn read_terminal_attachment_preview_sse_event_after_v1(
+    router: &AttachmentPreviewGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    after_cursor: Option<&str>,
+    run_id: &[u8],
+) -> ClientRealtimeEventV1 {
+    let mut request = Request::builder()
+        .method("GET")
+        .uri("/api/realtime/v1/events")
+        .header("cookie", cookie);
+    if let Some(after_cursor) = after_cursor {
+        request = request.header("last-event-id", after_cursor);
+    }
     let response = runtime.block_on(
         router.route(
-            Request::builder()
-                .method("GET")
-                .uri("/api/realtime/v1/events")
-                .header("cookie", cookie)
+            request
                 .body(http_body_util::Full::new(Bytes::new()))
                 .expect("Attachment Preview Gateway SSE request"),
         ),

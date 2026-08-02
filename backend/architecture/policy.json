@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_preview_privacy_fences_v1",
+    "currentSlice": "attachment_preview_sse_cursor_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
