@@ -4,10 +4,11 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: static execution slice implemented. Отдельные provider
-units, typed Settings/OAuth authority, Mail-owned persistence, exact command
-consumer, target-bound Blob custody/read, Google People create/update, iCloud
-read-only rejection и exact terminal outbox подключены к Mail managed runtime.
+Состояние реализации: static execution slice implemented. Reverse upsert и
+provider-to-Contacts pagination имеют отдельные consumers/workers, provider
+units, typed Settings/OAuth authority, Mail-owned atomic inbox/outbox, opaque
+cursors и exact terminal events. Target-bound Blob custody/read, Google People
+create/update и iCloud read-only rejection подключены к Mail managed runtime.
 Target custody receipt сохраняется в Mail-owned PostgreSQL до Blob read и
 provider dispatch; disposable PostgreSQL conformance доказывает restart replay,
 идемпотентную запись и conflict rejection. Managed Blob/provider/browser

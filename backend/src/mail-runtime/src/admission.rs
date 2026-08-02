@@ -179,6 +179,10 @@ fn mail_address_book_provider_capability_v1() -> CapabilityDescriptorV1 {
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Optional as i32,
         requests: vec![
+            MailAddressBookContractV1::FetchPageCommand.consume_request(),
+            MailAddressBookContractV1::EntryObserved.publish_request(),
+            MailAddressBookContractV1::PageCompleted.publish_request(),
+            MailAddressBookContractV1::PageRejected.publish_request(),
             MailAddressBookContractV1::UpsertEntryCommand.consume_request(),
             MailAddressBookContractV1::EntryUpserted.publish_request(),
             MailAddressBookContractV1::EntryUpsertRejected.publish_request(),
@@ -619,7 +623,7 @@ mod tests {
             .find(|capability| capability.capability_id == MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1)
             .expect("Mail address-book provider capability");
         assert_eq!(address_book.provides, []);
-        assert_eq!(address_book.requests.len(), 3);
+        assert_eq!(address_book.requests.len(), 7);
         assert!(
             address_book
                 .requests

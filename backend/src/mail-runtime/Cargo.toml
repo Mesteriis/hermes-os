@@ -16,6 +16,7 @@ path = "src/lib.rs"
 default = []
 conformance-test-support = [
     "hermes-mail-api/conformance-test-support",
+    "hermes-mail-carddav/conformance-test-support",
     "hermes-mail-gmail/conformance-test-support",
     "hermes-mail-google-people/conformance-test-support",
     "hermes-mail-imap/conformance-test-support",
@@ -36,6 +37,7 @@ hermes-mail-persistence = { path = "../mail-persistence" }
 hermes-mail-address-book-contract = { path = "../mail-address-book-contract" }
 hermes-mail-address-book-persistence = { path = "../mail-address-book-persistence" }
 hermes-mail-google-people = { path = "../mail-google-people" }
+hermes-mail-carddav = { path = "../mail-carddav" }
 hermes-contacts-mail-sync-source-api = { path = "../contacts-mail-sync-source-api" }
 hermes-mail-delivery-intent-contract = { path = "../mail-delivery-intent-contract" }
 hermes-attachment-security-contract = { path = "../attachment-security-contract" }

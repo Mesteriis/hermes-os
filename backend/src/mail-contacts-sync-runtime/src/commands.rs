@@ -35,6 +35,7 @@ pub(crate) fn build_initial_fetch_command_v1(
             run_id: run_id.to_vec(),
             logical_owner_id: context.logical_owner_id.clone(),
             account_id: account_id.to_owned(),
+            page_sequence: 1,
             continuation_cursor: None,
             page_size: MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1,
         },

@@ -80,12 +80,20 @@ const files = {
     'src/mail-address-book-persistence/migrations/0002_snapshot_custody.sql',
     BACKEND_ROOT,
   ),
+  mailPersistenceProviderPageMigration: new URL(
+    'src/mail-address-book-persistence/migrations/0003_provider_page.sql',
+    BACKEND_ROOT,
+  ),
   mailPersistenceCustody: new URL(
     'src/mail-address-book-persistence/src/custody.rs',
     BACKEND_ROOT,
   ),
   mailPersistenceDelivery: new URL(
     'src/mail-address-book-persistence/src/delivery.rs',
+    BACKEND_ROOT,
+  ),
+  mailPersistenceFetchDelivery: new URL(
+    'src/mail-address-book-persistence/src/fetch_delivery.rs',
     BACKEND_ROOT,
   ),
   mailPersistenceSchema: new URL(
@@ -106,6 +114,10 @@ const files = {
   ),
   mailRuntimeAddressBookWorker: new URL(
     'src/mail-runtime/src/address_book_worker.rs',
+    BACKEND_ROOT,
+  ),
+  mailRuntimeAddressBookFetchWorker: new URL(
+    'src/mail-runtime/src/address_book_fetch_worker.rs',
     BACKEND_ROOT,
   ),
   mailRuntimeAddressBookOutbox: new URL(
@@ -208,7 +220,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_runtime_execution_v1',
+    'mail_address_book_provider_pagination_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -319,8 +331,10 @@ test('Mail owns address-book persistence settings and credential authority witho
     manifest,
     migration,
     custodyMigration,
+    providerPageMigration,
     custody,
     delivery,
+    fetchDelivery,
     schema,
     settings,
     storageBundle,
@@ -332,8 +346,10 @@ test('Mail owns address-book persistence settings and credential authority witho
     readFile(files.mailPersistenceManifest, 'utf8'),
     readFile(files.mailPersistenceMigration, 'utf8'),
     readFile(files.mailPersistenceCustodyMigration, 'utf8'),
+    readFile(files.mailPersistenceProviderPageMigration, 'utf8'),
     readFile(files.mailPersistenceCustody, 'utf8'),
     readFile(files.mailPersistenceDelivery, 'utf8'),
+    readFile(files.mailPersistenceFetchDelivery, 'utf8'),
     readFile(files.mailPersistenceSchema, 'utf8'),
     readFile(files.mailRuntimeSettings, 'utf8'),
     readFile(files.mailRuntimeStorageBundle, 'utf8'),
@@ -357,7 +373,7 @@ test('Mail owns address-book persistence settings and credential authority witho
   assert.match(manifest, /owner = "mail"/);
   assert.match(manifest, /surface = "persistence"/);
   assert.doesNotMatch(manifest, /hermes-contacts|hermes-mail-contacts-sync/);
-  assert.match(schema, /MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 27/);
+  assert.match(schema, /MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 28/);
   assert.match(storageBundle, /append_mail_address_book_storage_v1/);
   assert.match(migration, /mail_address_book_upsert_inbox/);
   assert.match(migration, /mail_address_book_upsert_result_outbox/);
@@ -366,8 +382,16 @@ test('Mail owns address-book persistence settings and credential authority witho
   assert.match(custodyMigration, /mail_address_book_target_snapshot_receipt_complete/);
   assert.match(custody, /record_target_snapshot_receipt/);
   assert.match(custody, /AlreadyRecorded/);
+  assert.match(providerPageMigration, /mail_address_book_fetch_inbox/);
+  assert.match(providerPageMigration, /mail_address_book_fetch_outbox/);
+  assert.match(providerPageMigration, /UNIQUE \(command_message_id, command_id\)/);
+  assert.match(fetchDelivery, /accept_fetch_command/);
+  assert.match(fetchDelivery, /complete_fetch_command/);
+  assert.match(fetchDelivery, /pending_fetch_events/);
+  assert.match(fetchDelivery, /FOR UPDATE/);
   assert.doesNotMatch(migration, /CREATE TABLE hermes_data\.contacts_/);
   assert.doesNotMatch(custodyMigration, /hermes_data\.contacts_/);
+  assert.doesNotMatch(providerPageMigration, /hermes_data\.contacts_/);
   assert.doesNotMatch(migration, /mail_contacts_sync_/);
   assert.match(delivery, /mark_dispatch_started/);
   assert.match(delivery, /uncertain_upserts/);
@@ -439,12 +463,38 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(outbox, /mark_result_published/);
   assert.match(managed, /address_book_upsert_subscribe_permit/);
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
-  assert.equal(policy.implementation.currentSlice, 'mail_address_book_runtime_execution_v1');
+  assert.equal(policy.implementation.currentSlice, 'mail_address_book_provider_pagination_v1');
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(
       'mail.address-book.contact-source.blob.v1',
     ),
   );
+});
+
+test('Mail runtime paginates provider address books behind typed event-only commands', async () => {
+  const [consumer, worker, outbox, managed, main, admission] = await Promise.all([
+    readFile(files.mailRuntimeAddressBookConsumer, 'utf8'),
+    readFile(files.mailRuntimeAddressBookFetchWorker, 'utf8'),
+    readFile(files.mailRuntimeAddressBookOutbox, 'utf8'),
+    readFile(files.mailRuntimeManaged, 'utf8'),
+    readFile(files.mailRuntimeMain, 'utf8'),
+    readFile(files.mailRuntimeAdmission, 'utf8'),
+  ]);
+  assert.match(consumer, /consume_next_mail_address_book_fetch_v1/);
+  assert.match(consumer, /accept_fetch_command/);
+  assert.match(worker, /GooglePeopleClientV1/);
+  assert.match(worker, /CardDavClientV1/);
+  assert.match(worker, /complete_fetch_command/);
+  assert.match(worker, /GOOGLE_CURSOR_PREFIX/);
+  assert.match(worker, /CARDDAV_CURSOR_PREFIX/);
+  assert.doesNotMatch(worker, /hermes_contacts|mail_contacts_sync/);
+  assert.match(outbox, /pending_fetch_events/);
+  assert.match(managed, /address_book_fetch_subscribe_permit/);
+  assert.match(main, /process_next_mail_address_book_fetch_v1/);
+  assert.match(admission, /FetchPageCommand\.consume_request/);
+  assert.match(admission, /EntryObserved\.publish_request/);
+  assert.match(admission, /PageCompleted\.publish_request/);
+  assert.match(admission, /PageRejected\.publish_request/);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

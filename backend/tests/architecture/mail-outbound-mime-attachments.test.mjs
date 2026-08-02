@@ -106,6 +106,7 @@ const MAIL_CARGO_FEATURES = {
     default: [],
     'conformance-test-support': [
       'hermes-mail-api/conformance-test-support',
+      'hermes-mail-carddav/conformance-test-support',
       'hermes-mail-gmail/conformance-test-support',
       'hermes-mail-google-people/conformance-test-support',
       'hermes-mail-imap/conformance-test-support',
@@ -131,7 +132,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_runtime_execution_v1',
+    'mail_address_book_provider_pagination_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',

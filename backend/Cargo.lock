@@ -4327,9 +4327,11 @@ dependencies = [
 name = "hermes-mail-contacts-sync-testkit"
 version = "0.1.0"
 dependencies = [
+ "hermes-mail-address-book-contract",
  "hermes-mail-address-book-persistence",
  "hermes-mail-contacts-sync-core",
  "hermes-mail-contacts-sync-persistence",
+ "prost-types 0.14.4",
  "sha2 0.11.0",
  "tokio",
 ]
@@ -4446,6 +4448,7 @@ dependencies = [
  "hermes-mail-address-book-contract",
  "hermes-mail-address-book-persistence",
  "hermes-mail-api",
+ "hermes-mail-carddav",
  "hermes-mail-core",
  "hermes-mail-delivery-intent-contract",
  "hermes-mail-gmail",

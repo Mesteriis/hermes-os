@@ -180,7 +180,7 @@ test('summary runtime and assembly expose only exact event request and release b
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_runtime_execution_v1',
+    'mail_address_book_provider_pagination_v1',
   );
   assert.deepEqual(
     policy.implementation.productionPackages

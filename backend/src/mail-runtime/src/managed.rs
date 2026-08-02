@@ -72,7 +72,8 @@ use crate::account_lifecycle::{
     MailAccountLifecycleCoordinatorV1, MailAccountLifecycleRuntimeErrorV1,
 };
 use crate::address_book_consumer::{
-    MailAddressBookConsumeErrorV1, consume_next_mail_address_book_upsert_v1,
+    MailAddressBookConsumeErrorV1, consume_next_mail_address_book_fetch_v1,
+    consume_next_mail_address_book_upsert_v1,
 };
 use crate::address_book_outbox::{
     MailAddressBookOutboxRelayErrorV1, relay_mail_address_book_outbox_once_v1,
@@ -229,6 +230,7 @@ pub struct MailAdmittedRuntime {
     attachment_anchor_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     attachment_safety_subscribe_permit: Option<RuntimeSubscribePermitV1>,
     delivery_intent_subscribe_permit: RuntimeSubscribePermitV1,
+    address_book_fetch_subscribe_permit: RuntimeSubscribePermitV1,
     address_book_upsert_subscribe_permit: RuntimeSubscribePermitV1,
     pub(crate) address_book_persistence:
         hermes_mail_address_book_persistence::MailAddressBookPersistenceV1,
@@ -732,6 +734,7 @@ pub async fn open_admitted_runtime_catalog(
         attachment_anchor_subscribe_permit: subscribe_permits.anchor,
         attachment_safety_subscribe_permit: subscribe_permits.safety,
         delivery_intent_subscribe_permit: subscribe_permits.delivery_intent,
+        address_book_fetch_subscribe_permit: subscribe_permits.address_book_fetch,
         address_book_upsert_subscribe_permit: subscribe_permits.address_book_upsert,
         address_book_persistence,
         replay_command_subscribe_permit: subscribe_permits.replay_command,
@@ -757,6 +760,12 @@ pub async fn open_admitted_runtime_catalog(
 }
 
 impl MailAdmittedRuntime {
+    pub(crate) fn carddav_credentials(&self) -> Option<(&str, &str)> {
+        let username = self.address_book.carddav_username.as_deref()?;
+        let password = std::str::from_utf8(self.carddav_password.as_deref()?).ok()?;
+        Some((username, password))
+    }
+
     #[must_use]
     pub fn connection_ids(&self) -> Vec<String> {
         let mut connection_ids = self.parked_accounts.keys().cloned().collect::<Vec<_>>();
@@ -2430,6 +2439,26 @@ impl MailAdmittedRuntime {
         })
     }
 
+    pub async fn try_consume_address_book_fetch(
+        &self,
+        consumed_at_unix_seconds: i64,
+    ) -> Result<bool, MailAddressBookConsumeErrorV1> {
+        consume_next_mail_address_book_fetch_v1(
+            &self.address_book_persistence,
+            &self.event_connection,
+            &self.address_book_fetch_subscribe_permit,
+            &self.logical_owner_id,
+            consumed_at_unix_seconds,
+        )
+        .await
+        .map(|outcome| {
+            matches!(
+                outcome,
+                hermes_mail_address_book_persistence::MailAddressBookFetchInboxOutcomeV1::Accepted
+            )
+        })
+    }
+
     pub async fn relay_address_book_outbox(
         &self,
         published_at_unix_seconds: i64,
@@ -3947,6 +3976,7 @@ struct MailEventSubscribePermitsV1 {
     anchor: Option<RuntimeSubscribePermitV1>,
     safety: Option<RuntimeSubscribePermitV1>,
     delivery_intent: RuntimeSubscribePermitV1,
+    address_book_fetch: RuntimeSubscribePermitV1,
     address_book_upsert: RuntimeSubscribePermitV1,
     replay_command: RuntimeSubscribePermitV1,
 }
@@ -3964,11 +3994,14 @@ fn bind_event_subscribe_permits(
     let expected_address_book_upsert =
         hermes_mail_address_book_contract::MailAddressBookContractV1::UpsertEntryCommand
             .reference();
+    let expected_address_book_fetch =
+        hermes_mail_address_book_contract::MailAddressBookContractV1::FetchPageCommand.reference();
     let mut anchor = None;
     let mut safety = None;
     let mut delivery_intent = None;
     let mut replay_command = None;
     let mut address_book_upsert = None;
+    let mut address_book_fetch = None;
     for permit in permits {
         let Some(contract) = permit.contract() else {
             return Err(MailBootstrapError::EventHub);
@@ -3993,6 +4026,10 @@ fn bind_event_subscribe_permits(
             if address_book_upsert.replace(permit).is_some() {
                 return Err(MailBootstrapError::EventHub);
             }
+        } else if exact_runtime_contract(contract, &expected_address_book_fetch) {
+            if address_book_fetch.replace(permit).is_some() {
+                return Err(MailBootstrapError::EventHub);
+            }
         } else {
             return Err(MailBootstrapError::EventHub);
         }
@@ -4001,6 +4038,7 @@ fn bind_event_subscribe_permits(
         anchor,
         safety,
         delivery_intent: delivery_intent.ok_or(MailBootstrapError::EventHub)?,
+        address_book_fetch: address_book_fetch.ok_or(MailBootstrapError::EventHub)?,
         address_book_upsert: address_book_upsert.ok_or(MailBootstrapError::EventHub)?,
         replay_command: replay_command.ok_or(MailBootstrapError::EventHub)?,
     })

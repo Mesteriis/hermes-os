@@ -50,6 +50,7 @@ pub async fn advance_ready_page_v1(
                 run_id: run_id.to_vec(),
                 logical_owner_id: runtime.logical_owner_id.clone(),
                 account_id: run.draft.account_id,
+                page_sequence: next_page_sequence,
                 continuation_cursor: Some(cursor),
                 page_size: MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1,
             },

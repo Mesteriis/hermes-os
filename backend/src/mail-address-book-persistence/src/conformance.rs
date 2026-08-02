@@ -8,8 +8,8 @@ use sqlx::{
 };
 
 use crate::{
-    MAIL_ADDRESS_BOOK_CUSTODY_SCHEMA_V1, MAIL_ADDRESS_BOOK_SCHEMA_V1,
-    MailAddressBookPersistenceErrorV1, MailAddressBookPersistenceV1,
+    MAIL_ADDRESS_BOOK_CUSTODY_SCHEMA_V1, MAIL_ADDRESS_BOOK_PROVIDER_PAGE_SCHEMA_V1,
+    MAIL_ADDRESS_BOOK_SCHEMA_V1, MailAddressBookPersistenceErrorV1, MailAddressBookPersistenceV1,
 };
 
 pub struct MailAddressBookPersistenceConformanceV1;
@@ -56,6 +56,7 @@ impl MailAddressBookPersistenceConformanceV1 {
         for migration in [
             MAIL_ADDRESS_BOOK_SCHEMA_V1,
             MAIL_ADDRESS_BOOK_CUSTODY_SCHEMA_V1,
+            MAIL_ADDRESS_BOOK_PROVIDER_PAGE_SCHEMA_V1,
         ] {
             let sql = std::str::from_utf8(migration)
                 .map_err(|_| MailAddressBookPersistenceErrorV1::InvalidInput)?;

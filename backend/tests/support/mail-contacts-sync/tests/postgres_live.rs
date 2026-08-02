@@ -1,8 +1,18 @@
+use hermes_mail_address_book_contract::{
+    MAIL_RUNTIME_MODULE_ID_V1, MailAddressBookEnvelopeContextV1,
+    MailAddressBookResultEnvelopeContextV1, build_mail_address_book_entry_observed_v1,
+    build_mail_address_book_page_completed_result_v1,
+    wire::{
+        MailAddressBookEntryObservedV1, MailAddressBookPageCompletedV1,
+        MailAddressBookProviderKindV1,
+    },
+};
 use hermes_mail_address_book_persistence::{
     MailAddressBookCommandInboxOutcomeV1, MailAddressBookDispatchOutcomeV1,
-    MailAddressBookPersistenceConformanceV1, MailAddressBookPersistenceErrorV1,
-    MailAddressBookSnapshotCustodyOutcomeV1, MailAddressBookTargetSnapshotReceiptV1,
-    MailAddressBookUpsertAdmissionV1,
+    MailAddressBookFetchAdmissionV1, MailAddressBookFetchInboxOutcomeV1,
+    MailAddressBookFetchStoreOutcomeV1, MailAddressBookPersistenceConformanceV1,
+    MailAddressBookPersistenceErrorV1, MailAddressBookSnapshotCustodyOutcomeV1,
+    MailAddressBookTargetSnapshotReceiptV1, MailAddressBookUpsertAdmissionV1,
 };
 use hermes_mail_contacts_sync_core::{
     MailContactsSyncDirectionV1, MailContactsSyncDraftV1, MailContactsSyncStateV1,
@@ -17,6 +27,133 @@ use hermes_mail_contacts_sync_persistence::{
     MailContactsSyncPersistenceErrorV1, MailContactsSyncPersistenceOutcomeV1, OutboxEnvelopeV1,
 };
 use sha2::{Digest, Sha256};
+
+#[tokio::test]
+#[ignore = "requires the disposable authenticated PostgreSQL contour"]
+async fn address_book_provider_page_is_atomic_replayable_and_conflict_checked() {
+    let database_url = std::env::var("HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL")
+        .expect("HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL");
+    let persistence = MailAddressBookPersistenceConformanceV1::connect_url(&database_url)
+        .await
+        .expect("connect Mail address-book persistence");
+    MailAddressBookPersistenceConformanceV1::install_schema(&persistence)
+        .await
+        .expect("install Mail address-book schema");
+    let admission = MailAddressBookFetchAdmissionV1 {
+        command_message_id: [1; 16],
+        command_envelope_sha256: [2; 32],
+        command_id: [1; 16],
+        run_id: [3; 16],
+        logical_owner_id: "owner-1".to_owned(),
+        account_id: "mail-account-1".to_owned(),
+        page_sequence: 2,
+        continuation_cursor: Some(b"google-page-v1\0page-2".to_vec()),
+        page_size: 50,
+    };
+    assert_eq!(
+        persistence
+            .accept_fetch_command(&admission, 1_800_000_000)
+            .await
+            .expect("accept fetch command"),
+        MailAddressBookFetchInboxOutcomeV1::Accepted
+    );
+    assert_eq!(
+        persistence
+            .accept_fetch_command(&admission, 1_800_000_001)
+            .await
+            .expect("replay fetch command"),
+        MailAddressBookFetchInboxOutcomeV1::DuplicateAccepted
+    );
+    assert_eq!(
+        persistence.pending_fetches(1).await.expect("pending fetch")[0].admission,
+        admission
+    );
+    let event_context = MailAddressBookEnvelopeContextV1 {
+        module_id: MAIL_RUNTIME_MODULE_ID_V1.to_owned(),
+        runtime_instance_id: "mail-runtime-1".to_owned(),
+        runtime_generation: 7,
+        recorded_at_unix_seconds: 1_800_000_002,
+        recorded_at_nanos: 0,
+    };
+    let observation = build_mail_address_book_entry_observed_v1(
+        admission.command_message_id,
+        MailAddressBookEntryObservedV1 {
+            observation_id: vec![4; 16],
+            run_id: admission.run_id.to_vec(),
+            logical_owner_id: admission.logical_owner_id.clone(),
+            account_id: admission.account_id.clone(),
+            provider_kind: MailAddressBookProviderKindV1::MailAddressBookProviderKindGooglePeople
+                as i32,
+            provider_entry_id: "people/1".to_owned(),
+            provider_etag: Some("etag-1".to_owned()),
+            display_name: "Ada".to_owned(),
+            email_addresses: vec!["ada@example.test".to_owned()],
+            phone_numbers: Vec::new(),
+            observed_at: Some(prost_types::Timestamp {
+                seconds: 1_800_000_002,
+                nanos: 0,
+            }),
+            source_revision: 5,
+            entry_digest: vec![6; 32],
+            page_sequence: admission.page_sequence,
+        },
+        &event_context,
+    )
+    .expect("observation");
+    let completed = build_mail_address_book_page_completed_result_v1(
+        admission.command_message_id,
+        MailAddressBookPageCompletedV1 {
+            command_id: admission.command_id.to_vec(),
+            run_id: admission.run_id.to_vec(),
+            page_sequence: admission.page_sequence,
+            observed_entries: 1,
+            next_continuation_cursor: None,
+        },
+        &MailAddressBookResultEnvelopeContextV1 {
+            runtime_instance_id: "mail-runtime-1".to_owned(),
+            runtime_generation: 7,
+            completed_at_unix_seconds: 1_800_000_003,
+            completed_at_nanos: 0,
+            execution_attempt: 1,
+        },
+    )
+    .expect("completed result");
+    let records = vec![observation, completed];
+    assert_eq!(
+        persistence
+            .complete_fetch_command(admission.command_id, &records, 1_800_000_003)
+            .await
+            .expect("complete fetch"),
+        MailAddressBookFetchStoreOutcomeV1::Stored
+    );
+    assert_eq!(
+        persistence
+            .complete_fetch_command(admission.command_id, &records, 1_800_000_004)
+            .await
+            .expect("replay complete fetch"),
+        MailAddressBookFetchStoreOutcomeV1::AlreadyStored
+    );
+    let pending = persistence
+        .pending_fetch_events(10)
+        .await
+        .expect("pending page events");
+    assert_eq!(pending, records);
+    for record in &pending {
+        assert!(
+            persistence
+                .mark_fetch_event_published(*record.message_id(), 1_800_000_005)
+                .await
+                .expect("mark page event published")
+        );
+    }
+    assert!(
+        persistence
+            .pending_fetch_events(10)
+            .await
+            .expect("empty page outbox")
+            .is_empty()
+    );
+}
 
 #[tokio::test]
 #[ignore = "requires the disposable authenticated PostgreSQL contour"]

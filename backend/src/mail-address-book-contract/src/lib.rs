@@ -5,8 +5,11 @@ mod envelope;
 pub use envelope::{
     MailAddressBookEnvelopeBuildErrorV1, MailAddressBookEnvelopeContextV1,
     MailAddressBookResultEnvelopeContextV1, build_fetch_mail_address_book_page_command_v1,
+    build_mail_address_book_entry_observed_v1,
     build_mail_address_book_entry_upsert_rejected_result_v1,
     build_mail_address_book_entry_upserted_result_v1,
+    build_mail_address_book_page_completed_result_v1,
+    build_mail_address_book_page_rejected_result_v1,
     build_upsert_mail_address_book_entry_command_v1,
 };
 
@@ -21,7 +24,7 @@ pub const MAIL_RUNTIME_MODULE_ID_V1: &str = "hermes-mail-runtime";
 pub const MAIL_ADDRESS_BOOK_COMMAND_SOURCE_MODULE_ID_V1: &str = "hermes-mail-contacts-sync-runtime";
 pub const MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1: &str = "mail.address-book.provider.v1";
 pub const MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1: u32 = 1;
-pub const MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1: u32 = 2;
+pub const MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1: u32 = 3;
 pub const MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1: u32 = 500;
 pub const MAIL_ADDRESS_BOOK_MAX_CURSOR_BYTES_V1: usize = 4096;
 pub const MAIL_ADDRESS_BOOK_MAX_SNAPSHOT_TICKET_BYTES_V1: usize = 4096;
@@ -129,6 +132,96 @@ pub fn validate_mail_address_book_entry_upserted_v1(
     }
 }
 
+pub fn validate_mail_address_book_entry_observed_v1(
+    payload: &wire::MailAddressBookEntryObservedV1,
+) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
+    use wire::MailAddressBookProviderKindV1;
+
+    let provider = MailAddressBookProviderKindV1::try_from(payload.provider_kind)
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)?;
+    let observed_at = payload
+        .observed_at
+        .as_ref()
+        .ok_or(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)?;
+    if valid_id16(&payload.observation_id)
+        && valid_id16(&payload.run_id)
+        && valid_identity(&payload.logical_owner_id, 128)
+        && valid_identity(&payload.account_id, 256)
+        && provider != MailAddressBookProviderKindV1::MailAddressBookProviderKindUnspecified
+        && valid_ascii(&payload.provider_entry_id, 512)
+        && payload
+            .provider_etag
+            .as_deref()
+            .is_none_or(|value| valid_ascii(value, 512))
+        && valid_private_text(&payload.display_name)
+        && payload.email_addresses.len() <= 32
+        && payload.phone_numbers.len() <= 32
+        && (!payload.email_addresses.is_empty()
+            || !payload.phone_numbers.is_empty()
+            || !payload.display_name.is_empty())
+        && payload
+            .email_addresses
+            .iter()
+            .all(|value| valid_private_text(value))
+        && payload
+            .phone_numbers
+            .iter()
+            .all(|value| valid_private_text(value))
+        && observed_at.seconds > 0
+        && (0..1_000_000_000).contains(&observed_at.nanos)
+        && payload.source_revision > 0
+        && valid_id32(&payload.entry_digest)
+        && payload.page_sequence > 0
+    {
+        Ok(())
+    } else {
+        Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)
+    }
+}
+
+pub fn validate_mail_address_book_page_completed_v1(
+    payload: &wire::MailAddressBookPageCompletedV1,
+) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
+    if valid_id16(&payload.command_id)
+        && valid_id16(&payload.run_id)
+        && payload.page_sequence > 0
+        && payload.observed_entries <= MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1
+        && payload
+            .next_continuation_cursor
+            .as_ref()
+            .is_none_or(|cursor| {
+                !cursor.is_empty() && cursor.len() <= MAIL_ADDRESS_BOOK_MAX_CURSOR_BYTES_V1
+            })
+    {
+        Ok(())
+    } else {
+        Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)
+    }
+}
+
+pub fn validate_mail_address_book_page_rejected_v1(
+    payload: &wire::MailAddressBookPageRejectedV1,
+) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
+    use wire::MailAddressBookRejectCodeV1;
+
+    let code = MailAddressBookRejectCodeV1::try_from(payload.code)
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)?;
+    let retryable = matches!(
+        code,
+        MailAddressBookRejectCodeV1::MailAddressBookRejectCodeProviderUnavailable
+            | MailAddressBookRejectCodeV1::MailAddressBookRejectCodeCredentialUnavailable
+    );
+    if valid_id16(&payload.command_id)
+        && valid_id16(&payload.run_id)
+        && code != MailAddressBookRejectCodeV1::MailAddressBookRejectCodeUnspecified
+        && payload.retryable == retryable
+    {
+        Ok(())
+    } else {
+        Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)
+    }
+}
+
 pub fn validate_mail_address_book_entry_upsert_rejected_v1(
     payload: &wire::MailAddressBookEntryUpsertRejectedV1,
 ) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
@@ -152,6 +245,25 @@ pub fn validate_mail_address_book_entry_upsert_rejected_v1(
 
 fn valid_id16(value: &[u8]) -> bool {
     value.len() == 16 && value.iter().any(|byte| *byte != 0)
+}
+
+fn valid_id32(value: &[u8]) -> bool {
+    value.len() == 32 && value.iter().any(|byte| *byte != 0)
+}
+
+fn valid_identity(value: &str, max: usize) -> bool {
+    !value.is_empty()
+        && value.len() <= max
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+}
+
+fn valid_private_text(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 2_048
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
 }
 
 fn valid_ascii(value: &str, max: usize) -> bool {

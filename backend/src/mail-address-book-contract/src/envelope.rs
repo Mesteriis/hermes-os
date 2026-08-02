@@ -2,7 +2,7 @@ use hermes_events_protocol::{
     delivery::{OutboxRecordError, OutboxRecordV1},
     v1::{
         ActorKindV1, ActorRefV1, CommandMetadataV1, ContractRefV1, DurableEnvelopeV1, FenceKindV1,
-        ResultMetadataV1, ResultOutcomeV1, SourceFenceV1, SourceRefV1,
+        ObservationMetadataV1, ResultMetadataV1, ResultOutcomeV1, SourceFenceV1, SourceRefV1,
         durable_envelope_v1::Semantics,
     },
     validation::envelope::validate_envelope_v1,
@@ -16,11 +16,15 @@ use crate::{
     MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1, MAIL_ADDRESS_BOOK_MAX_CURSOR_BYTES_V1,
     MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1, MAIL_ADDRESS_BOOK_MAX_SNAPSHOT_TICKET_BYTES_V1,
     MAIL_ADDRESS_BOOK_SCHEMA_SHA256_V1, MAIL_OWNER_ID_V1, MAIL_RUNTIME_MODULE_ID_V1,
-    MailAddressBookContractV1, validate_mail_address_book_entry_upsert_rejected_v1,
-    validate_mail_address_book_entry_upserted_v1,
+    MailAddressBookContractV1, validate_mail_address_book_entry_observed_v1,
+    validate_mail_address_book_entry_upsert_rejected_v1,
+    validate_mail_address_book_entry_upserted_v1, validate_mail_address_book_page_completed_v1,
+    validate_mail_address_book_page_rejected_v1,
     wire::{
-        FetchMailAddressBookPageCommandV1, MailAddressBookEntryUpsertRejectedV1,
-        MailAddressBookEntryUpsertedV1, UpsertMailAddressBookEntryCommandV1,
+        FetchMailAddressBookPageCommandV1, MailAddressBookEntryObservedV1,
+        MailAddressBookEntryUpsertRejectedV1, MailAddressBookEntryUpsertedV1,
+        MailAddressBookPageCompletedV1, MailAddressBookPageRejectedV1,
+        UpsertMailAddressBookEntryCommandV1,
     },
 };
 
@@ -60,6 +64,7 @@ pub fn build_fetch_mail_address_book_page_command_v1(
     let run_id = id16(&payload.run_id)?;
     if !valid_identity(&payload.logical_owner_id)
         || !valid_bounded(&payload.account_id, 256)
+        || payload.page_sequence == 0
         || payload.page_size == 0
         || payload.page_size > MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1
         || payload.continuation_cursor.as_ref().is_some_and(|value| {
@@ -125,6 +130,193 @@ pub fn build_fetch_mail_address_book_page_command_v1(
     validate_envelope_v1(&envelope)
         .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidEnvelope)?;
     OutboxRecordV1::accept(envelope.encode_to_vec()).map_err(outbox_error)
+}
+
+pub fn build_mail_address_book_entry_observed_v1(
+    command_message_id: [u8; 16],
+    payload: MailAddressBookEntryObservedV1,
+    context: &MailAddressBookEnvelopeContextV1,
+) -> Result<OutboxRecordV1, MailAddressBookEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    validate_mail_address_book_entry_observed_v1(&payload)?;
+    if command_message_id.iter().all(|byte| *byte == 0) {
+        return Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    let observation_id = id16(&payload.observation_id)?;
+    let run_id = id16(&payload.run_id)?;
+    let observed_at = payload
+        .observed_at
+        .ok_or(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)?;
+    let source_cursor_sha256: [u8; 32] = payload
+        .entry_digest
+        .as_slice()
+        .try_into()
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)?;
+    let envelope = DurableEnvelopeV1 {
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: observation_id.to_vec(),
+        contract: Some(contract_ref(MailAddressBookContractV1::EntryObserved)),
+        source: Some(mail_source(context)),
+        recorded_at: Some(timestamp(context)),
+        partition_key: run_id.to_vec(),
+        causation_message_id: command_message_id.to_vec(),
+        correlation_id: run_id.to_vec(),
+        actor: Some(mail_actor()),
+        trace: None,
+        source_fence: Some(mail_fence(context)),
+        semantics: Some(Semantics::Observation(ObservationMetadataV1 {
+            observation_id: observation_id.to_vec(),
+            observed_at: Some(timestamp(context)),
+            occurred_at: Some(observed_at),
+            source_cursor_sha256: source_cursor_sha256.to_vec(),
+            source_sequence: Some(payload.page_sequence),
+        })),
+        payload: payload.encode_to_vec(),
+    };
+    validate_envelope_v1(&envelope)
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidEnvelope)?;
+    OutboxRecordV1::accept(envelope.encode_to_vec()).map_err(outbox_error)
+}
+
+pub fn build_mail_address_book_page_completed_result_v1(
+    command_message_id: [u8; 16],
+    payload: MailAddressBookPageCompletedV1,
+    context: &MailAddressBookResultEnvelopeContextV1,
+) -> Result<OutboxRecordV1, MailAddressBookEnvelopeBuildErrorV1> {
+    validate_mail_address_book_page_completed_v1(&payload)?;
+    build_fetch_result(
+        command_message_id,
+        id16(&payload.command_id)?,
+        id16(&payload.run_id)?,
+        MailAddressBookContractV1::PageCompleted,
+        ResultOutcomeV1::Succeeded,
+        payload.encode_to_vec(),
+        context,
+    )
+}
+
+pub fn build_mail_address_book_page_rejected_result_v1(
+    command_message_id: [u8; 16],
+    payload: MailAddressBookPageRejectedV1,
+    context: &MailAddressBookResultEnvelopeContextV1,
+) -> Result<OutboxRecordV1, MailAddressBookEnvelopeBuildErrorV1> {
+    validate_mail_address_book_page_rejected_v1(&payload)?;
+    build_fetch_result(
+        command_message_id,
+        id16(&payload.command_id)?,
+        id16(&payload.run_id)?,
+        MailAddressBookContractV1::PageRejected,
+        ResultOutcomeV1::Rejected,
+        payload.encode_to_vec(),
+        context,
+    )
+}
+
+fn build_fetch_result(
+    command_message_id: [u8; 16],
+    command_id: [u8; 16],
+    run_id: [u8; 16],
+    contract: MailAddressBookContractV1,
+    outcome: ResultOutcomeV1,
+    payload: Vec<u8>,
+    context: &MailAddressBookResultEnvelopeContextV1,
+) -> Result<OutboxRecordV1, MailAddressBookEnvelopeBuildErrorV1> {
+    validate_result_context(context)?;
+    if command_message_id.iter().all(|byte| *byte == 0) {
+        return Err(MailAddressBookEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    let completed_at = Timestamp {
+        seconds: context.completed_at_unix_seconds,
+        nanos: context.completed_at_nanos,
+    };
+    let envelope = DurableEnvelopeV1 {
+        envelope_major: 1,
+        envelope_revision: 1,
+        message_id: digest16(
+            b"mail-address-book-fetch-result-v1",
+            &command_id,
+            contract.name().as_bytes(),
+        )
+        .to_vec(),
+        contract: Some(contract_ref(contract)),
+        source: Some(SourceRefV1 {
+            module_id: MAIL_RUNTIME_MODULE_ID_V1.to_owned(),
+            runtime_instance_id: digest16(
+                b"mail-runtime-address-book-fetch-source-v1",
+                context.runtime_instance_id.as_bytes(),
+                b"mail-address-book",
+            )
+            .to_vec(),
+            runtime_generation: context.runtime_generation,
+        }),
+        recorded_at: Some(completed_at),
+        partition_key: run_id.to_vec(),
+        causation_message_id: command_message_id.to_vec(),
+        correlation_id: run_id.to_vec(),
+        actor: Some(ActorRefV1 {
+            kind: ActorKindV1::Module as i32,
+            actor_id: MAIL_RUNTIME_MODULE_ID_V1.as_bytes().to_vec(),
+        }),
+        trace: None,
+        source_fence: Some(SourceFenceV1 {
+            kind: FenceKindV1::RuntimeLease as i32,
+            scope_id: MAIL_RUNTIME_MODULE_ID_V1.as_bytes().to_vec(),
+            epoch: context.runtime_generation,
+        }),
+        semantics: Some(Semantics::Result(ResultMetadataV1 {
+            command_id: command_id.to_vec(),
+            command_message_id: command_message_id.to_vec(),
+            outcome: outcome as i32,
+            completed_at: Some(Timestamp {
+                seconds: context.completed_at_unix_seconds,
+                nanos: context.completed_at_nanos,
+            }),
+            execution_attempt: context.execution_attempt,
+        })),
+        payload,
+    };
+    validate_envelope_v1(&envelope)
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidEnvelope)?;
+    OutboxRecordV1::accept(envelope.encode_to_vec()).map_err(outbox_error)
+}
+
+fn contract_ref(contract: MailAddressBookContractV1) -> ContractRefV1 {
+    ContractRefV1 {
+        owner: MAIL_OWNER_ID_V1.to_owned(),
+        name: contract.name().to_owned(),
+        major: MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1,
+        revision: MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1,
+        schema_sha256: MAIL_ADDRESS_BOOK_SCHEMA_SHA256_V1.to_vec(),
+    }
+}
+
+fn mail_source(context: &MailAddressBookEnvelopeContextV1) -> SourceRefV1 {
+    SourceRefV1 {
+        module_id: MAIL_RUNTIME_MODULE_ID_V1.to_owned(),
+        runtime_instance_id: digest16(
+            b"mail-runtime-address-book-observation-source-v1",
+            context.runtime_instance_id.as_bytes(),
+            b"mail-address-book",
+        )
+        .to_vec(),
+        runtime_generation: context.runtime_generation,
+    }
+}
+
+fn mail_actor() -> ActorRefV1 {
+    ActorRefV1 {
+        kind: ActorKindV1::Module as i32,
+        actor_id: MAIL_RUNTIME_MODULE_ID_V1.as_bytes().to_vec(),
+    }
+}
+
+fn mail_fence(context: &MailAddressBookEnvelopeContextV1) -> SourceFenceV1 {
+    SourceFenceV1 {
+        kind: FenceKindV1::RuntimeLease as i32,
+        scope_id: MAIL_RUNTIME_MODULE_ID_V1.as_bytes().to_vec(),
+        epoch: context.runtime_generation,
+    }
 }
 
 pub fn build_upsert_mail_address_book_entry_command_v1(
@@ -410,6 +602,7 @@ mod tests {
                 run_id: vec![2; 16],
                 logical_owner_id: "owner-1".to_owned(),
                 account_id: "mail-account-1".to_owned(),
+                page_sequence: 1,
                 continuation_cursor: None,
                 page_size: 100,
             },

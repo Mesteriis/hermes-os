@@ -17,9 +17,11 @@ assembly и Contacts-to-Mail command path реализованы статиче�
 durable-резервирует команду, читает target-bound Blob и выполняет Google People
 create/update либо exact iCloud read-only rejection. Target custody receipt
 сохраняется до Blob read/provider dispatch и проверен disposable PostgreSQL
-restart/replay тестом. Полный provider-to-Contacts pagination path и
-managed/provider/browser conformance ещё не реализованы,
-поэтому gate остаётся закрытым.
+restart/replay тестом. Provider-to-Contacts pagination path реализован
+статически, включая exact consumer, Google People/CardDAV adapters, opaque
+cursors, atomic Mail-owned inbox/outbox и disposable PostgreSQL replay
+evidence. Managed provider и browser conformance ещё не реализованы, поэтому
+gate остаётся закрытым.
 Contacts command открыт только после exact five-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
 legacy address-book service, Mail account UI или статических contracts не
@@ -167,6 +169,18 @@ remote write explicitly.
 Accepted command is not provider completion. Provider result returns by a
 separate durable event. Ambiguous timeout is `outcome_unknown`; workflow does
 not blindly repeat it without provider reconciliation.
+
+### Provider pagination
+
+Workflow отправляет exact page command с монотонным `page_sequence`; только
+Mail декодирует opaque provider cursor, выполняет Google People или read-only
+iCloud CardDAV query и атомарно сохраняет все typed observations вместе с одним
+terminal page result до Event Hub publication. Google `next_page_token` —
+единственный continuation token этого flow; `next_sync_token` не
+переинтерпретируется как следующая страница. CardDAV использует Mail-owned typed
+offset cursor поверх детерминированной сортировки по `href`. Accepted command и
+exact page bytes переживают restart, а повторное использование identity с
+другими bytes отклоняется.
 
 ### Settings, Scheduler и client transport
 

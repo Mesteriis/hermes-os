@@ -16,6 +16,9 @@ use hermes_mail_runtime::managed::{
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
     address_book_consumer::MailAddressBookConsumeErrorV1,
+    address_book_fetch_worker::{
+        MailAddressBookFetchWorkerErrorV1, process_next_mail_address_book_fetch_v1,
+    },
     address_book_outbox::MailAddressBookOutboxRelayErrorV1,
     address_book_worker::{MailAddressBookWorkerErrorV1, process_next_mail_address_book_upsert_v1},
     attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
@@ -420,6 +423,33 @@ where
                     "developer_mail_address_book_command_error={error:?}"
                 ));
                 return Err("Mail address-book command is invalid".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.try_consume_address_book_fetch(now)) {
+            Ok(_) | Err(MailAddressBookConsumeErrorV1::Unavailable) => {}
+            Err(MailAddressBookConsumeErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_address_book_fetch_inbox_persistence_failed");
+                return Err("Mail address-book fetch inbox persistence failed".to_owned());
+            }
+            Err(error) => {
+                developer_diagnostic(&format!(
+                    "developer_mail_address_book_fetch_command_error={error:?}"
+                ));
+                return Err("Mail address-book fetch command is invalid".to_owned());
+            }
+        }
+        match runtime.block_on(process_next_mail_address_book_fetch_v1(&mut admitted, now)) {
+            Ok(_) => {}
+            Err(MailAddressBookFetchWorkerErrorV1::InvalidClock) => {
+                return Err("Mail address-book fetch worker clock is invalid".to_owned());
+            }
+            Err(MailAddressBookFetchWorkerErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_address_book_fetch_worker_persistence_failed");
+                return Err("Mail address-book fetch worker persistence failed".to_owned());
+            }
+            Err(MailAddressBookFetchWorkerErrorV1::Envelope) => {
+                developer_diagnostic("developer_mail_address_book_fetch_worker_envelope_failed");
+                return Err("Mail address-book fetch worker result is invalid".to_owned());
             }
         }
         match runtime.block_on(process_next_mail_address_book_upsert_v1(&mut admitted, now)) {

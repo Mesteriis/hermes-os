@@ -3867,6 +3867,7 @@ const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
         ? [
             dependency,
             { name: 'hermes-mail-google-people', kind: 'normal' },
+            { name: 'hermes-mail-carddav', kind: 'normal' },
             { name: 'hermes-contacts-mail-sync-source-api', kind: 'normal' },
           ]
       : [dependency]
@@ -6183,6 +6184,7 @@ const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST = {
     default: [],
     'conformance-test-support': [
       'hermes-mail-api/conformance-test-support',
+      'hermes-mail-carddav/conformance-test-support',
       'hermes-mail-gmail/conformance-test-support',
       'hermes-mail-google-people/conformance-test-support',
       'hermes-mail-imap/conformance-test-support',
@@ -8055,7 +8057,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'mail_address_book_runtime_execution_v1') {
+  if (currentSlice === 'mail_address_book_provider_pagination_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY,
