@@ -236,7 +236,7 @@ test('text extraction produces translation source only through durable target-ow
 });
 
 test('attachment translation has an exact signed managed lifecycle and restart gate', async () => {
-  const [setup, flow, harness, runner, recovery, testkitManifest] = await Promise.all([
+  const [setup, flow, gateway, harness, runner, recovery, testkitManifest] = await Promise.all([
     readFile(
       new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_translation_managed_setup.rs',
@@ -247,6 +247,13 @@ test('attachment translation has an exact signed managed lifecycle and restart g
     readFile(
       new URL(
         'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_translation_managed_flow.rs',
+        BACKEND_ROOT,
+      ),
+      'utf8',
+    ),
+    readFile(
+      new URL(
+        'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_translation_gateway_fixture.rs',
         BACKEND_ROOT,
       ),
       'utf8',
@@ -267,16 +274,24 @@ test('attachment translation has an exact signed managed lifecycle and restart g
   assert.match(setup, /attachment_translation_release_artifact_v1/);
   assert.match(setup, /restart_attachment_translation_runtime_v1/);
   assert.match(setup, /storage_successor::reserve/);
-  assert.match(flow, /managed_attachment_translation_runtime_starts_with_exact_signed_contracts/);
+  assert.match(flow, /managed_attachment_translation_reaches_source_ai_and_gateway_sse/);
   assert.match(flow, /Text Extraction workflow/);
+  assert.match(flow, /AttachmentTranslationErrorCodeInferenceRejected/);
+  assert.match(flow, /AttachmentTranslationErrorCodeSourceRejected/);
+  assert.match(flow, /transition_registration/);
   assert.match(flow, /Attachment Translation restart must not restart/);
+  assert.match(gateway, /ATTACHMENT_TRANSLATION_READ_BLOB_PATH_V1/);
+  assert.match(gateway, /open_attachment_translation_sse_v1/);
+  assert.match(gateway, /read_terminal_attachment_translation_sse_response_v1/);
+  assert.match(gateway, /Last-Event-ID|replayable SSE fixture/);
   assert.match(harness, /mod attachment_translation_managed_setup/);
+  assert.match(harness, /mod attachment_translation_gateway_fixture/);
   assert.match(harness, /mod attachment_translation_managed_flow/);
   assert.match(runner, /hermes-attachment-translation-runtime/);
   assert.match(runner, /HERMES_ATTACHMENT_TRANSLATION_RUNTIME_BIN/);
   assert.match(
     runner,
-    /managed_attachment_translation_runtime_starts_with_exact_signed_contracts/,
+    /managed_attachment_translation_reaches_source_ai_and_gateway_sse/,
   );
   assert.match(recovery, /materialize_ai_source_from_authority_v1/);
   assert.match(recovery, /refresh_runtime_bound_source/);
