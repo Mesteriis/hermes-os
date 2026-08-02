@@ -58,10 +58,10 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_translation_v1',
+    'contacts_mail_identity_command_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
-    domains: ['communications', 'knowledge', 'review', 'tasks'],
+    domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
     integrations: ['mail'],
     workflows: [
       'attachment_preview',
@@ -205,6 +205,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'communications_export.blob.v1',
       'communications_export.events.v1',
       'communications_export.storage.v1',
+      'contacts.mail-identity.command.v1',
       'knowledge.reviewed-candidate.blob.v1',
       'knowledge.reviewed-candidate.command.v1',
       'knowledge.reviewed-candidate.created.publisher.v1',

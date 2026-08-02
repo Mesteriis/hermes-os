@@ -114,7 +114,7 @@ test('Communications export is one exact workflow family with a public domain so
   const sourceSchema = sourceContract.replaceAll(/\/\/.*$/gm, '');
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_translation_v1',
+    'contacts_mail_identity_command_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'attachment_preview',

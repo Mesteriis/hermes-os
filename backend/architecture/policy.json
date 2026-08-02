@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "attachment_translation_v1",
+    "currentSlice": "contacts_mail_identity_command_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1062,6 +1062,24 @@
         "role": "domain",
         "owner": "tasks",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-contacts-command-api",
+        "role": "domain",
+        "owner": "contacts",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-contacts-core",
+        "role": "domain",
+        "owner": "contacts",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-contacts-persistence",
+        "role": "domain",
+        "owner": "contacts",
+        "surface": "persistence"
       },
       {
         "name": "hermes-tasks-persistence",
@@ -2289,6 +2307,27 @@
         }
       ],
       "hermes-tasks-core": [],
+      "hermes-contacts-command-api": [
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-contacts-core": [],
+      "hermes-contacts-persistence": [
+        {
+          "name": "hermes-contacts-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "hermes-storage-protocol",
@@ -8582,6 +8621,88 @@
           "features": []
         }
       ],
+      "hermes-contacts-command-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-contacts-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-contacts-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "sha2",
@@ -12026,6 +12147,10 @@
     ],
     "cargoFeaturesEnabled": false,
     "cargoFeatureAllowlist": {
+      "hermes-contacts-persistence": {
+        "default": [],
+        "conformance-test-support": []
+      },
       "hermes-communication-cross-channel-forward-persistence": {
         "default": [],
         "conformance-test-support": []
@@ -12974,6 +13099,18 @@
         "primaryKind": "lib",
         "customBuildAllowed": false
       },
+      "hermes-contacts-command-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-contacts-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-contacts-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
       "hermes-tasks-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
@@ -13050,6 +13187,7 @@
     "ownerInventory": {
       "domains": [
         "communications",
+        "contacts",
         "knowledge",
         "review",
         "tasks"
@@ -13203,6 +13341,7 @@
         "communications_export.blob.v1",
         "communications_export.events.v1",
         "communications_export.storage.v1",
+        "contacts.mail-identity.command.v1",
         "knowledge.reviewed-candidate.blob.v1",
         "knowledge.reviewed-candidate.command.v1",
         "knowledge.reviewed-candidate.created.publisher.v1",

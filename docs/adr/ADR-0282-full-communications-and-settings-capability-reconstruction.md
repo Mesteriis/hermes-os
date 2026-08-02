@@ -446,7 +446,8 @@ runtime не является domain, а app composition не становитс
 | Attachment translation | `attachment_translation` workflow | `attachment_translation_v1` |
 | Provider actions | Exact integration | integration command gate |
 | Hermes pin/snooze/important/review | Review | `review_communications_attention_v1` after Review admission |
-| Mail address-book synchronization | `mail_contacts_sync` workflow plus Contacts command | `mail_contacts_sync_v1` |
+| Contacts identity command for Mail address-book entries | Contacts | `contacts_mail_identity_command_v1` |
+| Mail address-book synchronization | `mail_contacts_sync` workflow plus Contacts command | `mail_contacts_sync_v1` after `contacts_mail_identity_command_v1` |
 | Calls aggregation | app plus Communications call evidence | `communications_call_evidence_v1` |
 | Recording/transcript | Blob plus transcription workflow | `call_transcription_v1` |
 | App preferences | client/app | `application_preferences_v1` |

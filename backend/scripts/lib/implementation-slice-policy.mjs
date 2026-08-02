@@ -1234,6 +1234,27 @@ const ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES = [
   { name: 'hermes-attachment-translation-assembly', role: 'workflow', owner: 'attachment_translation', surface: 'assembly' },
 ];
 
+const CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_PRODUCTION_PACKAGES =
+  ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES.flatMap((packageDescriptor) => (
+    packageDescriptor.name === 'hermes-tasks-core'
+      ? [
+          packageDescriptor,
+          { name: 'hermes-contacts-command-api', role: 'domain', owner: 'contacts', surface: 'contract' },
+          { name: 'hermes-contacts-core', role: 'domain', owner: 'contacts', surface: 'implementation' },
+        ]
+      : [packageDescriptor]
+  ));
+
+const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_PRODUCTION_PACKAGES =
+  CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_PRODUCTION_PACKAGES.flatMap((packageDescriptor) => (
+    packageDescriptor.name === 'hermes-contacts-core'
+      ? [
+          packageDescriptor,
+          { name: 'hermes-contacts-persistence', role: 'domain', owner: 'contacts', surface: 'persistence' },
+        ]
+      : [packageDescriptor]
+  ));
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3665,6 +3686,23 @@ const ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-command-api': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-contacts-core': [],
+};
+
+const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-persistence': [
+    { name: 'hermes-contacts-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -4937,6 +4975,29 @@ const ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
   ],
 };
 
+const CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-command-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-contacts-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
+const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-contacts-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -5702,6 +5763,18 @@ const ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_INVENTORY = {
   ].sort(),
 };
 
+const CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_INVENTORY = {
+  ...ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_INVENTORY,
+  domains: [
+    ...ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_INVENTORY.domains,
+    'contacts',
+  ].sort(),
+  businessCapabilities: [
+    ...ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_INVENTORY.businessCapabilities,
+    'contacts.mail-identity.command.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -5746,6 +5819,14 @@ const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
       'hermes-mail-gmail/conformance-test-support',
       'hermes-mail-imap/conformance-test-support',
     ],
+  },
+};
+
+const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_CARGO_FEATURE_ALLOWLIST = {
+  ...MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+  'hermes-contacts-persistence': {
+    default: [],
+    'conformance-test-support': [],
   },
 };
 
@@ -5947,6 +6028,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-review-task-candidate-api',
       'hermes-review-task-candidate-promotion-api',
       'hermes-tasks-command-api',
+      'hermes-contacts-command-api',
       'hermes-mail-delivery-intent-contract',
       'hermes-telegram-delivery-intent-contract',
       'hermes-whatsapp-delivery-intent-contract',
@@ -7519,6 +7601,28 @@ function expectedSlice(currentSlice) {
       packages: ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies: ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: ATTACHMENT_TRANSLATION_RUNTIME_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'contacts_mail_identity_command_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST,
+      packages: CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'contacts_mail_identity_command_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: CONTACTS_MAIL_IDENTITY_COMMAND_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_CARGO_FEATURE_ALLOWLIST,
+      packages: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

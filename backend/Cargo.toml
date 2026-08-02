@@ -76,6 +76,9 @@ members = [
   "src/tasks-persistence",
   "src/tasks-runtime",
   "src/tasks-assembly",
+  "src/contacts-command-api",
+  "src/contacts-core",
+  "src/contacts-persistence",
   "src/reviewed-task-candidate-promotion-core",
   "src/reviewed-task-candidate-promotion-persistence",
   "src/reviewed-task-candidate-promotion-runtime",
@@ -277,6 +280,7 @@ members = [
   "tests/support/storage",
   "tests/support/mail-communications-slice",
   "tests/support/telegram-calls",
+  "tests/support/contacts",
 ]
 resolver = "2"
 

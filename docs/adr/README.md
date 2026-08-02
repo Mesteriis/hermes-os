@@ -722,3 +722,8 @@ ADR-0378 выделяет attachment translation в отдельный workflow 
 Text Extraction передаётся только exact durable events и target-bound Blob,
 AI Engine получает distinct attachment-translation use-case contract, а
 Communications, provider integration, Kernel и Gateway не становятся facade.
+ADR-0379 разделяет Mail address-book sync между Mail integration, отдельным
+`mail_contacts_sync` workflow и минимальным Contacts command owner. Provider
+protocol/ETag остаются в Mail, canonical identity truth — в Contacts, а
+direction, correlation, checkpoints и retry — в workflow; взаимодействие идёт
+только через typed durable events/commands и owner-local storage.

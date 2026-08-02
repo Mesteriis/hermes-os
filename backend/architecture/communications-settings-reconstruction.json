@@ -717,11 +717,21 @@
       "dependsOn": ["communications_canonical_read_v2"]
     },
     {
+      "gate": "contacts_mail_identity_command_v1",
+      "role": "domain",
+      "owner": "contacts",
+      "state": "planned",
+      "dependsOn": ["client_gateway_v1"]
+    },
+    {
       "gate": "mail_contacts_sync_v1",
       "role": "workflow",
       "owner": "mail_contacts_sync",
       "state": "planned",
-      "dependsOn": ["mail_account_lifecycle_v1"]
+      "dependsOn": [
+        "mail_account_lifecycle_v1",
+        "contacts_mail_identity_command_v1"
+      ]
     },
     {
       "gate": "application_preferences_v1",
