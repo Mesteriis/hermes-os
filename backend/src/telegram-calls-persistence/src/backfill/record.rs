@@ -5,7 +5,7 @@ use hermes_telegram_calls_core::{
     TELEGRAM_CALLS_REALTIME_BACKFILL_JOB_OWNER_V1, TELEGRAM_CALLS_REALTIME_BACKFILL_SCOPE_V1,
 };
 
-use super::command::parse_backfill_command_v1;
+use super::command::{parse_backfill_command_v1, parse_completed_backfill_command_v1};
 use super::{
     TelegramCallsBackfillErrorV1, TelegramCallsBackfillExecutionV1, TelegramCallsBackfillPhaseV1,
     TelegramCallsBackfillStateV1,
@@ -61,8 +61,16 @@ pub(super) async fn load_execution_for_update(
 fn execution_from_row(
     row: &PgRow,
 ) -> Result<TelegramCallsBackfillExecutionV1, TelegramCallsBackfillErrorV1> {
+    let state = state(row_value::<String>(row, "execution_state")?.as_str())?;
+    let phase = phase(row_value::<String>(row, "execution_phase")?.as_str())?;
     let envelope_bytes: Vec<u8> = row_value(row, "command_envelope_bytes")?;
-    let parsed = parse_backfill_command_v1(&envelope_bytes)?;
+    let parsed = if state == TelegramCallsBackfillStateV1::Succeeded
+        && phase == TelegramCallsBackfillPhaseV1::Complete
+    {
+        parse_completed_backfill_command_v1(&envelope_bytes)?
+    } else {
+        parse_backfill_command_v1(&envelope_bytes)?
+    };
     let run_id: Vec<u8> = row_value(row, "job_run_id")?;
     let message_id: Vec<u8> = row_value(row, "command_message_id")?;
     let envelope_sha256: Vec<u8> = row_value(row, "command_envelope_sha256")?;
@@ -82,8 +90,6 @@ fn execution_from_row(
     {
         return Err(TelegramCallsBackfillErrorV1::CorruptExecution);
     }
-    let state = state(row_value::<String>(row, "execution_state")?.as_str())?;
-    let phase = phase(row_value::<String>(row, "execution_phase")?.as_str())?;
     Ok(TelegramCallsBackfillExecutionV1 {
         state,
         phase,

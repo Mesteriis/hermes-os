@@ -29,6 +29,10 @@ const paths = {
     'src/communications-export-runtime/src/main.rs',
     BACKEND_ROOT,
   ),
+  workflowManagedRuntime: new URL(
+    'src/communications-export-runtime/src/runtime.rs',
+    BACKEND_ROOT,
+  ),
   workflowAssembly: new URL(
     'src/communications-export-assembly/Cargo.toml',
     BACKEND_ROOT,
@@ -162,10 +166,18 @@ test('Communications export is one exact workflow family with a public domain so
 });
 
 test('Kernel launches workflow through a distinct provider-neutral configuration', async () => {
-  const [kernelLaunch, ownerControl, workflowRuntime, devAssembly, release] = await Promise.all([
+  const [
+    kernelLaunch,
+    ownerControl,
+    workflowRuntime,
+    workflowManagedRuntime,
+    devAssembly,
+    release,
+  ] = await Promise.all([
     readFile(paths.kernelLaunch, 'utf8'),
     readFile(paths.ownerControl, 'utf8'),
     readFile(paths.workflowRuntime, 'utf8'),
+    readFile(paths.workflowManagedRuntime, 'utf8'),
     readFile(paths.devAssembly, 'utf8'),
     readFile(paths.release, 'utf8'),
   ]);
@@ -179,6 +191,11 @@ test('Kernel launches workflow through a distinct provider-neutral configuration
   assert.match(workflowLaunch, /host_bridge_configuration: None/);
   assert.match(ownerControl, /StartReservedWorkflowRuntimeRequestV1/);
   assert.match(workflowRuntime, /ManagedWorkflowRuntimeConfigurationV1/);
+  const eventAccess = workflowManagedRuntime.match(
+    /request_managed_runtime_event_access_v2\([\s\S]*?\)\n\s*\.map_err/,
+  )?.[0] ?? '';
+  assert.match(eventAccess, /&storage_configuration\.logical_owner_id/);
+  assert.doesNotMatch(eventAccess, /&admission\.logical_owner_id/);
   assert.match(devAssembly, /ModuleRuntimeKindV1::Workflow/);
   assert.match(devAssembly, /start_reserved_workflow_runtime/);
   assert.match(release, /hermes-communications-export-assembly/);

@@ -220,7 +220,12 @@ pub async fn open_admitted_runtime(
     let calls = TelegramCallsPersistence::new(durable.shared_owner_pool());
     complete_calls_realtime_backfill_v1(&calls, &identity)
         .await
-        .map_err(|_| TelegramBootstrapError::CallsBackfill)?;
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_telegram_calls_backfill_error={error:?}");
+            }
+            TelegramBootstrapError::CallsBackfill
+        })?;
     let persisted_account = durable
         .account(account_id)
         .await

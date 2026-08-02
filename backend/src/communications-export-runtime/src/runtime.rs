@@ -205,14 +205,19 @@ impl CommunicationsExportRuntimeV1 {
         )?;
         let access = request_managed_runtime_event_access_v2(
             &mut control_channel,
-            &admission.logical_owner_id,
+            &storage_configuration.logical_owner_id,
             &admission.registration_id,
             &admission.runtime_instance_id,
             admission.runtime_generation,
             admission.grant_epoch,
             credential_revision,
         )
-        .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_communications_export_event_access_error={error:?}");
+            }
+            unavailable_at("event_access")
+        })?;
         let permits = CommunicationsExportSubscribePermitsV1::bind(
             access
                 .subscribe_permits(
@@ -243,7 +248,7 @@ impl CommunicationsExportRuntimeV1 {
             access.into_credential(),
         )
         .await
-        .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("event_connection"))?;
         let binding = storage_binding(&storage_configuration, admission)?;
         let vault_public_key = storage_configuration
             .vault_hpke_public_key_x25519
@@ -262,7 +267,7 @@ impl CommunicationsExportRuntimeV1 {
         );
         let password = resolve_storage_runtime_credential(&mut leases, &binding)
             .await
-            .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+            .map_err(|_| unavailable_at("storage_credential"))?;
         let password = std::str::from_utf8(&password)
             .map_err(|_| CommunicationsExportRuntimeErrorV1::Admission)?;
         let persistence = CommunicationsExportPersistenceV1::connect_runtime(
@@ -273,11 +278,11 @@ impl CommunicationsExportRuntimeV1 {
             password,
         )
         .await
-        .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+        .map_err(|_| unavailable_at("storage_connection"))?;
         persistence
             .verify_storage_ready()
             .await
-            .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+            .map_err(|_| unavailable_at("storage_readiness"))?;
         let mut control_channel = leases.into_route_port().into_channel();
         signal_managed_runtime_ready(&mut control_channel, admission)?;
         control_channel
@@ -424,6 +429,13 @@ impl CommunicationsExportRuntimeV1 {
         .await
         .map_err(outbox_error)
     }
+}
+
+fn unavailable_at(stage: &'static str) -> CommunicationsExportRuntimeErrorV1 {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_communications_export_startup_unavailable stage={stage}");
+    }
+    CommunicationsExportRuntimeErrorV1::Unavailable
 }
 
 fn validate_open(
