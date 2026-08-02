@@ -263,7 +263,7 @@ fn start_reserved_attachment_preview_runtime_v1(
     }
 }
 
-fn attachment_preview_release_artifact_v1() -> SignedRuntimeArtifact {
+pub(super) fn attachment_preview_release_artifact_v1() -> SignedRuntimeArtifact {
     SignedRuntimeArtifact::new(
         ATTACHMENT_PREVIEW_RELEASE_ARTIFACT_ID_V1,
         attachment_preview_binary(),

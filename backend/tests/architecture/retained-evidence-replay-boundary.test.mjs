@@ -393,7 +393,8 @@ test('workflow command and result delivery preserves exact bytes and commit-befo
 });
 
 test('replay workflow is an admitted managed runtime with exact event grants', async () => {
-  const [managed, main, communicationsAdmission, communicationsRuntime, mailAdmission, mailRuntime, developmentRelease, developmentAssembly] = await Promise.all([
+  const [managed, main, communicationsAdmission, communicationsRuntime, mailAdmission, mailRuntime,
+    developmentRelease, developmentAssembly, managedSetup, managedFlow, managedScript] = await Promise.all([
     read('src/attachment-preview-evidence-replay-runtime/src/managed_runtime.rs'),
     read('src/attachment-preview-evidence-replay-runtime/src/main.rs'),
     read('src/communications-runtime/src/admission.rs'),
@@ -402,6 +403,9 @@ test('replay workflow is an admitted managed runtime with exact event grants', a
     read('src/mail-runtime/src/managed.rs'),
     read('scripts/materialize-dev-release.sh'),
     read('development/assembly/src/main.rs'),
+    read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_evidence_replay_managed_setup.rs'),
+    read('tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/attachment_preview_evidence_replay_managed_flow.rs'),
+    read('scripts/test-authenticated-storage.mjs'),
   ]);
 
   assert.match(main, /"serve-inherited" => serve_inherited/);
@@ -427,4 +431,10 @@ test('replay workflow is an admitted managed runtime with exact event grants', a
   assert.match(developmentRelease, /hermes-attachment-preview-evidence-replay-assembly/);
   assert.match(developmentAssembly, /ModuleRuntimeKindV1::Workflow/);
   assert.match(developmentAssembly, /ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_RUNTIME_ARTIFACT/);
+  assert.match(managedSetup, /attachment_preview_evidence_replay_storage_bundle_v1/);
+  assert.match(managedSetup, /start_reserved_workflow/);
+  assert.match(managedSetup, /storage_successor::reserve/);
+  assert.match(managedFlow, /managed_attachment_preview_evidence_replay_runtime_starts_with_exact_signed_contracts/);
+  assert.match(managedFlow, /runtime_generation, 2/);
+  assert.match(managedScript, /HERMES_ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_RUNTIME_BIN/);
 });
