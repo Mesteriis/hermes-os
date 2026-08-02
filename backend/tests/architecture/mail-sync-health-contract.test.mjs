@@ -245,7 +245,7 @@ test('Mail sync health is exact, restart-safe and cut over through its generated
   assert.match(clientPort, /sync_health_wire::encode_sync_health_query/);
   assert.match(clientPort, /sync_health_wire::decode_sync_health_response/);
   assert.match(admission, /MailClientContractV1::SyncHealthQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
+  assert.match(managedSetup, /mail_runtime_storage_bundle_v1/);
   assert.match(managedSetup, /MailClientContractV1::SyncHealthQuery/);
   assert.match(managedFlow, /assert_mail_sync_replay_and_health/);
   assert.match(

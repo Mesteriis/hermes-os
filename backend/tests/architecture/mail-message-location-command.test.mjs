@@ -151,7 +151,7 @@ test('Mail message location commands are reversible, provider-owned and live-con
   assert.match(runtime, /hermes_mail_imap::move_message/);
   assert.match(runtime, /client\.restore_message/);
   assert.doesNotMatch(runtime, /hermes_communications_runtime|communications-runtime/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
+  assert.match(managedSetup, /mail_runtime_storage_bundle_v1/);
   assert.match(managedSetup, /MailClientContractV1::MessageLocationCommand/);
   assert.match(managedSetup, /MailClientContractV1::MessageLocationQuery/);
   assert.match(managedFlow, /assert_mail_message_archive/);

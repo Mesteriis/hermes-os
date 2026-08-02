@@ -7,9 +7,7 @@ use hermes_mail_api::{
     account::{MailBindCredentialRequestV1, MailCredentialPurposeV1},
     client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID, MailClientContractV1},
 };
-use hermes_mail_persistence::{
-    GmailOAuthCredentialBindingV1, MAIL_STORAGE_BUNDLE_REVISION_V17, mail_storage_bundle_v1,
-};
+use hermes_mail_persistence::GmailOAuthCredentialBindingV1;
 use hermes_mail_runtime::{
     admission::{
         MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
@@ -17,15 +15,17 @@ use hermes_mail_runtime::{
         MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,
         MAIL_ATTACHMENT_SCAN_CANDIDATE_PUBLISH_CAPABILITY_ID, MAIL_BLOB_CAPABILITY_ID,
         MAIL_COMMUNICATION_OBSERVED_PUBLISH_CAPABILITY_ID, MAIL_CREDENTIAL_LEASE_TTL_SECONDS,
+        MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1,
         MAIL_GMAIL_CREDENTIAL_LIFECYCLE_CAPABILITY_ID, MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID,
         MAIL_GMAIL_OAUTH_REFRESH_CREDENTIALS_CAPABILITY_ID,
         MAIL_GMAIL_OAUTH_SETUP_CREDENTIALS_CAPABILITY_ID,
         MAIL_GMAIL_REFRESH_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
         MAIL_IMAP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID, MAIL_IMAP_CREDENTIALS_CAPABILITY_ID,
-        MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID, MAIL_SMTP_CREDENTIALS_CAPABILITY_ID,
-        MAIL_STORAGE_CAPABILITY_ID, mail_module_descriptor_v1,
+        MAIL_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID, MAIL_SMTP_CREDENTIAL_LIFECYCLE_CAPABILITY_ID,
+        MAIL_SMTP_CREDENTIALS_CAPABILITY_ID, MAIL_STORAGE_CAPABILITY_ID, mail_module_descriptor_v1,
     },
     settings::mail_settings_schema_bytes_v2,
+    storage_bundle::mail_runtime_storage_bundle_v1,
 };
 use hermes_vault_key_provider::WrappingKeyProvider;
 use hermes_vault_key_provider_file::FileWrappingKeyProvider;
@@ -453,6 +453,8 @@ fn admit_mail_runtime_profile(
                 .to_owned(),
         ],
     };
+    capability_ids.push(MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1.to_owned());
+    capability_ids.push(MAIL_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID.to_owned());
     capability_ids.sort();
     crate::modules::registration::registry::approve_after_owner_authorization(
         store,
@@ -479,12 +481,14 @@ fn admit_mail_runtime_profile(
             Some(Sha256::digest(&schema).into()),
         ))
         .expect("record Mail release binding");
-    let bundle = mail_storage_bundle_v1().encode_to_vec();
+    let bundle = mail_runtime_storage_bundle_v1().expect("compose managed Mail Storage bundle");
+    let bundle_revision = bundle.revision;
+    let bundle = bundle.encode_to_vec();
     store
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 MAIL_OWNER_ID,
-                u64::from(MAIL_STORAGE_BUNDLE_REVISION_V17),
+                u64::from(bundle_revision),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -506,8 +510,11 @@ pub(super) fn prepare_mail_runtime(
         .expect("reserve Mail managed launch");
     let runtime_instance_id = reservation.runtime_instance_id().to_owned();
     let runtime_generation = reservation.runtime_generation();
+    let bundle_revision = mail_runtime_storage_bundle_v1()
+        .expect("compose managed Mail Storage bundle")
+        .revision;
     let bundle = store
-        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(MAIL_STORAGE_BUNDLE_REVISION_V17))
+        .platform_storage_bundle(MAIL_OWNER_ID, u64::from(bundle_revision))
         .expect("read Mail Storage bundle")
         .expect("Mail Storage bundle");
     let binding = issue_managed(
@@ -516,13 +523,8 @@ pub(super) fn prepare_mail_runtime(
         &runtime_instance_id,
         runtime_generation,
         MAIL_STORAGE_CAPABILITY_ID,
-        StorageBindingIssueV1::new(
-            1,
-            1,
-            u64::from(MAIL_STORAGE_BUNDLE_REVISION_V17),
-            *bundle.digest(),
-        )
-        .expect("Mail Storage binding issue"),
+        StorageBindingIssueV1::new(1, 1, u64::from(bundle_revision), *bundle.digest())
+            .expect("Mail Storage binding issue"),
     )
     .expect("issue Mail Storage binding");
     crate::platform::storage::provisioning::apply_reserved_binding(supervisor, store, &binding)

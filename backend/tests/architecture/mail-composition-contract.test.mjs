@@ -185,7 +185,7 @@ test('Mail composition is owner-local, independently admitted and cut over throu
   assert.match(clientPort, /MailClientRequestV1::CompositionQuery/);
   assert.match(admission, /MailClientContractV1::CompositionCommand/);
   assert.match(admission, /MailClientContractV1::CompositionQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
+  assert.match(managedSetup, /mail_runtime_storage_bundle_v1/);
   assert.match(managedFlow, /assert_wrong_scope_cursor_is_rejected/);
   assert.match(managedFlow, /assert_cross_account_query_is_rejected/);
   assert.match(managedFlow, /assert_conflicting_operation_is_rejected/);

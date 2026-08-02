@@ -173,7 +173,7 @@ test('Mail permanent delete is explicit, provider-owned and live-conformant', as
   assert.match(runtime, /ReauthorizationRequired/);
   assert.match(runtime, /MailMessagePermanentDeletePersistenceErrorV1::Database/);
   assert.doesNotMatch(runtime, /hermes_communications_runtime|communications-runtime/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
+  assert.match(managedSetup, /mail_runtime_storage_bundle_v1/);
   assert.match(managedSetup, /MailClientContractV1::MessagePermanentDeleteCommand/);
   assert.match(managedSetup, /MailClientContractV1::MessagePermanentDeleteQuery/);
   assert.match(

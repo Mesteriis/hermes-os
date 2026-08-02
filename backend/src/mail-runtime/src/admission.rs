@@ -17,8 +17,9 @@ use hermes_mail_api::client_contract::{
     MailClientContractV1,
 };
 pub use hermes_mail_api::client_contract::{MAIL_MODULE_ID, MAIL_OWNER_ID};
+pub use hermes_mail_delivery_intent_contract::MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1;
 use hermes_mail_delivery_intent_contract::{
-    MAIL_DELIVERY_INTENT_TARGET_CAPABILITY_ID_V1, mail_delivery_intent_execute_consume_request_v1,
+    mail_delivery_intent_execute_consume_request_v1,
     mail_delivery_intent_rejected_publish_request_v1,
     mail_delivery_intent_succeeded_publish_request_v1,
 };

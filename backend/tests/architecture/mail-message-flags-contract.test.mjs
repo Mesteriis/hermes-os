@@ -185,7 +185,7 @@ test('Mail message flags stay provider-owned, durable, typed and separately admi
   assert.match(clientPort, /MailClientRequestV1::MessageFlagStatus/);
   assert.match(admission, /MailClientContractV1::MessageFlagCommand/);
   assert.match(admission, /MailClientContractV1::MessageFlagQuery/);
-  assert.match(managedSetup, /MAIL_STORAGE_BUNDLE_REVISION_V17/);
+  assert.match(managedSetup, /mail_runtime_storage_bundle_v1/);
   assert.match(managedSetup, /MailClientContractV1::MessageFlagCommand/);
   assert.match(managedFlow, /managed_mail_message_flags_reconcile_provider_and_projection/);
   assert.match(managedFlow, /assert_mail_message_flags/);
