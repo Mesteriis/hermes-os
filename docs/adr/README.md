@@ -712,3 +712,9 @@ ADR-0376 фиксирует explicit owner-authorized replay для canonical du
 публикует те же bytes/message ID, не сбрасывает outbox state и не создаёт Kernel
 facade. Исторический Preview закрывается отдельным workflow gate только после
 двух producer-owned replay operations и terminal browser SSE/client_blob proof.
+ADR-0377 закрывает обнаруженный live-browser gap до admission: public replay
+Start становится provider-neutral и принимает только authenticated operation и
+canonical attachment anchor. Exact durable message выбирают и аудируют только
+Communications и Mail в собственных replay indexes после двух typed event
+commands; Kernel/Gateway/Event Hub не получают business selection, frontend не
+получает provider registrations и продолжает terminal lifecycle через один SSE.
