@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_contacts_sync_runtime_admission_v1",
+    "currentSlice": "mail_address_book_provider_adapters_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1536,6 +1536,18 @@
         "role": "workflow",
         "owner": "mail_contacts_sync",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-mail-google-people",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-mail-carddav",
+        "role": "integration",
+        "owner": "mail",
+        "surface": "implementation"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -2523,6 +2535,8 @@
           "kind": "normal"
         }
       ],
+      "hermes-mail-google-people": [],
+      "hermes-mail-carddav": [],
       "hermes-tasks-persistence": [
         {
           "name": "hermes-storage-protocol",
@@ -9190,6 +9204,92 @@
           "features": []
         }
       ],
+      "hermes-mail-google-people": [
+        {
+          "name": "async-native-tls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.6.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "async-std",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.13.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "futures-util",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.3.32",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": true,
+          "features": [
+            "derive"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-mail-carddav": [
+        {
+          "name": "async-native-tls",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.6.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "async-std",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.13.2",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "base64",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.22.1",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "futures-util",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.3.32",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "quick-xml",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.41.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
       "hermes-tasks-persistence": [
         {
           "name": "sha2",
@@ -12687,6 +12787,14 @@
           "hermes-mail-gmail/conformance-test-support",
           "hermes-mail-imap/conformance-test-support"
         ]
+      },
+      "hermes-mail-google-people": {
+        "default": [],
+        "conformance-test-support": []
+      },
+      "hermes-mail-carddav": {
+        "default": [],
+        "conformance-test-support": []
       }
     },
     "targetPolicy": {
@@ -13632,6 +13740,14 @@
       },
       "hermes-mail-contacts-sync-runtime": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-google-people": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-mail-carddav": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       },
       "hermes-tasks-persistence": {

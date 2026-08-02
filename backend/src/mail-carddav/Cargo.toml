@@ -1,0 +1,24 @@
+[package]
+name = "hermes-mail-carddav"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+conformance-test-support = []
+
+[package.metadata.hermes]
+role = "integration"
+owner = "mail"
+surface = "implementation"
+
+[dependencies]
+async-native-tls = "=0.6.0"
+async-std = "=1.13.2"
+base64 = "=0.22.1"
+futures-util = "=0.3.32"
+quick-xml = { version = "=0.41.0", default-features = false }

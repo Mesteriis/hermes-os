@@ -14,6 +14,10 @@ const files = {
     'docs/adr/ADR-0381-contacts-target-bound-mail-sync-source-port.md',
     PROJECT_ROOT,
   ),
+  providerAdr: new URL(
+    'docs/adr/ADR-0382-mail-address-book-provider-execution-and-authority.md',
+    PROJECT_ROOT,
+  ),
   inventory: new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
   policy: new URL('architecture/policy.json', BACKEND_ROOT),
   apiManifest: new URL('src/contacts-command-api/Cargo.toml', BACKEND_ROOT),
@@ -60,6 +64,10 @@ const files = {
     'src/mail-address-book-contract/proto/hermes/mail/address_book/v1/address_book.proto',
     BACKEND_ROOT,
   ),
+  googlePeopleManifest: new URL('src/mail-google-people/Cargo.toml', BACKEND_ROOT),
+  googlePeople: new URL('src/mail-google-people/src/lib.rs', BACKEND_ROOT),
+  cardDavManifest: new URL('src/mail-carddav/Cargo.toml', BACKEND_ROOT),
+  cardDav: new URL('src/mail-carddav/src/lib.rs', BACKEND_ROOT),
   workflowApiManifest: new URL('src/mail-contacts-sync-api/Cargo.toml', BACKEND_ROOT),
   workflowApi: new URL(
     'src/mail-contacts-sync-api/proto/hermes/mail_contacts_sync/v1/sync.proto',
@@ -148,7 +156,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_runtime_admission_v1',
+    'mail_address_book_provider_adapters_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -196,6 +204,62 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
   assert.match(sourceResults, /consume_source_prepared_once_v1/);
   assert.match(sourceResults, /build_upsert_mail_address_book_entry_command_v1/);
   assert.doesNotMatch(`${reverseChange}\n${sourceResults}`, /BlobDataClient|provider_kind\s*==|reqwest/);
+});
+
+test('Mail address-book providers are separate bounded integration adapters', async () => {
+  const [adr, policySource, googleManifest, google, cardDavManifest, cardDav] =
+    await Promise.all([
+      readFile(files.providerAdr, 'utf8'),
+      readFile(files.policy, 'utf8'),
+      readFile(files.googlePeopleManifest, 'utf8'),
+      readFile(files.googlePeople, 'utf8'),
+      readFile(files.cardDavManifest, 'utf8'),
+      readFile(files.cardDav, 'utf8'),
+    ]);
+  const policy = JSON.parse(policySource);
+  const packages = new Map(
+    policy.implementation.productionPackages.map((descriptor) => [descriptor.name, descriptor]),
+  );
+
+  assert.match(adr, /hermes-mail-google-people/);
+  assert.match(adr, /hermes-mail-carddav/);
+  assert.match(adr, /никогда не выводит provider из[\s\S]*hostname, email suffix/);
+  assert.match(adr, /mail_icloud_carddav_password/);
+  assert.deepEqual(packages.get('hermes-mail-google-people'), {
+    name: 'hermes-mail-google-people',
+    role: 'integration',
+    owner: 'mail',
+    surface: 'implementation',
+  });
+  assert.deepEqual(packages.get('hermes-mail-carddav'), {
+    name: 'hermes-mail-carddav',
+    role: 'integration',
+    owner: 'mail',
+    surface: 'implementation',
+  });
+
+  for (const manifest of [googleManifest, cardDavManifest]) {
+    assert.match(manifest, /role = "integration"/);
+    assert.match(manifest, /owner = "mail"/);
+    assert.match(manifest, /surface = "implementation"/);
+    assert.doesNotMatch(
+      manifest,
+      /hermes-(?:contacts|communications|mail-contacts-sync|events|storage|vault)/,
+    );
+  }
+  assert.match(google, /GOOGLE_PEOPLE_API_HOST_V1: &str = "people.googleapis.com"/);
+  assert.match(google, /GOOGLE_PEOPLE_CONTACTS_SCOPE_V1/);
+  assert.match(google, /OutcomeUnknown/);
+  assert.match(google, /expected_etag/);
+  assert.match(google, /take\(\(MAX_RESPONSE_BYTES \+ 1\) as u64\)/);
+  assert.doesNotMatch(google, /reqwest|sqlx|async_nats|hermes_contacts/i);
+
+  assert.match(cardDav, /ICLOUD_CARDDAV_HOST_V1: &str = "contacts.icloud.com"/);
+  assert.match(cardDav, /ICLOUD_CARDDAV_CREDENTIAL_PURPOSE_V1/);
+  assert.match(cardDav, /ReadOnlyProvider/);
+  assert.match(cardDav, /supports_remote_write/);
+  assert.match(cardDav, /take\(\(MAX_RESPONSE_BYTES \+ 1\) as u64\)/);
+  assert.doesNotMatch(cardDav, /reqwest|sqlx|async_nats|hermes_contacts/i);
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

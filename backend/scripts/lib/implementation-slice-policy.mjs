@@ -1290,6 +1290,12 @@ const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES =
     { name: 'hermes-mail-contacts-sync-runtime', role: 'workflow', owner: 'mail_contacts_sync', surface: 'runtime' },
   ]);
 
+const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_PRODUCTION_PACKAGES = [
+  ...MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES,
+  { name: 'hermes-mail-google-people', role: 'integration', owner: 'mail', surface: 'implementation' },
+  { name: 'hermes-mail-carddav', role: 'integration', owner: 'mail', surface: 'implementation' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3812,6 +3818,12 @@ const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-google-people': [],
+  'hermes-mail-carddav': [],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5171,6 +5183,24 @@ const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-google-people': [
+    { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: true, features: ['derive'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
+  ],
+  'hermes-mail-carddav': [
+    { name: 'async-native-tls', kind: 'normal', source: 'crates_io', version: '=0.6.0', defaultFeatures: true, features: [] },
+    { name: 'async-std', kind: 'normal', source: 'crates_io', version: '=1.13.2', defaultFeatures: true, features: [] },
+    { name: 'base64', kind: 'normal', source: 'crates_io', version: '=0.22.1', defaultFeatures: true, features: [] },
+    { name: 'futures-util', kind: 'normal', source: 'crates_io', version: '=0.3.32', defaultFeatures: true, features: [] },
+    { name: 'quick-xml', kind: 'normal', source: 'crates_io', version: '=0.41.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -6053,6 +6083,18 @@ const CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_CARGO_FEATURE_ALLOWLIST = {
 const MAIL_CONTACTS_SYNC_PERSISTENCE_CARGO_FEATURE_ALLOWLIST = {
   ...CONTACTS_MAIL_IDENTITY_COMMAND_PERSISTENCE_CARGO_FEATURE_ALLOWLIST,
   'hermes-mail-contacts-sync-persistence': {
+    default: [],
+    'conformance-test-support': [],
+  },
+};
+
+const MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_CARGO_FEATURE_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_PERSISTENCE_CARGO_FEATURE_ALLOWLIST,
+  'hermes-mail-google-people': {
+    default: [],
+    'conformance-test-support': [],
+  },
+  'hermes-mail-carddav': {
     default: [],
     'conformance-test-support': [],
   },
@@ -7898,6 +7940,17 @@ function expectedSlice(currentSlice) {
       packages: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'mail_address_book_provider_adapters_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_CARGO_FEATURE_ALLOWLIST,
+      packages: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_ADDRESS_BOOK_PROVIDER_ADAPTERS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

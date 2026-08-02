@@ -109,6 +109,14 @@ const MAIL_CARGO_FEATURES = {
       'hermes-mail-imap/conformance-test-support',
     ],
   },
+  'hermes-mail-google-people': {
+    default: [],
+    'conformance-test-support': [],
+  },
+  'hermes-mail-carddav': {
+    default: [],
+    'conformance-test-support': [],
+  },
 };
 
 test('Mail outbound attachments keep provider delivery contracts as separate integration units', async () => {
@@ -117,7 +125,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_runtime_admission_v1',
+    'mail_address_book_provider_adapters_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',
@@ -162,6 +170,8 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
       'hermes-mail-retained-evidence-replay-persistence',
       'hermes-mail-retained-evidence-replay-contract',
       'hermes-mail-address-book-contract',
+      'hermes-mail-google-people',
+      'hermes-mail-carddav',
     ],
   );
   assert.deepEqual(

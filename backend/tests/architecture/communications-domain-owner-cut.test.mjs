@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_runtime_admission_v1',
+    'mail_address_book_provider_adapters_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
@@ -315,6 +315,8 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'hermes-mail-retained-evidence-replay-persistence',
       'hermes-mail-retained-evidence-replay-contract',
       'hermes-mail-address-book-contract',
+      'hermes-mail-google-people',
+      'hermes-mail-carddav',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );

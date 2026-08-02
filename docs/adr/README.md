@@ -729,3 +729,12 @@ direction, correlation, checkpoints и retry — в workflow; взаимодей
 только через typed durable events/commands и owner-local storage. Contacts
 command gate реализован пятью изолированными units и доказан live managed
 Vault/Storage/NATS contour; сам Mail sync workflow остаётся planned.
+ADR-0380 задаёт managed configuration instances и typed Settings bootstrap для
+workflow runtime без account/provider authority в Kernel или Scheduler.
+ADR-0381 добавляет шестую Contacts-owned source-port unit: private contact
+snapshot переходит в Mail только через exact target-bound Blob, а durable event
+остаётся bodyless и revision-bound.
+ADR-0382 фиксирует Mail-owned address-book execution: Google People и CardDAV
+являются отдельными provider units, provider выбирается только typed Mail
+Settings, OAuth/CardDAV credentials имеют разные exact purposes, а durable
+inbox/result outbox остаются в отдельной Mail persistence unit.

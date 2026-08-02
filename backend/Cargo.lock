@@ -4237,6 +4237,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-mail-carddav"
+version = "0.1.0"
+dependencies = [
+ "async-native-tls",
+ "async-std",
+ "base64 0.22.1",
+ "futures-util",
+ "quick-xml",
+]
+
+[[package]]
 name = "hermes-mail-communications-slice-testkit"
 version = "0.1.0"
 dependencies = [
@@ -4340,6 +4351,17 @@ dependencies = [
  "base64 0.22.1",
  "futures-util",
  "hermes-mail-api",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "hermes-mail-google-people"
+version = "0.1.0"
+dependencies = [
+ "async-native-tls",
+ "async-std",
+ "futures-util",
  "serde",
  "serde_json",
 ]
