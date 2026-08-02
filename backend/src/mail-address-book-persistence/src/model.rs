@@ -16,5 +16,12 @@ pub struct MailAddressBookUpsertAdmissionV1 {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingMailAddressBookUpsertV1 {
     pub admission: MailAddressBookUpsertAdmissionV1,
+    pub target_snapshot_receipt: Option<MailAddressBookTargetSnapshotReceiptV1>,
     pub execution_attempt: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MailAddressBookTargetSnapshotReceiptV1 {
+    pub reference_id: [u8; 16],
+    pub receipt_sha256: [u8; 32],
 }

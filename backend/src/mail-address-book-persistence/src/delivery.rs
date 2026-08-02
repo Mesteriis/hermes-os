@@ -302,6 +302,7 @@ fn job_from_row(
     let execution_attempt: i32 = row.try_get("execution_attempt").map_err(row_error)?;
     let pending = PendingMailAddressBookUpsertV1 {
         admission: admission_from_row(&row)?,
+        target_snapshot_receipt: target_snapshot_receipt_from_row(&row)?,
         execution_attempt: execution_attempt.try_into().map_err(row_error)?,
     };
     validate_admission(&pending.admission, 1)?;
@@ -309,6 +310,27 @@ fn job_from_row(
         return Err(MailAddressBookPersistenceErrorV1::InvalidRow);
     }
     Ok(pending)
+}
+
+fn target_snapshot_receipt_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<Option<crate::MailAddressBookTargetSnapshotReceiptV1>, MailAddressBookPersistenceErrorV1>
+{
+    let reference_id = optional_row_id::<16>(row, "target_contact_snapshot_reference_id")?;
+    let receipt_sha256 = optional_row_id::<32>(row, "target_contact_snapshot_receipt_sha256")?;
+    let recorded_at: Option<i64> = row
+        .try_get("snapshot_custody_recorded_at_unix_seconds")
+        .map_err(row_error)?;
+    match (reference_id, receipt_sha256, recorded_at) {
+        (None, None, None) => Ok(None),
+        (Some(reference_id), Some(receipt_sha256), Some(recorded_at)) if recorded_at > 0 => {
+            Ok(Some(crate::MailAddressBookTargetSnapshotReceiptV1 {
+                reference_id,
+                receipt_sha256,
+            }))
+        }
+        _ => Err(MailAddressBookPersistenceErrorV1::InvalidRow),
+    }
 }
 
 fn verify_admission_row(
@@ -495,6 +517,21 @@ fn row_id<const WIDTH: usize>(
     (!zero(&value))
         .then_some(value)
         .ok_or(MailAddressBookPersistenceErrorV1::InvalidRow)
+}
+
+fn optional_row_id<const WIDTH: usize>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<Option<[u8; WIDTH]>, MailAddressBookPersistenceErrorV1> {
+    row.try_get::<Option<Vec<u8>>, _>(column)
+        .map_err(row_error)?
+        .map(|value| {
+            let value: [u8; WIDTH] = value.try_into().map_err(row_error)?;
+            (!zero(&value))
+                .then_some(value)
+                .ok_or(MailAddressBookPersistenceErrorV1::InvalidRow)
+        })
+        .transpose()
 }
 
 fn zero(value: &[u8]) -> bool {

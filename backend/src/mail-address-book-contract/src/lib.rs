@@ -18,6 +18,7 @@ use hermes_runtime_protocol::v1::{
 pub const PACKAGE: &str = "hermes-mail-address-book-contract";
 pub const MAIL_OWNER_ID_V1: &str = "mail";
 pub const MAIL_RUNTIME_MODULE_ID_V1: &str = "hermes-mail-runtime";
+pub const MAIL_ADDRESS_BOOK_COMMAND_SOURCE_MODULE_ID_V1: &str = "hermes-mail-contacts-sync-runtime";
 pub const MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1: &str = "mail.address-book.provider.v1";
 pub const MAIL_ADDRESS_BOOK_CONTRACT_MAJOR_V1: u32 = 1;
 pub const MAIL_ADDRESS_BOOK_CONTRACT_REVISION_V1: u32 = 2;

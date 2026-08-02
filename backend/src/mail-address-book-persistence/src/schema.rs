@@ -4,9 +4,12 @@ use hermes_storage_protocol::{
 };
 use sha2::{Digest, Sha256};
 
-pub const MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 26;
+const MAIL_ADDRESS_BOOK_PREDECESSOR_REVISION_V1: u32 = 25;
+pub const MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 27;
 pub const MAIL_ADDRESS_BOOK_SCHEMA_V1: &[u8] =
     include_bytes!("../migrations/0001_address_book_upsert.sql");
+pub const MAIL_ADDRESS_BOOK_CUSTODY_SCHEMA_V1: &[u8] =
+    include_bytes!("../migrations/0002_snapshot_custody.sql");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailAddressBookSchemaErrorV1 {
@@ -18,7 +21,7 @@ pub fn append_mail_address_book_storage_v1(
     mut predecessor: StorageBundleV1,
 ) -> Result<StorageBundleV1, MailAddressBookSchemaErrorV1> {
     if predecessor.major != 1
-        || predecessor.revision != MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1 - 1
+        || predecessor.revision != MAIL_ADDRESS_BOOK_PREDECESSOR_REVISION_V1
         || predecessor.bundle_id != "mail_state"
         || predecessor.owner_id != "mail"
         || predecessor.steps.last().map(|step| step.revision) != Some(predecessor.revision)
@@ -27,10 +30,16 @@ pub fn append_mail_address_book_storage_v1(
         return Err(MailAddressBookSchemaErrorV1::InvalidPredecessor);
     }
     predecessor.steps.push(StorageMigrationStepV1 {
-        revision: MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1,
+        revision: 26,
         migration_id: "mail_address_book_upsert".to_owned(),
         forward_sql_utf8: MAIL_ADDRESS_BOOK_SCHEMA_V1.to_vec(),
         sha256: Sha256::digest(MAIL_ADDRESS_BOOK_SCHEMA_V1).to_vec(),
+    });
+    predecessor.steps.push(StorageMigrationStepV1 {
+        revision: MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1,
+        migration_id: "mail_address_book_snapshot_custody".to_owned(),
+        forward_sql_utf8: MAIL_ADDRESS_BOOK_CUSTODY_SCHEMA_V1.to_vec(),
+        sha256: Sha256::digest(MAIL_ADDRESS_BOOK_CUSTODY_SCHEMA_V1).to_vec(),
     });
     predecessor.revision = MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1;
     validate_storage_bundle(&predecessor)
@@ -73,14 +82,24 @@ mod tests {
     fn appends_only_mail_address_book_upsert_state() {
         let bundle =
             append_mail_address_book_storage_v1(predecessor("mail")).expect("valid successor");
-        assert_eq!(bundle.revision, 26);
-        let sql =
-            String::from_utf8(bundle.steps.last().unwrap().forward_sql_utf8.clone()).expect("utf8");
-        assert!(sql.contains("mail_address_book_upsert_inbox"));
-        assert!(sql.contains("mail_address_book_upsert_result_outbox"));
-        assert!(sql.contains("exact_envelope_bytes"));
-        assert!(!sql.contains("CREATE TABLE hermes_data.contacts_"));
-        assert!(!sql.contains("mail_contacts_sync_"));
+        assert_eq!(bundle.revision, 27);
+        let upsert_sql = String::from_utf8(
+            bundle.steps[bundle.steps.len() - 2]
+                .forward_sql_utf8
+                .clone(),
+        )
+        .expect("upsert utf8");
+        let custody_sql = String::from_utf8(bundle.steps.last().unwrap().forward_sql_utf8.clone())
+            .expect("custody utf8");
+        assert!(upsert_sql.contains("mail_address_book_upsert_inbox"));
+        assert!(upsert_sql.contains("mail_address_book_upsert_result_outbox"));
+        assert!(upsert_sql.contains("exact_envelope_bytes"));
+        assert!(custody_sql.contains("target_contact_snapshot_reference_id"));
+        assert!(custody_sql.contains("mail_address_book_target_snapshot_receipt_complete"));
+        assert!(
+            !format!("{upsert_sql}\n{custody_sql}").contains("CREATE TABLE hermes_data.contacts_")
+        );
+        assert!(!format!("{upsert_sql}\n{custody_sql}").contains("mail_contacts_sync_"));
     }
 
     #[test]

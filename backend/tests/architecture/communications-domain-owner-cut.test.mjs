@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_persistence_authority_v1',
+    'mail_address_book_runtime_execution_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
@@ -215,6 +215,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'knowledge.reviewed-candidate.created.publisher.v1',
       'knowledge.reviewed-candidate.rejected.publisher.v1',
       'knowledge.storage.v1',
+      'mail.address-book.contact-source.blob.v1',
       'mail.address-book.provider.v1',
       'mail.attachment-anchor.consume.v1',
       'mail.attachment-blob-admission.publish.v1',

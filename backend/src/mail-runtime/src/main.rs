@@ -15,6 +15,9 @@ use hermes_mail_runtime::managed::{
 };
 use hermes_mail_runtime::{
     MailRuntimeAdmission,
+    address_book_consumer::MailAddressBookConsumeErrorV1,
+    address_book_outbox::MailAddressBookOutboxRelayErrorV1,
+    address_book_worker::{MailAddressBookWorkerErrorV1, process_next_mail_address_book_upsert_v1},
     attachment_security_outbox::MailAttachmentSecurityOutboxRelayError,
     communications_outbox::MailCommunicationsOutboxRelayError,
     delivery_intent_consumer::MailDeliveryIntentConsumeErrorV1,
@@ -406,6 +409,33 @@ where
                 return Err("Mail delivery-intent command is invalid".to_owned());
             }
         }
+        match runtime.block_on(admitted.try_consume_address_book_upsert(now)) {
+            Ok(_) | Err(MailAddressBookConsumeErrorV1::Unavailable) => {}
+            Err(MailAddressBookConsumeErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_address_book_inbox_persistence_failed");
+                return Err("Mail address-book inbox persistence failed".to_owned());
+            }
+            Err(error) => {
+                developer_diagnostic(&format!(
+                    "developer_mail_address_book_command_error={error:?}"
+                ));
+                return Err("Mail address-book command is invalid".to_owned());
+            }
+        }
+        match runtime.block_on(process_next_mail_address_book_upsert_v1(&mut admitted, now)) {
+            Ok(_) => {}
+            Err(MailAddressBookWorkerErrorV1::InvalidClock) => {
+                return Err("Mail address-book worker clock is invalid".to_owned());
+            }
+            Err(MailAddressBookWorkerErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_address_book_worker_persistence_failed");
+                return Err("Mail address-book persistence failed".to_owned());
+            }
+            Err(MailAddressBookWorkerErrorV1::ResultEnvelope) => {
+                developer_diagnostic("developer_mail_address_book_result_invalid");
+                return Err("Mail address-book result is invalid".to_owned());
+            }
+        }
         runtime
             .block_on(admitted.try_consume_attachment_anchor_handoff(now))
             .map_err(|_| {
@@ -445,6 +475,13 @@ where
             Err(MailDeliveryIntentOutboxRelayErrorV1::Persistence(_)) => {
                 developer_diagnostic("developer_mail_delivery_intent_outbox_persistence_failed");
                 return Err("Mail delivery-intent outbox persistence failed".to_owned());
+            }
+        }
+        match runtime.block_on(admitted.relay_address_book_outbox(now)) {
+            Ok(_) | Err(MailAddressBookOutboxRelayErrorV1::Unavailable) => {}
+            Err(MailAddressBookOutboxRelayErrorV1::Persistence) => {
+                developer_diagnostic("developer_mail_address_book_outbox_persistence_failed");
+                return Err("Mail address-book result relay failed".to_owned());
             }
         }
         match runtime.block_on(admitted.relay_attachment_security_outbox(now)) {

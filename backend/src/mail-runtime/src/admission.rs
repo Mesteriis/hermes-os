@@ -12,6 +12,13 @@ use hermes_communications_attachment_contract::admission::{
 use hermes_communications_ingress::admission::{
     COMMUNICATION_OBSERVED_MAX_IN_FLIGHT, communication_observed_publish_request_v1,
 };
+use hermes_contacts_mail_sync_source_api::{
+    CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1, CONTACT_MAIL_SYNC_SOURCE_MAX_BYTES_V1,
+    CONTACTS_MAIL_SYNC_SOURCE_CAPABILITY_ID_V1,
+};
+use hermes_mail_address_book_contract::{
+    MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1, MailAddressBookContractV1,
+};
 use hermes_mail_api::client_contract::{
     MAIL_CLIENT_CONTRACT_MAJOR, MAIL_CLIENT_CONTRACT_REVISION, MAIL_CLIENT_DESCRIPTOR_SET_V1,
     MailClientContractV1,
@@ -70,6 +77,8 @@ pub const MAIL_SMTP_CREDENTIAL_PROVISIONING_CAPABILITY_ID: &str =
     "mail.smtp.credential-provisioning.v1";
 pub const MAIL_STORAGE_CAPABILITY_ID: &str = "mail.storage.v1";
 pub const MAIL_RETAINED_EVIDENCE_REPLAY_CAPABILITY_ID: &str = "mail.retained-evidence-replay.v1";
+pub const MAIL_ADDRESS_BOOK_SOURCE_BLOB_CUSTODY_SCOPE_ID_V1: &str =
+    CONTACTS_MAIL_SYNC_SOURCE_CAPABILITY_ID_V1;
 pub const MAIL_ATTACHMENT_BLOB_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAIL_ATTACHMENT_BLOB_CUSTODY_SCOPE_ID: &str = "mail.attachment.content.v1";
 pub const MAIL_STORAGE_CONNECTION_BUDGET: u32 = 4;
@@ -88,6 +97,8 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::AccountLifecycleRetry),
         mail_client_capability_v1(MailClientContractV1::AccountQuery),
         mail_client_capability_v1(MailClientContractV1::AccountRetire),
+        mail_address_book_source_blob_capability_v1(),
+        mail_address_book_provider_capability_v1(),
         mail_attachment_anchor_consume_capability_v1(),
         mail_attachment_blob_admission_publish_capability_v1(),
         mail_attachment_safety_state_consume_capability_v1(),
@@ -160,6 +171,39 @@ pub fn mail_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         mail_client_capability_v1(MailClientContractV1::Sync),
         mail_settings_configuration_catalog_capability_v1(),
     ]
+}
+
+fn mail_address_book_provider_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![
+            MailAddressBookContractV1::UpsertEntryCommand.consume_request(),
+            MailAddressBookContractV1::EntryUpserted.publish_request(),
+            MailAddressBookContractV1::EntryUpsertRejected.publish_request(),
+        ],
+        ..Default::default()
+    }
+}
+
+fn mail_address_book_source_blob_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Optional as i32,
+        requests: vec![CapabilityRequestV1 {
+            request: Some(Request::BlobQuota(BlobQuotaRequestV1 {
+                max_bytes: CONTACT_MAIL_SYNC_SOURCE_MAX_BYTES_V1,
+                custody_scope_id: MAIL_ADDRESS_BOOK_SOURCE_BLOB_CUSTODY_SCOPE_ID_V1.to_owned(),
+                allowed_operations: vec![
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
+                    BlobQuotaOperationV1::ReadRange as i32,
+                ],
+            })),
+        }],
+        ..Default::default()
+    }
 }
 
 #[must_use]
@@ -526,6 +570,8 @@ mod tests {
                 MailClientContractV1::AccountLifecycleRetry.capability_id(),
                 MailClientContractV1::AccountQuery.capability_id(),
                 MailClientContractV1::AccountRetire.capability_id(),
+                CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1,
+                MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1,
                 MAIL_ATTACHMENT_ANCHOR_CONSUME_CAPABILITY_ID,
                 MAIL_ATTACHMENT_BLOB_ADMISSION_PUBLISH_CAPABILITY_ID,
                 MAIL_ATTACHMENT_SAFETY_STATE_CONSUME_CAPABILITY_ID,
@@ -566,6 +612,37 @@ mod tests {
                 SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID,
             ]
         );
+
+        let address_book = descriptor
+            .capabilities
+            .iter()
+            .find(|capability| capability.capability_id == MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1)
+            .expect("Mail address-book provider capability");
+        assert_eq!(address_book.provides, []);
+        assert_eq!(address_book.requests.len(), 3);
+        assert!(
+            address_book
+                .requests
+                .iter()
+                .all(|request| matches!(request.request, Some(Request::EventRoute(_))))
+        );
+        let source_blob = descriptor
+            .capabilities
+            .iter()
+            .find(|capability| {
+                capability.capability_id == CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1
+            })
+            .expect("Mail address-book source Blob capability");
+        assert!(matches!(
+            source_blob.requests[0].request.as_ref(),
+            Some(Request::BlobQuota(quota))
+                if quota.max_bytes == CONTACT_MAIL_SYNC_SOURCE_MAX_BYTES_V1
+                    && quota.custody_scope_id == CONTACTS_MAIL_SYNC_SOURCE_CAPABILITY_ID_V1
+                    && quota.allowed_operations == [
+                        BlobQuotaOperationV1::CustodyTransfer as i32,
+                        BlobQuotaOperationV1::ReadRange as i32,
+                    ]
+        ));
 
         let candidate = descriptor
             .capabilities

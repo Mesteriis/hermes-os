@@ -75,7 +75,7 @@ test('Knowledge admission is exact verified-note ownership with atomic owner-loc
   ]);
   const policy = JSON.parse(policySource);
 
-  assert.equal(policy.implementation.currentSlice, 'mail_address_book_persistence_authority_v1');
+  assert.equal(policy.implementation.currentSlice, 'mail_address_book_runtime_execution_v1');
   assert.equal(policy.domains.developmentAllowlist.includes('knowledge'), true);
   assert.equal(policy.domains.blocked.includes('knowledge'), false);
   assert.match(adr, /Состояние реализации: staged/);

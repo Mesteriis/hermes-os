@@ -1,6 +1,10 @@
 //! Typed Mail managed-runtime admission contract.
 
 pub mod account_lifecycle;
+pub mod address_book_consumer;
+pub mod address_book_outbox;
+pub mod address_book_snapshot;
+pub mod address_book_worker;
 pub mod admission;
 pub mod attachment_anchor_mapping;
 pub mod attachment_safety_projection;

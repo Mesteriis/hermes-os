@@ -217,7 +217,7 @@ test('task candidate agreement keeps extraction review and Tasks in separate own
   assert.equal(policy.domains.registered.includes('tasks'), true);
   assert.equal(policy.domains.developmentAllowlist.includes('tasks'), true);
   assert.equal(policy.domains.blocked.includes('tasks'), false);
-  assert.equal(policy.implementation.currentSlice, 'mail_address_book_persistence_authority_v1');
+  assert.equal(policy.implementation.currentSlice, 'mail_address_book_runtime_execution_v1');
   assert.equal(
     policy.implementation.ownerInventory.businessCapabilities.includes(
       'review.task-candidate.promotion-result.v1',

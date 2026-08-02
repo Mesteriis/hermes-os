@@ -1306,6 +1306,9 @@ const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES =
       : [packageDescriptor]
   ));
 
+const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES =
+  MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES;
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3850,6 +3853,26 @@ const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   )),
 };
 
+const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-mail-runtime': MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_WORKSPACE_DEPENDENCY_ALLOWLIST[
+    'hermes-mail-runtime'
+  ].flatMap((dependency) => (
+    dependency.name === 'hermes-mail-persistence'
+      ? [
+          dependency,
+          { name: 'hermes-mail-address-book-contract', kind: 'normal' },
+        ]
+      : dependency.name === 'hermes-mail-address-book-persistence'
+        ? [
+            dependency,
+            { name: 'hermes-mail-google-people', kind: 'normal' },
+            { name: 'hermes-contacts-mail-sync-source-api', kind: 'normal' },
+          ]
+      : [dependency]
+  )),
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5236,6 +5259,9 @@ const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
   ],
 };
 
+const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_THIRD_PARTY_DEPENDENCY_ALLOWLIST =
+  MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST;
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -6060,6 +6086,14 @@ const MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY = {
   ].sort(),
 };
 
+const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY = {
+  ...MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY,
+  businessCapabilities: [
+    ...MAIL_CONTACTS_SYNC_RUNTIME_ADMISSION_INVENTORY.businessCapabilities,
+    'mail.address-book.contact-source.blob.v1',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -6140,6 +6174,19 @@ const MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_CARGO_FEATURE_ALLOWLIST = {
   'hermes-mail-address-book-persistence': {
     default: [],
     'conformance-test-support': [],
+  },
+};
+
+const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST = {
+  ...MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_CARGO_FEATURE_ALLOWLIST,
+  'hermes-mail-runtime': {
+    default: [],
+    'conformance-test-support': [
+      'hermes-mail-api/conformance-test-support',
+      'hermes-mail-gmail/conformance-test-support',
+      'hermes-mail-google-people/conformance-test-support',
+      'hermes-mail-imap/conformance-test-support',
+    ],
   },
 };
 
@@ -8005,6 +8052,17 @@ function expectedSlice(currentSlice) {
       packages: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_ADDRESS_BOOK_PERSISTENCE_AUTHORITY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'mail_address_book_runtime_execution_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES,
+      workspaceDependencies: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

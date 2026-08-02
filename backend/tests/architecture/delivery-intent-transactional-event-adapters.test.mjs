@@ -82,7 +82,7 @@ test('delivery intent event adapters preserve four exact routes without a provid
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_persistence_authority_v1',
+    'mail_address_book_runtime_execution_v1',
   );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')

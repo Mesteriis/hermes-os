@@ -4,8 +4,15 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: planned. Решение фиксирует owner и build-unit boundaries;
-наличие ADR не открывает `mail_contacts_sync_v1`.
+Состояние реализации: static execution slice implemented. Отдельные provider
+units, typed Settings/OAuth authority, Mail-owned persistence, exact command
+consumer, target-bound Blob custody/read, Google People create/update, iCloud
+read-only rejection и exact terminal outbox подключены к Mail managed runtime.
+Target custody receipt сохраняется в Mail-owned PostgreSQL до Blob read и
+provider dispatch; disposable PostgreSQL conformance доказывает restart replay,
+идемпотентную запись и conflict rejection. Managed Blob/provider/browser
+conformance ещё не закрыт, поэтому наличие этого среза не открывает
+`mail_contacts_sync_v1`.
 
 Уточняет:
 
@@ -55,13 +62,16 @@ successor к `mail_state` после retained-replay revisions. Он владе�
 address-book inbox/job/result-outbox и replay fencing. Он не читает Contacts или
 workflow tables. Mail runtime:
 
-1. durable-резервирует exact upsert command до Blob/provider side effects;
+1. durable-резервирует exact upsert command до Ack и любых Blob/provider side
+   effects; после этой owner-local reservation повторная доставка безопасна;
 2. выбирает account и provider только из effective Mail Settings;
-3. принимает target-bound Blob custody, проверяет declared size/hash и декодирует
-   exact Contacts source content;
-4. выполняет provider mutation с ETag fencing;
-5. атомарно сохраняет terminal result в Mail-owned outbox до Ack;
-6. при ambiguous provider outcome выдаёт `OUTCOME_UNKNOWN`, не повторяя mutation
+3. принимает target-bound Blob custody и сохраняет exact target reference/hash
+   отдельным successor migration до чтения private bytes;
+4. после restart читает уже сохранённый target receipt, проверяет declared
+   size/hash и декодирует exact Contacts source content без повторного transfer;
+5. выполняет provider mutation с ETag fencing;
+6. атомарно сохраняет terminal result в Mail-owned outbox до его публикации;
+7. при ambiguous provider outcome выдаёт `OUTCOME_UNKNOWN`, не повторяя mutation
    автоматически.
 
 ## Инварианты
@@ -73,6 +83,8 @@ workflow tables. Mail runtime:
   subjects, logs, health и sanitized errors;
 - completed replay публикует сохранённый exact result без Blob read или provider
   mutation;
+- pending replay после завершённого custody использует сохранённый target
+  receipt; partial receipt row и другой receipt для того же command fail closed;
 - Google create/update различаются только по optional target-account link из
   source Blob; ETag передаётся как provider precondition;
 - iCloud write и missing Google Contacts scope являются definite typed

@@ -1,3 +1,9 @@
+use hermes_mail_address_book_persistence::{
+    MailAddressBookCommandInboxOutcomeV1, MailAddressBookDispatchOutcomeV1,
+    MailAddressBookPersistenceConformanceV1, MailAddressBookPersistenceErrorV1,
+    MailAddressBookSnapshotCustodyOutcomeV1, MailAddressBookTargetSnapshotReceiptV1,
+    MailAddressBookUpsertAdmissionV1,
+};
 use hermes_mail_contacts_sync_core::{
     MailContactsSyncDirectionV1, MailContactsSyncDraftV1, MailContactsSyncStateV1,
     MailContactsSyncTriggerV1,
@@ -310,6 +316,99 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
             .await
             .expect("replay disabled no-op"),
         AcceptScheduledMailContactsSyncDueOutcomeV1::Duplicate(None)
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires the disposable authenticated PostgreSQL contour"]
+async fn address_book_target_custody_is_restart_safe_and_conflict_checked() {
+    let database_url = std::env::var("HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL")
+        .expect("HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL");
+    let persistence = MailAddressBookPersistenceConformanceV1::connect_url(&database_url)
+        .await
+        .expect("connect Mail address-book persistence");
+    MailAddressBookPersistenceConformanceV1::install_schema(&persistence)
+        .await
+        .expect("install Mail address-book schema");
+    let admission = MailAddressBookUpsertAdmissionV1 {
+        command_message_id: [1; 16],
+        command_envelope_sha256: [2; 32],
+        command_id: [3; 16],
+        run_id: [4; 16],
+        logical_owner_id: "owner-1".to_owned(),
+        account_id: "mail-account-1".to_owned(),
+        contact_snapshot_reference_id: [5; 16],
+        contact_snapshot_sha256: [6; 32],
+        expected_contact_revision: 7,
+        contact_snapshot_declared_bytes: 128,
+        contact_snapshot_custody_source_proof: vec![8; 32],
+    };
+    assert_eq!(
+        persistence
+            .accept_upsert_command(&admission, 1_800_000_000)
+            .await
+            .expect("accept address-book command"),
+        MailAddressBookCommandInboxOutcomeV1::Accepted
+    );
+    assert_eq!(
+        persistence
+            .pending_upserts(1)
+            .await
+            .expect("load pre-transfer job")[0]
+            .target_snapshot_receipt,
+        None
+    );
+
+    let receipt = MailAddressBookTargetSnapshotReceiptV1 {
+        reference_id: [9; 16],
+        receipt_sha256: admission.contact_snapshot_sha256,
+    };
+    assert_eq!(
+        persistence
+            .record_target_snapshot_receipt(admission.command_id, receipt, 1_800_000_001)
+            .await
+            .expect("record target custody"),
+        MailAddressBookSnapshotCustodyOutcomeV1::Recorded
+    );
+    assert_eq!(
+        persistence
+            .record_target_snapshot_receipt(admission.command_id, receipt, 1_800_000_002)
+            .await
+            .expect("replay target custody"),
+        MailAddressBookSnapshotCustodyOutcomeV1::AlreadyRecorded
+    );
+    let conflicting = MailAddressBookTargetSnapshotReceiptV1 {
+        reference_id: [10; 16],
+        ..receipt
+    };
+    assert_eq!(
+        persistence
+            .record_target_snapshot_receipt(admission.command_id, conflicting, 1_800_000_003)
+            .await,
+        Err(MailAddressBookPersistenceErrorV1::Conflict)
+    );
+    assert_eq!(
+        persistence
+            .pending_upserts(1)
+            .await
+            .expect("reload restart-safe pending job")[0]
+            .target_snapshot_receipt,
+        Some(receipt)
+    );
+    assert_eq!(
+        persistence
+            .mark_dispatch_started(admission.command_id, 1_800_000_004)
+            .await
+            .expect("mark provider dispatch"),
+        MailAddressBookDispatchOutcomeV1::Started
+    );
+    assert_eq!(
+        persistence
+            .uncertain_upserts(1)
+            .await
+            .expect("load uncertain job")[0]
+            .target_snapshot_receipt,
+        Some(receipt)
     );
 }
 

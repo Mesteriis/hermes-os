@@ -76,6 +76,14 @@ const files = {
     'src/mail-address-book-persistence/migrations/0001_address_book_upsert.sql',
     BACKEND_ROOT,
   ),
+  mailPersistenceCustodyMigration: new URL(
+    'src/mail-address-book-persistence/migrations/0002_snapshot_custody.sql',
+    BACKEND_ROOT,
+  ),
+  mailPersistenceCustody: new URL(
+    'src/mail-address-book-persistence/src/custody.rs',
+    BACKEND_ROOT,
+  ),
   mailPersistenceDelivery: new URL(
     'src/mail-address-book-persistence/src/delivery.rs',
     BACKEND_ROOT,
@@ -86,6 +94,26 @@ const files = {
   ),
   mailRuntimeSettings: new URL('src/mail-runtime/src/settings.rs', BACKEND_ROOT),
   mailRuntimeStorageBundle: new URL('src/mail-runtime/src/storage_bundle.rs', BACKEND_ROOT),
+  mailRuntimeManifest: new URL('src/mail-runtime/Cargo.toml', BACKEND_ROOT),
+  mailRuntimeAdmission: new URL('src/mail-runtime/src/admission.rs', BACKEND_ROOT),
+  mailRuntimeAddressBookConsumer: new URL(
+    'src/mail-runtime/src/address_book_consumer.rs',
+    BACKEND_ROOT,
+  ),
+  mailRuntimeAddressBookSnapshot: new URL(
+    'src/mail-runtime/src/address_book_snapshot.rs',
+    BACKEND_ROOT,
+  ),
+  mailRuntimeAddressBookWorker: new URL(
+    'src/mail-runtime/src/address_book_worker.rs',
+    BACKEND_ROOT,
+  ),
+  mailRuntimeAddressBookOutbox: new URL(
+    'src/mail-runtime/src/address_book_outbox.rs',
+    BACKEND_ROOT,
+  ),
+  mailRuntimeManaged: new URL('src/mail-runtime/src/managed.rs', BACKEND_ROOT),
+  mailRuntimeMain: new URL('src/mail-runtime/src/main.rs', BACKEND_ROOT),
   mailOAuthCore: new URL('src/mail-core/src/oauth.rs', BACKEND_ROOT),
   mailOAuthPersistence: new URL('src/mail-persistence/src/oauth.rs', BACKEND_ROOT),
   mailPortabilityProto: new URL(
@@ -180,7 +208,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_persistence_authority_v1',
+    'mail_address_book_runtime_execution_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -290,6 +318,8 @@ test('Mail owns address-book persistence settings and credential authority witho
   const [
     manifest,
     migration,
+    custodyMigration,
+    custody,
     delivery,
     schema,
     settings,
@@ -301,6 +331,8 @@ test('Mail owns address-book persistence settings and credential authority witho
   ] = await Promise.all([
     readFile(files.mailPersistenceManifest, 'utf8'),
     readFile(files.mailPersistenceMigration, 'utf8'),
+    readFile(files.mailPersistenceCustodyMigration, 'utf8'),
+    readFile(files.mailPersistenceCustody, 'utf8'),
     readFile(files.mailPersistenceDelivery, 'utf8'),
     readFile(files.mailPersistenceSchema, 'utf8'),
     readFile(files.mailRuntimeSettings, 'utf8'),
@@ -325,12 +357,17 @@ test('Mail owns address-book persistence settings and credential authority witho
   assert.match(manifest, /owner = "mail"/);
   assert.match(manifest, /surface = "persistence"/);
   assert.doesNotMatch(manifest, /hermes-contacts|hermes-mail-contacts-sync/);
-  assert.match(schema, /MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 26/);
+  assert.match(schema, /MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 27/);
   assert.match(storageBundle, /append_mail_address_book_storage_v1/);
   assert.match(migration, /mail_address_book_upsert_inbox/);
   assert.match(migration, /mail_address_book_upsert_result_outbox/);
   assert.match(migration, /contacts_write_authorized BOOLEAN NOT NULL DEFAULT FALSE/);
+  assert.match(custodyMigration, /target_contact_snapshot_reference_id/);
+  assert.match(custodyMigration, /mail_address_book_target_snapshot_receipt_complete/);
+  assert.match(custody, /record_target_snapshot_receipt/);
+  assert.match(custody, /AlreadyRecorded/);
   assert.doesNotMatch(migration, /CREATE TABLE hermes_data\.contacts_/);
+  assert.doesNotMatch(custodyMigration, /hermes_data\.contacts_/);
   assert.doesNotMatch(migration, /mail_contacts_sync_/);
   assert.match(delivery, /mark_dispatch_started/);
   assert.match(delivery, /uncertain_upserts/);
@@ -345,6 +382,69 @@ test('Mail owns address-book persistence settings and credential authority witho
   assert.match(oauthPersistence, /contacts_write_authorized/);
   assert.match(portability, /MailAddressBookProviderV1 address_book_provider/);
   assert.match(portability, /optional string carddav_username/);
+});
+
+test('Mail runtime executes reverse sync through exact event Blob and provider boundaries', async () => {
+  const [
+    manifest,
+    admission,
+    consumer,
+    snapshot,
+    worker,
+    outbox,
+    managed,
+    main,
+    policySource,
+  ] = await Promise.all([
+    readFile(files.mailRuntimeManifest, 'utf8'),
+    readFile(files.mailRuntimeAdmission, 'utf8'),
+    readFile(files.mailRuntimeAddressBookConsumer, 'utf8'),
+    readFile(files.mailRuntimeAddressBookSnapshot, 'utf8'),
+    readFile(files.mailRuntimeAddressBookWorker, 'utf8'),
+    readFile(files.mailRuntimeAddressBookOutbox, 'utf8'),
+    readFile(files.mailRuntimeManaged, 'utf8'),
+    readFile(files.mailRuntimeMain, 'utf8'),
+    readFile(files.policy, 'utf8'),
+  ]);
+  const policy = JSON.parse(policySource);
+
+  assert.match(manifest, /hermes-mail-address-book-contract/);
+  assert.match(manifest, /hermes-mail-address-book-persistence/);
+  assert.match(manifest, /hermes-mail-google-people/);
+  assert.match(manifest, /hermes-contacts-mail-sync-source-api/);
+  assert.doesNotMatch(manifest, /hermes-contacts-(?:runtime|persistence|core)/);
+  assert.match(admission, /MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1/);
+  assert.match(admission, /CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1/);
+  assert.match(admission, /BlobQuotaOperationV1::CustodyTransfer/);
+  assert.match(consumer, /receive_runtime_pull_delivery/);
+  assert.match(consumer, /MAIL_ADDRESS_BOOK_COMMAND_SOURCE_MODULE_ID_V1/);
+  assert.match(consumer, /accept_upsert_command/);
+  assert.match(consumer, /acknowledge\(\)/);
+  assert.doesNotMatch(consumer, /provider_kind|GooglePeopleClientV1|CardDav/);
+  assert.match(snapshot, /request_managed_blob_custody_transfer_v2/);
+  assert.match(snapshot, /request_managed_blob_session_v2/);
+  assert.match(snapshot, /transfer_contact_snapshot_custody_v1/);
+  assert.match(snapshot, /read_contact_snapshot_v1/);
+  assert.match(snapshot, /ContactMailSyncSourceContentV1::decode/);
+  assert.match(snapshot, /Sha256::digest/);
+  assert.match(worker, /MailAddressBookProviderV1::GooglePeople|GooglePeopleClientV1/);
+  assert.match(worker, /MailAddressBookProviderV1::IcloudCardDav/);
+  assert.match(worker, /MailAddressBookRejectCodeReadOnlyProvider/);
+  assert.match(worker, /contacts_write_authorized/);
+  assert.match(worker, /mark_dispatch_started/);
+  assert.match(worker, /record_target_snapshot_receipt/);
+  assert.match(worker, /MailAddressBookRejectCodeOutcomeUnknown/);
+  assert.doesNotMatch(`${consumer}\n${snapshot}\n${worker}`, /SELECT\s|INSERT\s|UPDATE\s|DELETE\s/i);
+  assert.match(outbox, /publish_exact/);
+  assert.match(outbox, /mark_result_published/);
+  assert.match(managed, /address_book_upsert_subscribe_permit/);
+  assert.match(main, /process_next_mail_address_book_upsert_v1/);
+  assert.equal(policy.implementation.currentSlice, 'mail_address_book_runtime_execution_v1');
+  assert(
+    policy.implementation.ownerInventory.businessCapabilities.includes(
+      'mail.address-book.contact-source.blob.v1',
+    ),
+  );
 });
 
 test('Mail provider contract and sync workflow foundation preserve owner boundaries', async () => {

@@ -105,7 +105,7 @@ test('reviewed note promotion is an event-only workflow with a fresh Knowledge c
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_address_book_persistence_authority_v1',
+    'mail_address_book_runtime_execution_v1',
   );
   assert.equal(
     policy.implementation.ownerInventory.workflows.includes(

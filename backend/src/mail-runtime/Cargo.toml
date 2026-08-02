@@ -17,6 +17,7 @@ default = []
 conformance-test-support = [
     "hermes-mail-api/conformance-test-support",
     "hermes-mail-gmail/conformance-test-support",
+    "hermes-mail-google-people/conformance-test-support",
     "hermes-mail-imap/conformance-test-support",
 ]
 
@@ -32,7 +33,10 @@ hermes-mail-imap = { path = "../mail-imap" }
 hermes-mail-gmail = { path = "../mail-gmail" }
 hermes-mail-smtp = { path = "../mail-smtp" }
 hermes-mail-persistence = { path = "../mail-persistence" }
+hermes-mail-address-book-contract = { path = "../mail-address-book-contract" }
 hermes-mail-address-book-persistence = { path = "../mail-address-book-persistence" }
+hermes-mail-google-people = { path = "../mail-google-people" }
+hermes-contacts-mail-sync-source-api = { path = "../contacts-mail-sync-source-api" }
 hermes-mail-delivery-intent-contract = { path = "../mail-delivery-intent-contract" }
 hermes-attachment-security-contract = { path = "../attachment-security-contract" }
 hermes-communications-attachment-contract = { path = "../communications-attachment-contract" }

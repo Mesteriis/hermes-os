@@ -4327,6 +4327,7 @@ dependencies = [
 name = "hermes-mail-contacts-sync-testkit"
 version = "0.1.0"
 dependencies = [
+ "hermes-mail-address-book-persistence",
  "hermes-mail-contacts-sync-core",
  "hermes-mail-contacts-sync-persistence",
  "sha2 0.11.0",
@@ -4439,13 +4440,16 @@ dependencies = [
  "hermes-blob-client",
  "hermes-communications-attachment-contract",
  "hermes-communications-ingress",
+ "hermes-contacts-mail-sync-source-api",
  "hermes-events-jetstream",
  "hermes-events-protocol",
+ "hermes-mail-address-book-contract",
  "hermes-mail-address-book-persistence",
  "hermes-mail-api",
  "hermes-mail-core",
  "hermes-mail-delivery-intent-contract",
  "hermes-mail-gmail",
+ "hermes-mail-google-people",
  "hermes-mail-imap",
  "hermes-mail-persistence",
  "hermes-mail-retained-evidence-replay-contract",
