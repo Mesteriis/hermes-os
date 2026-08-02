@@ -179,32 +179,6 @@ pub(super) fn get_attachment_translation_v1(
     )
 }
 
-pub(super) fn wait_for_terminal_attachment_translation_v1(
-    router: &AttachmentTranslationGateway,
-    runtime: &tokio::runtime::Runtime,
-    cookie: &str,
-    run_id: &[u8],
-) -> GetAttachmentTranslationResponseV1 {
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        let response = get_attachment_translation_v1(router, runtime, cookie, run_id);
-        let state = AttachmentTranslationStateV1::try_from(response.state)
-            .expect("known Attachment Translation state");
-        if matches!(
-            state,
-            AttachmentTranslationStateV1::AttachmentTranslationStateReady
-                | AttachmentTranslationStateV1::AttachmentTranslationStateRejected
-        ) {
-            return response;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "Attachment Translation did not reach a terminal state: {response:?}"
-        );
-        std::thread::sleep(Duration::from_millis(25));
-    }
-}
-
 pub(super) fn read_terminal_attachment_translation_sse_event_v1(
     router: &AttachmentTranslationGateway,
     runtime: &tokio::runtime::Runtime,
@@ -241,7 +215,7 @@ pub(super) fn read_terminal_attachment_translation_sse_response_v1(
 ) -> ClientRealtimeEventV1 {
     runtime.block_on(async {
         tokio::time::timeout(
-            Duration::from_secs(8),
+            Duration::from_secs(40),
             find_terminal_attachment_translation_event_v1(response.into_body(), run_id),
         )
         .await

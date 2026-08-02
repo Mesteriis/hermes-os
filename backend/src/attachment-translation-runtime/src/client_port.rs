@@ -14,9 +14,10 @@ use hermes_attachment_translation_api::{
     },
 };
 use hermes_attachment_translation_core::{
-    AttachmentTranslationCompletenessV1, AttachmentTranslationDetectedLanguageV1,
-    AttachmentTranslationDraftV1, AttachmentTranslationLanguageV1,
-    AttachmentTranslationRejectionCodeV1, AttachmentTranslationStateV1,
+    AttachmentTranslationArtifactV1, AttachmentTranslationCompletenessV1,
+    AttachmentTranslationDetectedLanguageV1, AttachmentTranslationDraftV1,
+    AttachmentTranslationLanguageV1, AttachmentTranslationRejectionCodeV1,
+    AttachmentTranslationStateV1,
 };
 use hermes_attachment_translation_ingress::{
     AttachmentTranslationSourceEnvelopeContextV1, attachment_translation_source_request_id_v1,
@@ -216,6 +217,17 @@ async fn issue_read(
             run_id,
             WireError::AttachmentTranslationErrorCodeInvalidRequest,
         ),
+        Err(AttachmentTranslationPersistenceErrorV1::StaleFence) => {
+            ticket_error(run_id, WireError::AttachmentTranslationErrorCodeUnavailable)
+        }
+        Err(
+            AttachmentTranslationPersistenceErrorV1::InvalidRow
+            | AttachmentTranslationPersistenceErrorV1::InvalidTransition
+            | AttachmentTranslationPersistenceErrorV1::RevisionConflict,
+        ) => ticket_error(
+            run_id,
+            WireError::AttachmentTranslationErrorCodeResultRejected,
+        ),
         Err(_) => ticket_error(run_id, WireError::AttachmentTranslationErrorCodeUnavailable),
     };
     Ok(response.encode_to_vec())
@@ -310,16 +322,19 @@ fn get_response(run: PersistedAttachmentTranslationRunV1) -> GetAttachmentTransl
         expected_source_revision: run.draft.expected_source_revision,
         state: wire_state(run.status.state) as i32,
         state_revision: run.status.state_revision,
-        artifact: run.status.artifact.map(|artifact| WireArtifact {
-            translated_sha256: artifact.translated_sha256.to_vec(),
-            translated_size_bytes: artifact.translated_size_bytes,
-            detected_source_language: wire_detected_language(artifact.detected_source_language)
-                as i32,
-            target_language: wire_target_language(artifact.target_language) as i32,
-            completeness: wire_completeness(artifact.completeness) as i32,
-            confidence_basis_points: artifact.confidence_basis_points,
-        }),
+        artifact: run.status.artifact.map(wire_artifact),
         error: rejection_error(run.status.rejection) as i32,
+    }
+}
+
+pub(crate) fn wire_artifact(artifact: AttachmentTranslationArtifactV1) -> WireArtifact {
+    WireArtifact {
+        translated_sha256: artifact.translated_sha256.to_vec(),
+        translated_size_bytes: artifact.translated_size_bytes,
+        detected_source_language: wire_detected_language(artifact.detected_source_language) as i32,
+        target_language: wire_target_language(artifact.target_language) as i32,
+        completeness: wire_completeness(artifact.completeness) as i32,
+        confidence_basis_points: artifact.confidence_basis_points,
     }
 }
 

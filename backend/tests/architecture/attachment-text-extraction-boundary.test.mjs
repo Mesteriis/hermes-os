@@ -35,7 +35,7 @@ test('text extraction is an implemented workflow and not a Communications facade
   });
   assert.equal(
     policy.implementation.currentSlice,
-    'attachment_translation_source_producer_v1',
+    'attachment_translation_v1',
   );
   assert(policy.implementation.ownerInventory.workflows.includes(
     'attachment_text_extraction',

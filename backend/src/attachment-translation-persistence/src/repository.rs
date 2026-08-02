@@ -191,19 +191,19 @@ impl AttachmentTranslationPersistenceV1 {
         input: AttachmentTranslationSourceResultV1,
     ) -> Result<AttachmentTranslationInboxResultV1, AttachmentTranslationPersistenceErrorV1> {
         validate_source_result(&input)?;
-        self.persist_event_transition(
-            input.result_message_id,
-            input.envelope_sha256,
-            &input.logical_owner_id,
-            input.run_id,
-            input.transition,
-            input
+        self.persist_event_transition(EventTransitionWriteV1 {
+            message_id: input.result_message_id,
+            envelope_sha256: input.envelope_sha256,
+            logical_owner_id: input.logical_owner_id,
+            run_id: input.run_id,
+            transition: input.transition,
+            source_materialization: input
                 .source_authority
                 .zip(input.inference_request_bytes)
                 .map(|(authority, request)| SourceMaterialization { authority, request }),
-            None,
-            input.occurred_at_unix_millis,
-        )
+            artifact_fence: None,
+            occurred_at_unix_millis: input.occurred_at_unix_millis,
+        })
         .await
     }
 
@@ -229,16 +229,16 @@ impl AttachmentTranslationPersistenceV1 {
         ) {
             return Err(AttachmentTranslationPersistenceErrorV1::InvalidInput);
         }
-        self.persist_event_transition(
-            input.message_id,
-            input.envelope_sha256,
-            &input.logical_owner_id,
-            input.run_id,
-            input.transition,
-            None,
-            None,
-            input.occurred_at_unix_millis,
-        )
+        self.persist_event_transition(EventTransitionWriteV1 {
+            message_id: input.message_id,
+            envelope_sha256: input.envelope_sha256,
+            logical_owner_id: input.logical_owner_id,
+            run_id: input.run_id,
+            transition: input.transition,
+            source_materialization: None,
+            artifact_fence: None,
+            occurred_at_unix_millis: input.occurred_at_unix_millis,
+        })
         .await
     }
 
@@ -271,16 +271,16 @@ impl AttachmentTranslationPersistenceV1 {
         if artifact_fence.is_some() && (input.runtime_generation == 0 || input.grant_epoch == 0) {
             return Err(AttachmentTranslationPersistenceErrorV1::InvalidInput);
         }
-        self.persist_event_transition(
-            input.message_id,
-            input.result_sha256,
-            &input.logical_owner_id,
-            input.run_id,
-            input.transition,
-            None,
+        self.persist_event_transition(EventTransitionWriteV1 {
+            message_id: input.message_id,
+            envelope_sha256: input.result_sha256,
+            logical_owner_id: input.logical_owner_id,
+            run_id: input.run_id,
+            transition: input.transition,
+            source_materialization: None,
             artifact_fence,
-            input.occurred_at_unix_millis,
-        )
+            occurred_at_unix_millis: input.occurred_at_unix_millis,
+        })
         .await
     }
 
@@ -329,43 +329,39 @@ impl AttachmentTranslationPersistenceV1 {
 
     async fn persist_event_transition(
         &self,
-        message_id: [u8; 16],
-        envelope_sha256: [u8; 32],
-        logical_owner_id: &str,
-        run_id: [u8; 16],
-        transition: AttachmentTranslationTransitionV1,
-        materialization: Option<SourceMaterialization>,
-        artifact_fence: Option<(u64, u64)>,
-        occurred_at_unix_millis: i64,
+        input: EventTransitionWriteV1,
     ) -> Result<AttachmentTranslationInboxResultV1, AttachmentTranslationPersistenceErrorV1> {
         let mut transaction = self.pool.begin().await.map_err(storage_error)?;
         if inbox_duplicate(
             &mut transaction,
-            logical_owner_id,
-            &message_id,
-            &envelope_sha256,
-            &run_id,
+            &input.logical_owner_id,
+            &input.message_id,
+            &input.envelope_sha256,
+            &input.run_id,
         )
         .await?
         {
             transaction.commit().await.map_err(storage_error)?;
             return self
-                .load_run(logical_owner_id, &run_id)
+                .load_run(&input.logical_owner_id, &input.run_id)
                 .await
                 .map(AttachmentTranslationInboxResultV1::Duplicate);
         }
-        let current = load_for_update(&mut transaction, logical_owner_id, &run_id).await?;
-        let next = transition_attachment_translation_v1(&current.status, transition)
+        let current =
+            load_for_update(&mut transaction, &input.logical_owner_id, &input.run_id).await?;
+        let next = transition_attachment_translation_v1(&current.status, input.transition)
             .map_err(|_| AttachmentTranslationPersistenceErrorV1::InvalidTransition)?;
         persist_status(
             &mut transaction,
-            logical_owner_id,
-            &run_id,
-            current.status.state_revision,
-            &next,
-            materialization.as_ref(),
-            artifact_fence,
-            occurred_at_unix_millis,
+            StatusTransitionWriteV1 {
+                logical_owner_id: &input.logical_owner_id,
+                run_id: &input.run_id,
+                current_revision: current.status.state_revision,
+                next: &next,
+                source_materialization: input.source_materialization.as_ref(),
+                artifact_fence: input.artifact_fence,
+                occurred_at_unix_millis: input.occurred_at_unix_millis,
+            },
         )
         .await?;
         sqlx::query(
@@ -374,23 +370,23 @@ impl AttachmentTranslationPersistenceV1 {
                processed_at_unix_millis
              ) VALUES ($1, $2, $3, $4, $5)",
         )
-        .bind(logical_owner_id)
-        .bind(message_id.as_slice())
-        .bind(envelope_sha256.as_slice())
-        .bind(run_id.as_slice())
-        .bind(occurred_at_unix_millis)
+        .bind(&input.logical_owner_id)
+        .bind(input.message_id.as_slice())
+        .bind(input.envelope_sha256.as_slice())
+        .bind(input.run_id.as_slice())
+        .bind(input.occurred_at_unix_millis)
         .execute(&mut *transaction)
         .await
         .map_err(storage_error)?;
         insert_realtime_transition(
             &mut transaction,
-            logical_owner_id,
-            &run_id,
-            occurred_at_unix_millis,
+            &input.logical_owner_id,
+            &input.run_id,
+            input.occurred_at_unix_millis,
         )
         .await?;
         transaction.commit().await.map_err(storage_error)?;
-        self.load_run(logical_owner_id, &run_id)
+        self.load_run(&input.logical_owner_id, &input.run_id)
             .await
             .map(AttachmentTranslationInboxResultV1::Applied)
     }
@@ -415,6 +411,27 @@ impl AttachmentTranslationPersistenceV1 {
 struct SourceMaterialization {
     authority: AttachmentTranslationSourceAuthorityV1,
     request: Vec<u8>,
+}
+
+struct EventTransitionWriteV1 {
+    message_id: [u8; 16],
+    envelope_sha256: [u8; 32],
+    logical_owner_id: String,
+    run_id: [u8; 16],
+    transition: AttachmentTranslationTransitionV1,
+    source_materialization: Option<SourceMaterialization>,
+    artifact_fence: Option<(u64, u64)>,
+    occurred_at_unix_millis: i64,
+}
+
+struct StatusTransitionWriteV1<'a> {
+    logical_owner_id: &'a str,
+    run_id: &'a [u8; 16],
+    current_revision: u64,
+    next: &'a AttachmentTranslationStatusV1,
+    source_materialization: Option<&'a SourceMaterialization>,
+    artifact_fence: Option<(u64, u64)>,
+    occurred_at_unix_millis: i64,
 }
 
 macro_rules! select_run {
@@ -491,19 +508,13 @@ async fn load_for_update(
 
 async fn persist_status(
     transaction: &mut Transaction<'_, Postgres>,
-    logical_owner_id: &str,
-    run_id: &[u8; 16],
-    current_revision: u64,
-    next: &AttachmentTranslationStatusV1,
-    materialization: Option<&SourceMaterialization>,
-    artifact_fence: Option<(u64, u64)>,
-    occurred_at_unix_millis: i64,
+    input: StatusTransitionWriteV1<'_>,
 ) -> Result<(), AttachmentTranslationPersistenceErrorV1> {
-    if !valid_status(next) || !valid_timestamp(occurred_at_unix_millis) {
+    if !valid_status(input.next) || !valid_timestamp(input.occurred_at_unix_millis) {
         return Err(AttachmentTranslationPersistenceErrorV1::InvalidTransition);
     }
-    let pending = next.pending_result.as_ref();
-    let artifact = next.artifact.as_ref();
+    let pending = input.next.pending_result.as_ref();
+    let artifact = input.next.artifact.as_ref();
     let updated = sqlx::query(
         "UPDATE hermes_data.attachment_translation_runs SET
            state=$1, state_revision=$2, source_sha256=$3, inference_request_digest=$4,
@@ -523,19 +534,41 @@ async fn persist_status(
            updated_at_unix_millis=$26
          WHERE logical_owner_id=$27 AND run_id=$28 AND state_revision=$29",
     )
-    .bind(state_code(next.state))
-    .bind(signed(next.state_revision)?)
-    .bind(next.source_sha256.map(|value| value.to_vec()))
-    .bind(next.inference_request_digest.map(|value| value.to_vec()))
-    .bind(materialization.map(|value| value.request.as_slice()))
-    .bind(materialization.map(|value| value.authority.reference_id.to_vec()))
+    .bind(state_code(input.next.state))
+    .bind(signed(input.next.state_revision)?)
+    .bind(input.next.source_sha256.map(|value| value.to_vec()))
     .bind(
-        materialization
+        input
+            .next
+            .inference_request_digest
+            .map(|value| value.to_vec()),
+    )
+    .bind(
+        input
+            .source_materialization
+            .map(|value| value.request.as_slice()),
+    )
+    .bind(
+        input
+            .source_materialization
+            .map(|value| value.authority.reference_id.to_vec()),
+    )
+    .bind(
+        input
+            .source_materialization
             .map(|value| signed(value.authority.declared_bytes))
             .transpose()?,
     )
-    .bind(materialization.map(|value| value.authority.sha256.to_vec()))
-    .bind(materialization.map(|value| value.authority.custody_proof.as_slice()))
+    .bind(
+        input
+            .source_materialization
+            .map(|value| value.authority.sha256.to_vec()),
+    )
+    .bind(
+        input
+            .source_materialization
+            .map(|value| value.authority.custody_proof.as_slice()),
+    )
     .bind(pending.map(|value| value.translated_sha256.to_vec()))
     .bind(
         pending
@@ -567,21 +600,23 @@ async fn persist_status(
             .transpose()
             .map_err(|_| AttachmentTranslationPersistenceErrorV1::InvalidInput)?,
     )
-    .bind(next.rejection.map(rejection_code))
+    .bind(input.next.rejection.map(rejection_code))
     .bind(
-        artifact_fence
+        input
+            .artifact_fence
             .map(|(runtime_generation, _)| signed(runtime_generation))
             .transpose()?,
     )
     .bind(
-        artifact_fence
+        input
+            .artifact_fence
             .map(|(_, grant_epoch)| signed(grant_epoch))
             .transpose()?,
     )
-    .bind(occurred_at_unix_millis)
-    .bind(logical_owner_id)
-    .bind(run_id.as_slice())
-    .bind(signed(current_revision)?)
+    .bind(input.occurred_at_unix_millis)
+    .bind(input.logical_owner_id)
+    .bind(input.run_id.as_slice())
+    .bind(signed(input.current_revision)?)
     .execute(&mut **transaction)
     .await
     .map_err(storage_error)?

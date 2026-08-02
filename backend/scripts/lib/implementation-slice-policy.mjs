@@ -7508,7 +7508,10 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'attachment_translation_source_producer_v1') {
+  if (
+    currentSlice === 'attachment_translation_source_producer_v1'
+    || currentSlice === 'attachment_translation_v1'
+  ) {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: ATTACHMENT_TRANSLATION_SOURCE_PRODUCER_INVENTORY,

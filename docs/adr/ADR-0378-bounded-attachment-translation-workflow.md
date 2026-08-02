@@ -4,7 +4,7 @@
 
 Дата: 2026-08-02
 
-Состояние реализации: частично реализовано. Phase gate
+Состояние реализации: реализовано. Phase gate
 `attachment_translation_source_producer_v1` закрывает все шесть workflow production units:
 generated private-content-free client API, exact durable source ingress, pure
 lifecycle core, owner-local PostgreSQL persistence, managed runtime и release
@@ -23,11 +23,16 @@ commit. Signed managed negative-provider contour материализует exac
 поднимает отдельные Communications, Attachment Security, Text Extraction,
 Attachment Translation, AI Engine и Ollama processes через
 Vault/Storage/Blob/NATS, проводит safe attachment до ready extraction revision и
-доказывает authenticated Start/Get plus заранее открытый SSE, deterministic
-duplicate, conflict, stale source revision, provider failure, generation
-successor, replay после restart, owner revoke и privacy. Read ticket/Blob helper
-подготовлен, но managed positive Read и настоящий provider ещё не закрыты,
-поэтому `attachment_translation_v1` остаётся `planned`.
+доказывает authenticated Start/Get/Read, terminal transition через заранее
+открытый replayable SSE без polling, deterministic duplicate, conflict,
+unsupported language, stale source revision, provider failure, explicit stale
+runtime/grant fences, generation successor, metadata/SSE replay после restart,
+owner revoke и privacy. Отдельный positive contour прошёл через настоящий
+loopback Ollama process и модель `hermes-conformance`: workflow получил реальный
+переведённый candidate, выдал actor-bound one-use Blob ticket, закрыл wrong-actor
+и ticket replay, а после restart запретил новую выдачу authority для артефакта
+предыдущего generation. Поэтому `attachment_translation_v1` переведён в
+`implemented`.
 
 Restart recovery выделен из inference execution в отдельную функциональную
 единицу. Он не переиспользует сохранённый runtime-bound Blob proof: current
@@ -281,7 +286,7 @@ plaintext в PostgreSQL. Duplicate delivery переиспользует committ
 утверждает signed managed release или live contour и не меняет reconstruction
 inventory.
 
-`attachment_translation_v1` становится `implemented` только атомарно после:
+`attachment_translation_v1` переведён в `implemented` атомарно после:
 
 1. шести отдельных workflow units и compile-isolation checks;
 2. generated Start/Get/Read/realtime contracts без provider/model/prompt;
@@ -297,9 +302,10 @@ inventory.
 11. architecture, Cargo boundaries, formatting, Clippy, workspace/integration,
     frontend и full pre-push gates.
 
-До выполнения всех пунктов inventory state остаётся `planned`. Skeleton,
-identity translation, fixture/canned provider response, direct source RPC,
-client-ticket reuse или legacy REST facade не открывают gate.
+Все пункты закрыты repository, managed-runtime и live-provider evidence.
+Skeleton, identity translation, fixture/canned provider response, direct source
+RPC, client-ticket reuse или legacy REST facade не считались доказательством
+этого gate.
 
 ## Последствия
 

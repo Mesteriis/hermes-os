@@ -64,7 +64,7 @@ test('attachment translation agreement keeps workflow source engine and provider
     gate: 'attachment_translation_v1',
     role: 'workflow',
     owner: 'attachment_translation',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'attachment_text_extraction_v1',
       'ai_inference_v1',
@@ -89,8 +89,8 @@ test('attachment translation agreement keeps workflow source engine and provider
   assert.match(adr, /ai\.attachment-translation\.request\.v1/);
   assert.match(adr, /distinct capability/);
   assert.match(adr, /Source text и translated[\s\S]*не попадают в SQL workflow owner/);
-  assert.match(adr, /inventory state остаётся `planned`/);
-  assert.equal(policy.implementation.currentSlice, 'attachment_translation_source_producer_v1');
+  assert.match(adr, /`attachment_translation_v1` переведён в `implemented`/);
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_v1');
   assert(policy.implementation.ownerInventory.workflows.includes('attachment_translation'));
   for (const packageName of [
     'hermes-attachment-translation-api',
@@ -229,7 +229,7 @@ test('text extraction produces translation source only through durable target-ow
   assert.match(release, /attachment_translation\.release-artifacts\.json/);
   assert.match(developmentAssembly, /ATTACHMENT_TRANSLATION_RUNTIME_ARTIFACT/);
   assert.match(developmentAssembly, /PRE_ATTACHMENT_TRANSLATION_MODULE_PLAN_RUNTIME_ARTIFACTS_V3/);
-  assert.equal(policy.implementation.currentSlice, 'attachment_translation_source_producer_v1');
+  assert.equal(policy.implementation.currentSlice, 'attachment_translation_v1');
   assert(policy.implementation.ownerInventory.businessCapabilities.includes(
     'attachment_text_extraction.translation-source.v1',
   ));
@@ -275,14 +275,22 @@ test('attachment translation has an exact signed managed lifecycle and restart g
   assert.match(setup, /restart_attachment_translation_runtime_v1/);
   assert.match(setup, /storage_successor::reserve/);
   assert.match(flow, /managed_attachment_translation_reaches_source_ai_and_gateway_sse/);
+  assert.match(flow, /managed_attachment_translation_completes_and_reads_real_provider_result/);
+  assert.match(flow, /required\("HERMES_OLLAMA_LIVE_PORT"\)/);
   assert.match(flow, /Text Extraction workflow/);
   assert.match(flow, /AttachmentTranslationErrorCodeInferenceRejected/);
   assert.match(flow, /AttachmentTranslationErrorCodeSourceRejected/);
   assert.match(flow, /transition_registration/);
+  assert.match(flow, /assert_attachment_translation_runtime_fences_v1/);
+  assert.match(flow, /stale Attachment Translation runtime generation/);
+  assert.match(flow, /stale Attachment Translation grant epoch/);
+  assert.match(flow, /authenticate_secondary_gateway_router/);
+  assert.match(flow, /assert_attachment_translation_read_fenced_after_restart_v1/);
   assert.match(flow, /Attachment Translation restart must not restart/);
   assert.match(gateway, /ATTACHMENT_TRANSLATION_READ_BLOB_PATH_V1/);
   assert.match(gateway, /open_attachment_translation_sse_v1/);
   assert.match(gateway, /read_terminal_attachment_translation_sse_response_v1/);
+  assert.doesNotMatch(gateway, /wait_for_terminal_attachment_translation_v1/);
   assert.match(gateway, /Last-Event-ID|replayable SSE fixture/);
   assert.match(harness, /mod attachment_translation_managed_setup/);
   assert.match(harness, /mod attachment_translation_gateway_fixture/);

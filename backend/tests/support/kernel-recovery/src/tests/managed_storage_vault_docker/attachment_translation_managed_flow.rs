@@ -21,11 +21,12 @@ use hermes_attachment_translation_api::{
     ATTACHMENT_TRANSLATION_COMMAND_CONTRACT_NAME_V1, ATTACHMENT_TRANSLATION_CONTRACT_MAJOR_V1,
     ATTACHMENT_TRANSLATION_CONTRACT_REVISION_V1, ATTACHMENT_TRANSLATION_CONTROL_SCHEMA_SHA256,
     ATTACHMENT_TRANSLATION_MODULE_ID_V1, ATTACHMENT_TRANSLATION_OWNER_V1,
-    ATTACHMENT_TRANSLATION_QUERY_CONNECT_PATH_V1,
+    ATTACHMENT_TRANSLATION_QUERY_CONNECT_PATH_V1, ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1,
     wire::{
         AttachmentTranslationErrorCodeV1, AttachmentTranslationLanguageV1,
         AttachmentTranslationStateV1, AttachmentTranslationStatusChangedV1,
-        GetAttachmentTranslationRequestV1, StartAttachmentTranslationRequestV1,
+        GetAttachmentTranslationRequestV1, IssueAttachmentTranslationReadRequestV1,
+        IssueAttachmentTranslationReadResponseV1, StartAttachmentTranslationRequestV1,
         StartAttachmentTranslationResponseV1,
     },
 };
@@ -34,6 +35,7 @@ use hermes_kernel_control_store::{ModuleRegistrationState, PlatformStorageBindin
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
 };
+use sha2::{Digest, Sha256};
 
 const PRIVATE_ATTACHMENT_SOURCE_V1: &[u8] =
     b"Private attachment source for translation conformance.";
@@ -41,13 +43,27 @@ const PRIVATE_ATTACHMENT_SOURCE_V1: &[u8] =
 #[test]
 #[ignore = "requires disposable Docker plus managed Vault, Storage, Blob, NATS, Text Extraction, AI inference, Ollama AI and Attachment Translation binaries"]
 fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
+    run_attachment_translation_managed_contour_v1(AttachmentTranslationProviderV1::Unavailable(
+        AttachmentTranslationUnavailableOllamaV1::start(),
+    ));
+}
+
+#[test]
+#[ignore = "requires disposable Docker plus a real loopback Ollama service with hermes-conformance:latest"]
+fn managed_attachment_translation_completes_and_reads_real_provider_result() {
+    let port = required("HERMES_OLLAMA_LIVE_PORT")
+        .parse::<u16>()
+        .expect("valid live Ollama port");
+    run_attachment_translation_managed_contour_v1(AttachmentTranslationProviderV1::Live(port));
+}
+
+fn run_attachment_translation_managed_contour_v1(provider: AttachmentTranslationProviderV1) {
     assert_eq!(
         std::env::var("HERMES_STORAGE_AUTHENTICATED_TEST").as_deref(),
         Ok("1")
     );
     let clamav = AttachmentSecurityClamAvFixture::start();
-    let ollama_probe = AttachmentTranslationUnavailableOllamaV1::start();
-    let ollama_port = ollama_probe.port();
+    let ollama_port = provider.port();
     let root = unique_target_root("hermes-managed-attachment-translation");
     let data = private_directory(short_communications_kernel_data_directory());
     initialize_vault(
@@ -69,6 +85,10 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
         ))
         .expect("claim Attachment Translation logical owner");
     super::super::browser_gateway_session::admit_browser_test_device(
+        &store,
+        ATTACHMENT_TRANSLATION_LOGICAL_OWNER_ID_V1,
+    );
+    super::super::browser_gateway_session::admit_secondary_browser_test_device(
         &store,
         ATTACHMENT_TRANSLATION_LOGICAL_OWNER_ID_V1,
     );
@@ -253,6 +273,28 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
         target_language: AttachmentTranslationLanguageV1::AttachmentTranslationLanguageRussian
             as i32,
     };
+    assert_attachment_translation_runtime_fences_v1(
+        &store,
+        &supervisor,
+        &translation,
+        request.clone(),
+    );
+    let unsupported_language = route_attachment_translation_as_v1(
+        &store,
+        &supervisor,
+        &translation,
+        ATTACHMENT_TRANSLATION_LOGICAL_OWNER_ID_V1,
+        900,
+        StartAttachmentTranslationRequestV1 {
+            operation_id: vec![0xe0; 16],
+            target_language:
+                AttachmentTranslationLanguageV1::AttachmentTranslationLanguageUnspecified as i32,
+            ..request.clone()
+        },
+    );
+    assert_eq!(unsupported_language.request_id, 900);
+    assert_eq!(unsupported_language.error_code, "REJECTED");
+    assert!(unsupported_language.response_payload.is_empty());
     let wrong_owner = route_attachment_translation_as_v1(
         &store,
         &supervisor,
@@ -264,7 +306,7 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
     assert_eq!(wrong_owner.request_id, 901);
     assert_eq!(wrong_owner.error_code, "REJECTED");
     assert!(wrong_owner.response_payload.is_empty());
-    assert_eq!(ollama_probe.attempts(), 0);
+    provider.assert_attempts(0);
     assert_eq!(
         post_attachment_translation_proto_status_v1(
             &translation_router,
@@ -293,24 +335,6 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
             .expect("known Attachment Translation start error"),
         AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeUnspecified
     );
-    let terminal = wait_for_terminal_attachment_translation_v1(
-        &translation_router,
-        &gateway_runtime,
-        &translation_cookie,
-        &accepted.run_id,
-    );
-    assert_eq!(
-        AttachmentTranslationStateV1::try_from(terminal.state)
-            .expect("known terminal Attachment Translation state"),
-        AttachmentTranslationStateV1::AttachmentTranslationStateRejected
-    );
-    assert_eq!(
-        AttachmentTranslationErrorCodeV1::try_from(terminal.error)
-            .expect("known terminal Attachment Translation error"),
-        AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeInferenceRejected
-    );
-    assert!(terminal.artifact.is_none());
-    assert!(ollama_probe.attempts() > 0);
     let first_event = read_terminal_attachment_translation_sse_response_v1(
         &gateway_runtime,
         first_sse,
@@ -320,6 +344,45 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
         AttachmentTranslationStatusChangedV1::decode(first_event.payload.as_slice())
             .expect("Attachment Translation SSE payload");
     assert_eq!(first_payload.run_id, accepted.run_id);
+    let terminal = get_attachment_translation_v1(
+        &translation_router,
+        &gateway_runtime,
+        &translation_cookie,
+        &accepted.run_id,
+    );
+    let translated_body = if provider.is_live() {
+        assert_eq!(
+            AttachmentTranslationStateV1::try_from(terminal.state)
+                .expect("known ready Attachment Translation state"),
+            AttachmentTranslationStateV1::AttachmentTranslationStateReady
+        );
+        assert_eq!(
+            AttachmentTranslationErrorCodeV1::try_from(terminal.error)
+                .expect("known ready Attachment Translation error"),
+            AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeUnspecified
+        );
+        Some(read_ready_attachment_translation_v1(
+            &translation_router,
+            &gateway_runtime,
+            &translation_cookie,
+            &accepted.run_id,
+            &terminal,
+        ))
+    } else {
+        assert_eq!(
+            AttachmentTranslationStateV1::try_from(terminal.state)
+                .expect("known terminal Attachment Translation state"),
+            AttachmentTranslationStateV1::AttachmentTranslationStateRejected
+        );
+        assert_eq!(
+            AttachmentTranslationErrorCodeV1::try_from(terminal.error)
+                .expect("known terminal Attachment Translation error"),
+            AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeInferenceRejected
+        );
+        assert!(terminal.artifact.is_none());
+        provider.assert_attempted();
+        None
+    };
     assert!(
         !first_event
             .encode_to_vec()
@@ -355,7 +418,7 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
             .expect("known conflicting Attachment Translation error"),
         AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeInvalidRequest
     );
-    let provider_attempts = ollama_probe.attempts();
+    let provider_attempts = provider.attempts();
 
     assert!(
         realtime
@@ -390,6 +453,14 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
         ),
         terminal
     );
+    if translated_body.is_some() {
+        assert_attachment_translation_read_fenced_after_restart_v1(
+            &replay_router,
+            &gateway_runtime,
+            &replay_cookie,
+            &accepted.run_id,
+        );
+    }
     let replay_event = read_terminal_attachment_translation_sse_response_v1(
         &gateway_runtime,
         replay_sse,
@@ -399,6 +470,8 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
     assert_eq!(replay_event.payload, first_event.payload);
     conflicting_request.operation_id = vec![0xe4; 16];
     conflicting_request.expected_source_revision = extracted.state_revision - 1;
+    let stale_sse =
+        open_attachment_translation_sse_v1(&replay_router, &gateway_runtime, &replay_cookie);
     let stale = post_attachment_translation_proto_v1::<_, StartAttachmentTranslationResponseV1>(
         &replay_router,
         &gateway_runtime,
@@ -406,7 +479,16 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
         ATTACHMENT_TRANSLATION_COMMAND_CONNECT_PATH_V1,
         conflicting_request,
     );
-    let stale = wait_for_terminal_attachment_translation_v1(
+    let stale_event = read_terminal_attachment_translation_sse_response_v1(
+        &gateway_runtime,
+        stale_sse,
+        &stale.run_id,
+    );
+    let stale_payload =
+        AttachmentTranslationStatusChangedV1::decode(stale_event.payload.as_slice())
+            .expect("stale Attachment Translation SSE payload");
+    assert_eq!(stale_payload.run_id, stale.run_id);
+    let stale = get_attachment_translation_v1(
         &replay_router,
         &gateway_runtime,
         &replay_cookie,
@@ -417,7 +499,7 @@ fn managed_attachment_translation_reaches_source_ai_and_gateway_sse() {
             .expect("known stale Attachment Translation error"),
         AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeSourceRejected
     );
-    assert_eq!(ollama_probe.attempts(), provider_attempts);
+    provider.assert_attempts_option(provider_attempts);
     for (registration_id, owner) in [
         (ollama.registration_id.as_str(), "Ollama integration"),
         (ai.registration_id.as_str(), "AI engine"),
@@ -536,6 +618,205 @@ fn route_attachment_translation_as_v1(
     .expect("route Attachment Translation owner-fence request");
     ModuleClientResponseV1::decode(bytes.as_slice())
         .expect("decode Attachment Translation owner-fence response")
+}
+
+fn assert_attachment_translation_runtime_fences_v1(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    translation: &StartedAttachmentTranslationRuntimeV1,
+    request: StartAttachmentTranslationRequestV1,
+) {
+    let payload = ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: ATTACHMENT_TRANSLATION_MODULE_ID_V1.to_owned(),
+        owner_id: ATTACHMENT_TRANSLATION_OWNER_V1.to_owned(),
+        contract: Some(ContractReferenceV1 {
+            owner: ATTACHMENT_TRANSLATION_OWNER_V1.to_owned(),
+            name: ATTACHMENT_TRANSLATION_COMMAND_CONTRACT_NAME_V1.to_owned(),
+            major: ATTACHMENT_TRANSLATION_CONTRACT_MAJOR_V1,
+            revision: ATTACHMENT_TRANSLATION_CONTRACT_REVISION_V1,
+            schema_sha256: ATTACHMENT_TRANSLATION_CONTROL_SCHEMA_SHA256.to_vec(),
+        }),
+        request_id: 899,
+        request_payload: request.encode_to_vec(),
+        logical_owner_id: ATTACHMENT_TRANSLATION_LOGICAL_OWNER_ID_V1.to_owned(),
+        authenticated_device_id: "desktop-1".to_owned(),
+    }
+    .encode_to_vec();
+    for (runtime_generation, grant_epoch, label) in [
+        (
+            translation.runtime_generation + 1,
+            translation.grant_epoch,
+            "stale Attachment Translation runtime generation",
+        ),
+        (
+            translation.runtime_generation,
+            translation.grant_epoch + 1,
+            "stale Attachment Translation grant epoch",
+        ),
+    ] {
+        let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
+            &translation.registration_id,
+            &translation.runtime_instance_id,
+            runtime_generation,
+            grant_epoch,
+            ATTACHMENT_TRANSLATION_CAPABILITY_ID_V1,
+            &payload,
+        );
+        assert_eq!(
+            crate::modules::capability::router::route_managed_client_request(
+                store,
+                &supervisor.relay_port(),
+                &route,
+            )
+            .expect_err(label),
+            "managed runtime fence is stale",
+        );
+    }
+}
+
+fn read_ready_attachment_translation_v1(
+    router: &AttachmentTranslationGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+    terminal: &hermes_attachment_translation_api::wire::GetAttachmentTranslationResponseV1,
+) -> Vec<u8> {
+    let artifact = terminal
+        .artifact
+        .as_ref()
+        .expect("ready Attachment Translation artifact");
+    let ticket = post_attachment_translation_proto_v1::<_, IssueAttachmentTranslationReadResponseV1>(
+        router,
+        runtime,
+        cookie,
+        ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1,
+        IssueAttachmentTranslationReadRequestV1 {
+            protocol_major: 1,
+            run_id: run_id.to_vec(),
+        },
+    );
+    assert_eq!(ticket.run_id, run_id);
+    assert_eq!(
+        AttachmentTranslationErrorCodeV1::try_from(ticket.error)
+            .expect("known Attachment Translation ticket error"),
+        AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeUnspecified
+    );
+    assert_eq!(ticket.opaque_read_ticket.len(), 32);
+    assert_eq!(ticket.translated_size_bytes, artifact.translated_size_bytes);
+    let (unauthorized, unauthorized_body) = read_attachment_translation_blob_v1(
+        router,
+        runtime,
+        None,
+        ticket.opaque_read_ticket.clone(),
+    );
+    assert_eq!(unauthorized, hyper::StatusCode::UNAUTHORIZED);
+    assert!(unauthorized_body.is_empty());
+    let secondary_cookie =
+        super::super::browser_gateway_session::authenticate_secondary_gateway_router(
+            router, runtime,
+        );
+    let (wrong_actor, wrong_actor_body) = read_attachment_translation_blob_v1(
+        router,
+        runtime,
+        Some(&secondary_cookie),
+        ticket.opaque_read_ticket.clone(),
+    );
+    assert_eq!(wrong_actor, hyper::StatusCode::NOT_FOUND);
+    assert!(wrong_actor_body.is_empty());
+    let (status, body) = read_attachment_translation_blob_v1(
+        router,
+        runtime,
+        Some(cookie),
+        ticket.opaque_read_ticket.clone(),
+    );
+    assert_eq!(status, hyper::StatusCode::OK);
+    assert!(!body.is_empty());
+    assert_eq!(body.len() as u64, artifact.translated_size_bytes);
+    assert_eq!(Sha256::digest(&body).as_slice(), artifact.translated_sha256);
+    assert!(
+        !body
+            .windows(PRIVATE_ATTACHMENT_SOURCE_V1.len())
+            .any(|window| window == PRIVATE_ATTACHMENT_SOURCE_V1),
+        "live translated result must not be an identity copy"
+    );
+    let (replayed, replayed_body) = read_attachment_translation_blob_v1(
+        router,
+        runtime,
+        Some(cookie),
+        ticket.opaque_read_ticket,
+    );
+    assert_eq!(replayed, hyper::StatusCode::NOT_FOUND);
+    assert!(replayed_body.is_empty());
+    body
+}
+
+fn assert_attachment_translation_read_fenced_after_restart_v1(
+    router: &AttachmentTranslationGateway,
+    runtime: &tokio::runtime::Runtime,
+    cookie: &str,
+    run_id: &[u8],
+) {
+    let ticket = post_attachment_translation_proto_v1::<_, IssueAttachmentTranslationReadResponseV1>(
+        router,
+        runtime,
+        cookie,
+        ATTACHMENT_TRANSLATION_TICKET_CONNECT_PATH_V1,
+        IssueAttachmentTranslationReadRequestV1 {
+            protocol_major: 1,
+            run_id: run_id.to_vec(),
+        },
+    );
+    assert_eq!(ticket.run_id, run_id);
+    assert!(ticket.opaque_read_ticket.is_empty());
+    assert_eq!(
+        AttachmentTranslationErrorCodeV1::try_from(ticket.error)
+            .expect("known post-restart Attachment Translation ticket error"),
+        AttachmentTranslationErrorCodeV1::AttachmentTranslationErrorCodeUnavailable,
+    );
+}
+
+enum AttachmentTranslationProviderV1 {
+    Unavailable(AttachmentTranslationUnavailableOllamaV1),
+    Live(u16),
+}
+
+impl AttachmentTranslationProviderV1 {
+    fn port(&self) -> u16 {
+        match self {
+            Self::Unavailable(probe) => probe.port(),
+            Self::Live(port) => *port,
+        }
+    }
+
+    fn is_live(&self) -> bool {
+        matches!(self, Self::Live(_))
+    }
+
+    fn attempts(&self) -> Option<usize> {
+        match self {
+            Self::Unavailable(probe) => Some(probe.attempts()),
+            Self::Live(_) => None,
+        }
+    }
+
+    fn assert_attempts(&self, expected: usize) {
+        if let Some(actual) = self.attempts() {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    fn assert_attempted(&self) {
+        if let Some(actual) = self.attempts() {
+            assert!(actual > 0);
+        }
+    }
+
+    fn assert_attempts_option(&self, expected: Option<usize>) {
+        if let Some(expected) = expected {
+            assert_eq!(self.attempts(), Some(expected));
+        }
+    }
 }
 
 struct AttachmentTranslationUnavailableOllamaV1 {

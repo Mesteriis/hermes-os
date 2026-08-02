@@ -686,7 +686,7 @@
       "gate": "attachment_translation_v1",
       "role": "workflow",
       "owner": "attachment_translation",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "attachment_text_extraction_v1",
         "ai_inference_v1",

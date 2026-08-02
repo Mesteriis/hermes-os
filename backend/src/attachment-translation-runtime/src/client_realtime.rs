@@ -1,8 +1,11 @@
 use std::os::unix::net::UnixStream;
 
+use hermes_attachment_translation_api::wire::AttachmentTranslationArtifactV1 as WireArtifact;
 use hermes_attachment_translation_api::{
     ATTACHMENT_TRANSLATION_REALTIME_EVENT_KIND_V1, wire::AttachmentTranslationStatusChangedV1,
 };
+use hermes_attachment_translation_core::AttachmentTranslationArtifactV1;
+use hermes_attachment_translation_core::AttachmentTranslationStateV1;
 use hermes_attachment_translation_persistence::{
     AttachmentTranslationPersistenceErrorV1, AttachmentTranslationPersistenceV1,
 };
@@ -22,7 +25,7 @@ use prost::Message;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    client_port::{rejection_error, wire_state},
+    client_port::{rejection_error, wire_artifact, wire_state},
     contracts::attachment_translation_realtime_contract_v1,
 };
 
@@ -47,13 +50,24 @@ impl AttachmentTranslationClientRealtimePublisherV1 {
             .map_err(AttachmentTranslationClientRealtimeErrorV1::Persistence)?;
         let published = !transitions.is_empty();
         for transition in transitions {
+            let artifact = if transition.state == AttachmentTranslationStateV1::Ready {
+                persistence
+                    .load_run(logical_owner_id, &transition.run_id)
+                    .await
+                    .map_err(AttachmentTranslationClientRealtimeErrorV1::Persistence)?
+                    .status
+                    .artifact
+            } else {
+                None
+            };
+            let artifact = realtime_artifact(transition.state, artifact)?;
             let occurred_at_unix_millis = u64::try_from(transition.occurred_at_unix_millis)
                 .map_err(|_| AttachmentTranslationClientRealtimeErrorV1::InvalidTransition)?;
             let payload = AttachmentTranslationStatusChangedV1 {
                 run_id: transition.run_id.to_vec(),
                 state: wire_state(transition.state) as i32,
                 state_revision: transition.state_revision,
-                artifact: None,
+                artifact,
                 occurred_at_unix_millis,
                 error: rejection_error(transition.rejection) as i32,
             }
@@ -98,6 +112,19 @@ impl AttachmentTranslationClientRealtimePublisherV1 {
     }
 }
 
+fn realtime_artifact(
+    state: AttachmentTranslationStateV1,
+    artifact: Option<AttachmentTranslationArtifactV1>,
+) -> Result<Option<WireArtifact>, AttachmentTranslationClientRealtimeErrorV1> {
+    match (state, artifact) {
+        (AttachmentTranslationStateV1::Ready, Some(artifact)) => Ok(Some(wire_artifact(artifact))),
+        (AttachmentTranslationStateV1::Ready, None) | (_, Some(_)) => {
+            Err(AttachmentTranslationClientRealtimeErrorV1::InvalidTransition)
+        }
+        (_, None) => Ok(None),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum AttachmentTranslationClientRealtimeErrorV1 {
     InvalidTransition,
@@ -116,11 +143,41 @@ fn event_id(run_id: [u8; 16], state_revision: u64) -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
-    use super::event_id;
+    use hermes_attachment_translation_core::{
+        AttachmentTranslationArtifactV1, AttachmentTranslationCompletenessV1,
+        AttachmentTranslationDetectedLanguageV1, AttachmentTranslationLanguageV1,
+        AttachmentTranslationStateV1,
+    };
+
+    use super::{event_id, realtime_artifact};
 
     #[test]
     fn realtime_event_identity_is_stable_and_revision_specific() {
         assert_eq!(event_id([1; 16], 2), event_id([1; 16], 2));
         assert_ne!(event_id([1; 16], 2), event_id([1; 16], 3));
+    }
+
+    #[test]
+    fn ready_realtime_requires_and_projects_bounded_artifact_metadata() {
+        let artifact = AttachmentTranslationArtifactV1 {
+            artifact_id: [1; 16],
+            translated_sha256: [2; 32],
+            translated_size_bytes: 7,
+            detected_source_language: AttachmentTranslationDetectedLanguageV1::English,
+            target_language: AttachmentTranslationLanguageV1::Russian,
+            completeness: AttachmentTranslationCompletenessV1::Complete,
+            confidence_basis_points: 9_000,
+        };
+        let projected = realtime_artifact(AttachmentTranslationStateV1::Ready, Some(artifact))
+            .expect("ready realtime artifact")
+            .expect("projected ready artifact");
+        assert_eq!(projected.translated_sha256, vec![2; 32]);
+        assert_eq!(projected.translated_size_bytes, 7);
+        assert!(realtime_artifact(AttachmentTranslationStateV1::Ready, None).is_err());
+        assert!(
+            realtime_artifact(AttachmentTranslationStateV1::AwaitingInference, None)
+                .expect("nonterminal realtime")
+                .is_none()
+        );
     }
 }
