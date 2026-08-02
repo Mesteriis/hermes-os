@@ -39,9 +39,34 @@ pub struct AcceptScheduledMailContactsSyncDueV1 {
     pub command_message_id: [u8; 16],
     pub command_envelope_sha256: [u8; 32],
     pub scheduler_run_id: [u8; 16],
+    pub lease_epoch: u64,
+    pub lease_expires_at_unix_millis: u64,
     pub launch: Option<MailContactsSyncDraftV1>,
     pub durable_messages: Vec<OutboxEnvelopeV1>,
     pub occurred_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailContactsSyncScheduledTerminalOutcomeV1 {
+    Succeeded,
+    Failed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingMailContactsSyncScheduledTerminalV1 {
+    pub run_id: [u8; 16],
+    pub command_message_id: [u8; 16],
+    pub lease_epoch: u64,
+    pub lease_expires_at_unix_millis: u64,
+    pub outcome: MailContactsSyncScheduledTerminalOutcomeV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueueMailContactsSyncScheduledTerminalV1 {
+    pub logical_owner_id: String,
+    pub run_id: [u8; 16],
+    pub terminal_receipt: OutboxEnvelopeV1,
+    pub queued_at_unix_millis: i64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

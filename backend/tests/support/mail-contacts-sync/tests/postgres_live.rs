@@ -24,7 +24,9 @@ use hermes_mail_contacts_sync_persistence::{
     MailContactsSyncAdvanceOutcomeV1, MailContactsSyncContactOutcomeV1,
     MailContactsSyncEntryInputV1, MailContactsSyncEntryOutcomeInputV1,
     MailContactsSyncPageResultInputV1, MailContactsSyncPersistenceConformanceV1,
-    MailContactsSyncPersistenceErrorV1, MailContactsSyncPersistenceOutcomeV1, OutboxEnvelopeV1,
+    MailContactsSyncPersistenceErrorV1, MailContactsSyncPersistenceOutcomeV1,
+    MailContactsSyncScheduledTerminalOutcomeV1, OutboxEnvelopeV1,
+    QueueMailContactsSyncScheduledTerminalV1,
 };
 use sha2::{Digest, Sha256};
 
@@ -399,6 +401,8 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
         command_message_id: [60; 16],
         command_envelope_sha256: [61; 32],
         scheduler_run_id: [62; 16],
+        lease_epoch: 1,
+        lease_expires_at_unix_millis: 1_800_000_031_000,
         launch: Some(MailContactsSyncDraftV1 {
             run_id: [62; 16],
             operation_id: [62; 16],
@@ -409,7 +413,6 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
         durable_messages: vec![
             envelope(63, b"scheduler-acceptance"),
             envelope(64, b"scheduled-fetch"),
-            envelope(65, b"scheduler-terminal"),
         ],
         occurred_at_unix_millis: 1_800_000_001_000,
     };
@@ -427,12 +430,85 @@ async fn postgres_is_atomic_replayable_and_sse_replayable() {
             .expect("replay scheduled due"),
         AcceptScheduledMailContactsSyncDueOutcomeV1::Duplicate(Some(_))
     ));
+    assert_eq!(
+        persistence
+            .pending_scheduled_terminal("owner-1")
+            .await
+            .expect("no premature Scheduler terminal"),
+        None
+    );
+    assert_eq!(
+        persistence
+            .accept_provider_page(&MailContactsSyncPageResultInputV1 {
+                logical_owner_id: "owner-1".to_owned(),
+                run_id: [62; 16],
+                page_sequence: 1,
+                message_id: [66; 16],
+                envelope_sha256: [67; 32],
+                observed_entries: 0,
+                next_continuation_cursor: None,
+                occurred_at_unix_millis: 1_800_000_001_010,
+            })
+            .await
+            .expect("complete scheduled provider page"),
+        MailContactsSyncPersistenceOutcomeV1::Applied
+    );
+    assert_eq!(
+        persistence
+            .advance_ready_page(&AdvanceMailContactsSyncPageV1 {
+                logical_owner_id: "owner-1".to_owned(),
+                run_id: [62; 16],
+                next_page_command: None,
+                occurred_at_unix_millis: 1_800_000_001_020,
+            })
+            .await
+            .expect("finish scheduled sync"),
+        MailContactsSyncAdvanceOutcomeV1::Applied
+    );
+    let pending_terminal = persistence
+        .pending_scheduled_terminal("owner-1")
+        .await
+        .expect("scheduled terminal after workflow completion")
+        .expect("pending scheduled terminal");
+    assert_eq!(pending_terminal.run_id, [62; 16]);
+    assert_eq!(pending_terminal.command_message_id, [60; 16]);
+    assert_eq!(
+        pending_terminal.outcome,
+        MailContactsSyncScheduledTerminalOutcomeV1::Succeeded
+    );
+    let terminal = QueueMailContactsSyncScheduledTerminalV1 {
+        logical_owner_id: "owner-1".to_owned(),
+        run_id: [62; 16],
+        terminal_receipt: envelope(68, b"scheduler-terminal-after-completion"),
+        queued_at_unix_millis: 1_800_000_001_030,
+    };
+    assert!(
+        persistence
+            .queue_scheduled_terminal(&terminal)
+            .await
+            .expect("queue scheduled terminal")
+    );
+    assert!(
+        !persistence
+            .queue_scheduled_terminal(&terminal)
+            .await
+            .expect("replay queued scheduled terminal")
+    );
+    assert_eq!(
+        persistence
+            .pending_scheduled_terminal("owner-1")
+            .await
+            .expect("terminal queue drained"),
+        None
+    );
 
     let disabled_due = AcceptScheduledMailContactsSyncDueV1 {
         logical_owner_id: "owner-1".to_owned(),
         command_message_id: [70; 16],
         command_envelope_sha256: [71; 32],
         scheduler_run_id: [72; 16],
+        lease_epoch: 1,
+        lease_expires_at_unix_millis: 1_800_000_031_100,
         launch: None,
         durable_messages: vec![
             envelope(73, b"disabled-scheduler-acceptance"),

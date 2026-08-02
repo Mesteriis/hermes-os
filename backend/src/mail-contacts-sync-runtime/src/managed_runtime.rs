@@ -65,6 +65,7 @@ use crate::{
         MailContactsSyncReverseChangeContextV1, MailContactsSyncReverseChangeErrorV1,
         consume_contact_changed_once_v1,
     },
+    scheduler_completion::queue_mail_contacts_sync_terminal_once_v1,
     scheduler_due::{MailContactsSyncDueContractV1, MailContactsSyncDueRuntimeContextV1},
     scheduler_execution::consume_mail_contacts_sync_due_once_v1,
     source_results::{
@@ -411,7 +412,6 @@ impl MailContactsSyncManagedRuntimeV1 {
         &self,
         now: i64,
     ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
-        let schema_sha256: [u8; 32] = Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into();
         consume_mail_contacts_sync_due_once_v1(
             &self.persistence,
             &self.event_connection,
@@ -420,24 +420,41 @@ impl MailContactsSyncManagedRuntimeV1 {
                 logical_owner_id: self.admission.logical_owner_id.clone(),
                 runtime_instance_id: self.admission.runtime_instance_id.clone(),
                 authoritative_now_unix_millis: now,
-                due_context: MailContactsSyncDueRuntimeContextV1 {
-                    runtime_instance_id: runtime_instance_bytes(
-                        &self.admission.runtime_instance_id,
-                    ),
-                    runtime_generation: self.admission.runtime_generation,
-                    grant_epoch: self.admission.grant_epoch,
-                    contract: MailContactsSyncDueContractV1 {
-                        job_revision: 1,
-                        job_schema_sha256: schema_sha256,
-                        receipt_revision: 1,
-                        receipt_schema_sha256: schema_sha256,
-                    },
-                },
+                due_context: self.scheduler_due_context(),
             },
             &self.configurations,
         )
         .await
         .map_err(scheduled_error)
+    }
+
+    pub async fn queue_scheduler_terminal_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        queue_mail_contacts_sync_terminal_once_v1(
+            &self.persistence,
+            &self.admission.logical_owner_id,
+            &self.scheduler_due_context(),
+            now,
+        )
+        .await
+        .map_err(scheduled_completion_error)
+    }
+
+    fn scheduler_due_context(&self) -> MailContactsSyncDueRuntimeContextV1 {
+        let schema_sha256: [u8; 32] = Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).into();
+        MailContactsSyncDueRuntimeContextV1 {
+            runtime_instance_id: runtime_instance_bytes(&self.admission.runtime_instance_id),
+            runtime_generation: self.admission.runtime_generation,
+            grant_epoch: self.admission.grant_epoch,
+            contract: MailContactsSyncDueContractV1 {
+                job_revision: 1,
+                job_schema_sha256: schema_sha256,
+                receipt_revision: 1,
+                receipt_schema_sha256: schema_sha256,
+            },
+        }
     }
 
     pub async fn relay_outbox_once(
@@ -889,6 +906,20 @@ fn scheduled_error(
         }
         MailContactsSyncScheduledExecutionErrorV1::EventUnavailable => {
             MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn scheduled_completion_error(
+    error: crate::MailContactsSyncScheduledCompletionErrorV1,
+) -> MailContactsSyncManagedRuntimeErrorV1 {
+    match error {
+        crate::MailContactsSyncScheduledCompletionErrorV1::Persistence(error) => {
+            MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
+        }
+        crate::MailContactsSyncScheduledCompletionErrorV1::InvalidTime
+        | crate::MailContactsSyncScheduledCompletionErrorV1::ReceiptBuild => {
+            MailContactsSyncManagedRuntimeErrorV1::EventContract
         }
     }
 }

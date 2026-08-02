@@ -44,6 +44,7 @@ pub(super) fn installed_mail_contacts_sync_ensemble_release_v1(
     artifacts.push(mail_release_artifact());
     artifacts.push(contacts_release_artifact_v1());
     artifacts.push(mail_contacts_sync_release_artifact_v1());
+    artifacts.push(scheduler_release_artifact());
     InstalledSignedBundle::install(root, &artifacts)
         .expect("install signed Mail Contacts Sync ensemble release")
 }

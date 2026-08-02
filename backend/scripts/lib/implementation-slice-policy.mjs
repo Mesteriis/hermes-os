@@ -8095,6 +8095,7 @@ function expectedSlice(currentSlice) {
   if (
     currentSlice === 'mail_contacts_sync_release_assembly_v1'
     || currentSlice === 'mail_contacts_sync_managed_provider_to_contacts_v1'
+    || currentSlice === 'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1'
   ) {
     return {
       profile: FIRST_OWNER_PROFILE,

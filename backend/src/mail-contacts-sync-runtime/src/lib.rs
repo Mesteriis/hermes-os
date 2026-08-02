@@ -10,6 +10,7 @@ mod managed_runtime;
 mod provider_events;
 mod reverse_change;
 mod run_progress;
+mod scheduler_completion;
 mod scheduler_due;
 mod scheduler_execution;
 mod settings;
@@ -36,11 +37,15 @@ pub use provider_events::{
     consume_mail_address_book_page_rejected_once_v1,
 };
 pub use run_progress::{MailContactsSyncProgressErrorV1, advance_ready_page_v1};
+pub use scheduler_completion::{
+    MailContactsSyncScheduledCompletionErrorV1, queue_mail_contacts_sync_terminal_once_v1,
+};
 pub use scheduler_due::{
     DecodedMailContactsSyncDueCommandV1, MailContactsSyncDueAdapterErrorV1,
     MailContactsSyncDueContractV1, MailContactsSyncDueMessageV1,
-    MailContactsSyncDueRuntimeContextV1, build_mail_contacts_sync_terminal_receipt_v1,
-    decode_mail_contacts_sync_due_command_v1,
+    MailContactsSyncDueRuntimeContextV1, MailContactsSyncTerminalReceiptBindingV1,
+    build_mail_contacts_sync_terminal_receipt_from_binding_v1,
+    build_mail_contacts_sync_terminal_receipt_v1, decode_mail_contacts_sync_due_command_v1,
 };
 pub use scheduler_execution::{
     MailContactsSyncScheduledExecutionContextV1, MailContactsSyncScheduledExecutionErrorV1,

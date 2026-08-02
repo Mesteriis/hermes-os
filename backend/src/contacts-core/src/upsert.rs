@@ -37,7 +37,7 @@ pub fn decide_contact_upsert_v1(
             let changed = current.display_name != normalized.display_name
                 || current.email_addresses != normalized.email_addresses
                 || current.phone_numbers != normalized.phone_numbers
-                || current.provenance != normalized.provenance;
+                || provider_material_changed(&current.provenance, &normalized.provenance);
             if !changed {
                 return Ok((current.clone(), ContactUpsertOutcomeV1::Unchanged));
             }
@@ -77,6 +77,18 @@ pub fn decide_contact_upsert_v1(
             Ok((contact, ContactUpsertOutcomeV1::Created))
         }
     }
+}
+
+fn provider_material_changed(
+    current: &crate::ContactProviderProvenanceV1,
+    observed: &crate::ContactProviderProvenanceV1,
+) -> bool {
+    current.source_account_id != observed.source_account_id
+        || current.provider_kind != observed.provider_kind
+        || current.provider_entry_id != observed.provider_entry_id
+        || current.provider_etag != observed.provider_etag
+        || current.source_revision != observed.source_revision
+        || current.entry_digest != observed.entry_digest
 }
 
 fn choose_target(
@@ -147,6 +159,22 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.email_addresses, ["ada@example.test"]);
         assert_eq!(first.phone_numbers, ["+34910000000"]);
+    }
+
+    #[test]
+    fn a_later_observation_of_identical_provider_material_is_unchanged() {
+        let (current, _) = decide_contact_upsert_v1(draft(), no_match(), None).expect("contact");
+        let mut repeated = draft();
+        repeated.provenance.observed_at.unix_seconds += 60;
+        let matched = ContactIdentityMatchV1 {
+            provider_link_contact_id: Some(current.contact_id),
+            email_contact_ids: vec![current.contact_id],
+            phone_contact_ids: vec![current.contact_id],
+        };
+        let (result, outcome) =
+            decide_contact_upsert_v1(repeated, matched, Some(&current)).expect("unchanged");
+        assert_eq!(outcome, ContactUpsertOutcomeV1::Unchanged);
+        assert_eq!(result, current);
     }
 
     #[test]

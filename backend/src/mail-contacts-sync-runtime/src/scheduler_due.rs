@@ -64,6 +64,14 @@ pub struct DecodedMailContactsSyncDueCommandV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MailContactsSyncTerminalReceiptBindingV1 {
+    pub run_id: [u8; 16],
+    pub command_message_id: [u8; 16],
+    pub lease_epoch: u64,
+    pub lease_expires_at_unix_millis: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailContactsSyncDueAdapterErrorV1 {
     InvalidContext,
     InvalidEnvelope,
@@ -209,21 +217,40 @@ pub fn build_mail_contacts_sync_terminal_receipt_v1(
     observed_at_unix_millis: u64,
     context: &MailContactsSyncDueRuntimeContextV1,
 ) -> Result<MailContactsSyncDueMessageV1, MailContactsSyncDueAdapterErrorV1> {
+    build_mail_contacts_sync_terminal_receipt_from_binding_v1(
+        MailContactsSyncTerminalReceiptBindingV1 {
+            run_id: due.run_id,
+            command_message_id: due.command_message_id,
+            lease_epoch: due.lease_epoch,
+            lease_expires_at_unix_millis: due.lease_expires_at_unix_millis,
+        },
+        outcome,
+        observed_at_unix_millis,
+        context,
+    )
+}
+
+pub fn build_mail_contacts_sync_terminal_receipt_from_binding_v1(
+    binding: MailContactsSyncTerminalReceiptBindingV1,
+    outcome: JobRunOutcomeV1,
+    observed_at_unix_millis: u64,
+    context: &MailContactsSyncDueRuntimeContextV1,
+) -> Result<MailContactsSyncDueMessageV1, MailContactsSyncDueAdapterErrorV1> {
     validate_context(context)?;
     if !matches!(
         outcome,
         JobRunOutcomeV1::Succeeded | JobRunOutcomeV1::Failed
     ) || observed_at_unix_millis == 0
-        || observed_at_unix_millis >= due.lease_expires_at_unix_millis
+        || observed_at_unix_millis >= binding.lease_expires_at_unix_millis
     {
         return Err(MailContactsSyncDueAdapterErrorV1::InvalidTime);
     }
     receipt_envelope(
         ReceiptBindingV1 {
-            run_id: due.run_id,
-            command_message_id: due.command_message_id,
-            lease_epoch: due.lease_epoch,
-            lease_expires_at_unix_millis: due.lease_expires_at_unix_millis,
+            run_id: binding.run_id,
+            command_message_id: binding.command_message_id,
+            lease_epoch: binding.lease_epoch,
+            lease_expires_at_unix_millis: binding.lease_expires_at_unix_millis,
         },
         observed_at_unix_millis,
         outcome,

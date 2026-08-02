@@ -31,8 +31,15 @@ providers; Google successor restart и exact duplicate suppression также
 ensemble: signed Mail, workflow и Contacts processes запускаются через Kernel,
 Vault, Storage/PgBouncer и NATS; Mail читает TLS Google People fixture, workflow
 передаёт только typed durable events, Contacts выполняет owner-local mutation,
-а повтор Start не вызывает второй provider IO. Scheduled execution, reverse
-Blob/provider write, revoke/outage и browser conformance ещё не доказаны,
+а повтор Start не вызывает второй provider IO. Scheduled provider-to-Contacts
+execution теперь также доказан реальным managed Scheduler: fixed-interval
+schedule dispatches exact durable job command, workflow атомарно сохраняет
+acceptance и owner-local scheduler ledger, запускает тот же event-only flow и
+публикует terminal receipt только после фактического `Completed/Rejected`, а не
+после постановки первого provider command. Повторный provider snapshot без
+изменения provider material остаётся canonical `unchanged`, несмотря на новое
+время наблюдения. Reverse Blob/provider write, revoke/outage и browser
+conformance ещё не доказаны,
 поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
 Contacts command открыт только после exact six-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
@@ -265,13 +272,14 @@ Opens only after the Contacts gate plus:
 Static contracts, fixtures, seeded contacts, direct service calls, shared SQL,
 frontend skeletons or a provider mock do not open either gate.
 
-Текущий executable managed evidence покрывает manual часть пункта 3: один
+Текущий executable managed evidence покрывает обе части пункта 3: один
 disposable contour поднимает exact signed Mail, Contacts и
-`mail_contacts_sync` workflow artifacts, выполняет generated Start/Get route,
-проверяет provider observation → Contacts command/result через NATS, owner-local
-Contacts state и idempotent replay без повторного provider request. Этот evidence
-не считается доказательством scheduled, reverse, outage/revoke или browser
-частей gate.
+`mail_contacts_sync` workflow artifacts вместе с Scheduler, выполняет generated
+Start/Get route и fixed-interval scheduled dispatch, проверяет provider
+observation → Contacts command/result через NATS, owner-local Contacts state,
+idempotent manual replay без повторного provider request и Scheduler terminal
+receipt только после terminal workflow state. Этот evidence не считается
+доказательством reverse, outage/revoke или browser частей gate.
 
 ## Последствия
 

@@ -83,21 +83,25 @@ pub async fn process_mail_contacts_sync_due_payload_v1(
             .map_err(|_| MailContactsSyncScheduledExecutionErrorV1::CommandBuild)?,
         );
     }
-    durable_messages.push(durable_message(
-        &build_mail_contacts_sync_terminal_receipt_v1(
-            &due,
-            JobRunOutcomeV1::Succeeded,
-            now,
-            &context.due_context,
-        )
-        .map_err(|_| MailContactsSyncScheduledExecutionErrorV1::LeaseExpired)?,
-    ));
+    if launch.is_none() {
+        durable_messages.push(durable_message(
+            &build_mail_contacts_sync_terminal_receipt_v1(
+                &due,
+                JobRunOutcomeV1::Succeeded,
+                now,
+                &context.due_context,
+            )
+            .map_err(|_| MailContactsSyncScheduledExecutionErrorV1::LeaseExpired)?,
+        ));
+    }
     let result = persistence
         .accept_scheduled_due(AcceptScheduledMailContactsSyncDueV1 {
             logical_owner_id: context.logical_owner_id.clone(),
             command_message_id: due.command_message_id,
             command_envelope_sha256: due.command_envelope_sha256,
             scheduler_run_id: due.run_id,
+            lease_epoch: due.lease_epoch,
+            lease_expires_at_unix_millis: due.lease_expires_at_unix_millis,
             launch,
             durable_messages,
             occurred_at_unix_millis: context.authoritative_now_unix_millis,

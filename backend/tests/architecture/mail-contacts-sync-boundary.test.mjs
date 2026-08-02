@@ -197,6 +197,14 @@ const files = {
     'src/mail-contacts-sync-persistence/migrations/0003_reverse_sync.sql',
     BACKEND_ROOT,
   ),
+  workflowSchedulerCompletionMigration: new URL(
+    'src/mail-contacts-sync-persistence/migrations/0004_scheduler_completion.sql',
+    BACKEND_ROOT,
+  ),
+  workflowScheduledCompletionPersistence: new URL(
+    'src/mail-contacts-sync-persistence/src/scheduled_completion.rs',
+    BACKEND_ROOT,
+  ),
   workflowReversePersistence: new URL(
     'src/mail-contacts-sync-persistence/src/reverse_sync.rs',
     BACKEND_ROOT,
@@ -214,6 +222,14 @@ const files = {
     BACKEND_ROOT,
   ),
   workflowScheduler: new URL('src/mail-contacts-sync-runtime/src/scheduler_due.rs', BACKEND_ROOT),
+  workflowSchedulerExecution: new URL(
+    'src/mail-contacts-sync-runtime/src/scheduler_execution.rs',
+    BACKEND_ROOT,
+  ),
+  workflowSchedulerCompletion: new URL(
+    'src/mail-contacts-sync-runtime/src/scheduler_completion.rs',
+    BACKEND_ROOT,
+  ),
   workflowReverseChange: new URL(
     'src/mail-contacts-sync-runtime/src/reverse_change.rs',
     BACKEND_ROOT,
@@ -257,7 +273,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -532,7 +548,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
   );
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(
@@ -600,17 +616,33 @@ test('managed Mail provider conformance keeps endpoints credentials and evidence
   assert.doesNotMatch(`${worker}\n${setup}`, /hermes_contacts_(?:runtime|persistence)/);
 });
 
-test('managed provider-to-Contacts sync crosses owners only through durable events', async () => {
-  const [setup, flow, harness, mailManaged] = await Promise.all([
+test('managed manual and scheduled provider-to-Contacts sync cross owners only through durable events', async () => {
+  const [
+    setup,
+    flow,
+    harness,
+    mailManaged,
+    schedulerExecution,
+    schedulerCompletion,
+    completionPersistence,
+    completionMigration,
+    runtimeMain,
+  ] = await Promise.all([
     readFile(files.managedSyncSetup, 'utf8'),
     readFile(files.managedSyncFlow, 'utf8'),
     readFile(files.authenticatedStorageHarness, 'utf8'),
     readFile(files.mailRuntimeManaged, 'utf8'),
+    readFile(files.workflowSchedulerExecution, 'utf8'),
+    readFile(files.workflowSchedulerCompletion, 'utf8'),
+    readFile(files.workflowScheduledCompletionPersistence, 'utf8'),
+    readFile(files.workflowSchedulerCompletionMigration, 'utf8'),
+    readFile(files.workflowRuntimeMain, 'utf8'),
   ]);
   assert.match(setup, /installed_mail_contacts_sync_ensemble_release_v1/);
   assert.match(setup, /mail_release_artifact/);
   assert.match(setup, /contacts_release_artifact_v1/);
   assert.match(setup, /mail_contacts_sync_release_artifact_v1/);
+  assert.match(setup, /scheduler_release_artifact/);
   assert.match(setup, /start_reserved_workflow_with_settings/);
   assert.match(setup, /ClientRealtimePublishHandlerV1/);
   assert.match(flow, /managed_mail_contacts_sync_reaches_contacts_through_events/);
@@ -618,7 +650,21 @@ test('managed provider-to-Contacts sync crosses owners only through durable even
   assert.match(flow, /wait_for_completed/);
   assert.match(flow, /contacts_created, 1/);
   assert.match(flow, /provider\.accepted_people_reads\(\), 1/);
+  assert.match(flow, /scheduler_launch::start_from_reservation/);
+  assert.match(flow, /ScheduleTriggerV1::FixedInterval/);
+  assert.match(flow, /wait_for_scheduled_run_id/);
+  assert.match(flow, /wait_for_scheduler_terminal/);
+  assert.match(flow, /provider\.accepted_people_reads\(\), 2/);
   assert.match(flow, /duplicate\.run_id, accepted\.run_id/);
+  assert.match(schedulerExecution, /if launch\.is_none\(\)/);
+  assert.match(schedulerExecution, /lease_expires_at_unix_millis: due\.lease_expires_at_unix_millis/);
+  assert.match(schedulerCompletion, /pending_scheduled_terminal/);
+  assert.match(schedulerCompletion, /build_mail_contacts_sync_terminal_receipt_from_binding_v1/);
+  assert.match(completionPersistence, /runs\.state IN \(6, 7\)/);
+  assert.match(completionPersistence, /queue_scheduled_terminal/);
+  assert.match(completionMigration, /mail_contacts_sync_scheduler_runs/);
+  assert.match(completionMigration, /terminal_receipt_queued/);
+  assert.match(runtimeMain, /queue_scheduler_terminal_once/);
   assert.match(harness, /hermes-mail-contacts-sync-runtime/);
   assert.match(harness, /managed_mail_contacts_sync_reaches_contacts_through_events/);
   assert.match(mailManaged, /address_book_upsert_subscribe_permit,[\s\S]*&self\.logical_human_owner_id/);
@@ -690,6 +736,7 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
     migration,
     orchestrationMigration,
     reverseMigration,
+    schedulerCompletionMigration,
   ] = await Promise.all([
     readFile(files.workflowPersistenceManifest, 'utf8'),
     readFile(files.workflowPersistence, 'utf8'),
@@ -700,6 +747,7 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
     readFile(files.workflowMigration, 'utf8'),
     readFile(files.workflowOrchestrationMigration, 'utf8'),
     readFile(files.workflowReverseMigration, 'utf8'),
+    readFile(files.workflowSchedulerCompletionMigration, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -732,8 +780,9 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
   assert.match(orchestrationMigration, /outcome_accounted/);
   assert.match(reverseMigration, /mail_contacts_sync_reverse_inbox/);
   assert.match(reverseMigration, /mail_contacts_sync_reverse_operations/);
+  assert.match(schedulerCompletionMigration, /mail_contacts_sync_scheduler_runs/);
   assert.doesNotMatch(
-    `${migration}\n${orchestrationMigration}\n${reverseMigration}`,
+    `${migration}\n${orchestrationMigration}\n${reverseMigration}\n${schedulerCompletionMigration}`,
     /hermes_data\.(?:contacts_state|contacts_provider_links|mail_accounts|communications_)/,
   );
   assert.doesNotMatch(

@@ -105,7 +105,7 @@ test('reviewed note promotion is an event-only workflow with a fresh Knowledge c
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
   );
   assert.equal(
     policy.implementation.ownerInventory.workflows.includes(

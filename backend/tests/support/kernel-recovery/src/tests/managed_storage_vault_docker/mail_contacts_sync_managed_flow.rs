@@ -15,6 +15,14 @@ use hermes_mail_contacts_sync_api::{
 use hermes_mail_persistence::GmailOAuthCredentialBindingV1;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
+    SchedulerRuntimeControlRequestV1, SchedulerRuntimeControlResponseV1,
+    SchedulerScheduleUpsertOutcomeV1, UpsertSchedulerScheduleRequestV1,
+    scheduler_runtime_control_request_v1::Operation as SchedulerOperation,
+    scheduler_runtime_control_response_v1::Result as SchedulerResult,
+};
+use hermes_scheduler_protocol::{
+    MisfirePolicyV1, OverlapPolicyV1, RetryPolicyV1, SCHEDULER_JOB_DESCRIPTOR_SET_V1,
+    SchedulePolicyV1, ScheduleTriggerV1,
 };
 use sqlx::postgres::{PgConnectOptions, PgPoolOptions, PgSslMode};
 use zeroize::Zeroizing;
@@ -56,6 +64,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     let admitted_mail = admit_mail_google_people_runtime(&store);
     let admitted_contacts = admit_contacts_runtime_v1(&store);
     let admitted_sync = admit_mail_contacts_sync_runtime_v1(&store);
+    record_scheduler_runtime_for_mail_contacts_sync(&store);
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
     let realtime =
@@ -74,6 +83,13 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         release.kernel(),
         &storage_runtime_directory(),
     );
+    issue_initial_scheduler_storage_binding(&store);
+    crate::platform::storage::provisioning::apply_reserved_binding(
+        &supervisor,
+        &store,
+        &scheduler_binding(&store),
+    )
+    .expect("provision Scheduler Storage binding");
     let admitted_mail = prepare_mail_runtime(&supervisor, &store, admitted_mail);
     let admitted_contacts = prepare_contacts_runtime_v1(&supervisor, &store, admitted_contacts);
     let admitted_sync = prepare_mail_contacts_sync_runtime_v1(&supervisor, &store, admitted_sync);
@@ -103,6 +119,20 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         &store,
         &root.join("runtime"),
         admitted_sync,
+    );
+    let scheduler_reservation = managed_launch::load(&supervisor, &store, SCHEDULER_REGISTRATION)
+        .expect("load Scheduler reservation");
+    assert_eq!(
+        scheduler_launch::start_from_reservation(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &root.join("runtime"),
+            scheduler_reservation,
+            &scheduler_binding(&store),
+        )
+        .expect("start Scheduler for Mail Contacts Sync"),
+        1
     );
     assert_eq!(contacts.runtime_generation, 1);
     assert_eq!(sync.runtime_generation, 1);
@@ -142,6 +172,20 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     assert_eq!(completed.rejected_entries, 0);
     assert_eq!(provider.accepted_people_reads(), 1);
 
+    upsert_mail_contacts_sync_schedule(&supervisor);
+    let scheduled_run_id = runtime.block_on(wait_for_scheduled_run_id());
+    let scheduled = wait_for_completed(
+        &store,
+        &supervisor,
+        &sync.registration_id,
+        &scheduled_run_id,
+    );
+    assert_eq!(scheduled.account_id, MAIL_ACCOUNT_ID);
+    assert_eq!(scheduled.provider_entries_seen, 1);
+    assert_eq!(scheduled.contacts_unchanged, 1);
+    assert_eq!(provider.accepted_people_reads(), 2);
+    runtime.block_on(wait_for_scheduler_terminal(&scheduled_run_id));
+
     runtime.block_on(async {
         let pool = contacts_admin_pool_v1().await;
         let contacts_count: i64 = sqlx::query_scalar(
@@ -160,7 +204,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         .await
         .expect("count synced Contacts inbox");
         assert_eq!(contacts_count, 1);
-        assert_eq!(completed_inbox, 1);
+        assert_eq!(completed_inbox, 2);
         pool.close().await;
     });
 
@@ -169,7 +213,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     let duplicate_completed =
         wait_for_completed(&store, &supervisor, &sync.registration_id, &accepted.run_id);
     assert_eq!(duplicate_completed.state_revision, completed.state_revision);
-    assert_eq!(provider.accepted_people_reads(), 1);
+    assert_eq!(provider.accepted_people_reads(), 2);
 
     supervisor.shutdown().expect("stop managed processes");
     shutdown.store(true, Ordering::SeqCst);
@@ -178,6 +222,102 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     }
     std::fs::remove_dir_all(root).expect("remove Mail Contacts Sync fixture");
     std::fs::remove_dir_all(data).expect("remove Mail Contacts Sync Kernel fixture");
+}
+
+fn upsert_mail_contacts_sync_schedule(supervisor: &ManagedRuntimeSupervisor) {
+    let now = current_unix_millis();
+    let due_at = now + 1_500;
+    let policy = SchedulePolicyV1::new(
+        ScheduleTriggerV1::FixedInterval {
+            interval_millis: 900_000,
+        },
+        OverlapPolicyV1::Forbid,
+        MisfirePolicyV1::FireOnce,
+        RetryPolicyV1::new(3, 1_000).expect("Mail Contacts Sync retry policy"),
+        120_000,
+        0,
+    )
+    .expect("Mail Contacts Sync schedule policy");
+    let request = SchedulerRuntimeControlRequestV1 {
+        operation: Some(SchedulerOperation::UpsertSchedule(
+            UpsertSchedulerScheduleRequestV1 {
+                schedule_id: vec![0x91; 16],
+                schedule_revision: 1,
+                job_owner: MAIL_CONTACTS_SYNC_OWNER_ID_V1.to_owned(),
+                job_name: "scheduled_sync".to_owned(),
+                job_major: 1,
+                contract_name: "mail_contacts_sync.scheduled_sync".to_owned(),
+                contract_revision: 1,
+                contract_schema_sha256: Sha256::digest(SCHEDULER_JOB_DESCRIPTOR_SET_V1).to_vec(),
+                scope_id: MAIL_CONTACTS_SYNC_CONFIGURATION_ID_V1.to_owned(),
+                concurrency_key: MAIL_CONTACTS_SYNC_CONFIGURATION_ID_V1.to_owned(),
+                enabled: true,
+                policy_canonical_bytes: policy.canonical_bytes(),
+                next_due_at_unix_millis: due_at,
+                updated_at_unix_millis: now,
+            },
+        )),
+    };
+    let response = supervisor
+        .relay(SCHEDULER_REGISTRATION, request.encode_to_vec())
+        .expect("upsert Mail Contacts Sync schedule");
+    let response = SchedulerRuntimeControlResponseV1::decode(response.as_slice())
+        .expect("decode Mail Contacts Sync schedule response");
+    assert!(matches!(
+        response.result,
+        Some(SchedulerResult::UpsertSchedule(result))
+            if result.schedule_revision == 1
+                && result.outcome == SchedulerScheduleUpsertOutcomeV1::Inserted as i32
+    ));
+    assert!(response.error_code.is_empty());
+}
+
+async fn wait_for_scheduled_run_id() -> [u8; 16] {
+    let pool = contacts_admin_pool_v1().await;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let row = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT run_id FROM hermes_data.mail_contacts_sync_runs
+             WHERE logical_owner_id=$1 AND trigger_kind=2
+             ORDER BY created_at_unix_millis DESC LIMIT 1",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .fetch_optional(&pool)
+        .await
+        .expect("read scheduled Mail Contacts Sync run");
+        if let Some(run_id) = row {
+            pool.close().await;
+            return run_id.try_into().expect("scheduled run id");
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Scheduler did not launch Mail Contacts Sync"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+async fn wait_for_scheduler_terminal(run_id: &[u8; 16]) {
+    let pool = contacts_admin_pool_v1().await;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let outcome = sqlx::query_scalar::<_, String>(
+            "SELECT outcome FROM hermes_platform.scheduler_run_results WHERE run_id=$1",
+        )
+        .bind(run_id.as_slice())
+        .fetch_optional(&pool)
+        .await
+        .expect("read Scheduler terminal receipt");
+        if outcome.as_deref() == Some("finished") {
+            pool.close().await;
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Scheduler did not receive terminal Mail Contacts Sync result: {outcome:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 fn route_start(
@@ -270,7 +410,13 @@ fn route_sync_request(
         &request,
     );
     let bytes = route_managed_client_request(store, &supervisor.relay_port(), &route)
-        .expect("route Mail Contacts Sync client request");
+        .unwrap_or_else(|error| {
+            panic!(
+                "route Mail Contacts Sync client request: {error}; active={:?}; last_failure={:?}",
+                supervisor.is_active(registration_id),
+                supervisor.last_failure(registration_id)
+            )
+        });
     ModuleClientResponseV1::decode(bytes.as_slice())
         .expect("decode Mail Contacts Sync module response")
 }

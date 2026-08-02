@@ -234,6 +234,20 @@ impl MailContactsSyncPersistenceV1 {
         .await
         .map_err(storage_error)?;
         if launched {
+            sqlx::query(
+                "INSERT INTO hermes_data.mail_contacts_sync_scheduler_runs (
+                   logical_owner_id, run_id, command_message_id, lease_epoch,
+                   lease_expires_at_unix_millis
+                 ) VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(&input.logical_owner_id)
+            .bind(input.scheduler_run_id.as_slice())
+            .bind(input.command_message_id.as_slice())
+            .bind(signed(input.lease_epoch)?)
+            .bind(signed(input.lease_expires_at_unix_millis)?)
+            .execute(&mut *transaction)
+            .await
+            .map_err(storage_error)?;
             insert_realtime(
                 &mut transaction,
                 &input.logical_owner_id,
@@ -505,6 +519,9 @@ fn validate_scheduled_due(
         || !nonzero(&input.command_message_id)
         || !nonzero(&input.command_envelope_sha256)
         || !nonzero(&input.scheduler_run_id)
+        || input.lease_epoch == 0
+        || input.lease_expires_at_unix_millis
+            <= u64::try_from(input.occurred_at_unix_millis).unwrap_or_default()
         || !messages_are_valid
         || !launch_is_valid
         || input.occurred_at_unix_millis <= 0

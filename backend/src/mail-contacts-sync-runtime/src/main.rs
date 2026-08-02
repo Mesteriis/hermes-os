@@ -155,6 +155,7 @@ where
         retry_runtime(executor.block_on(runtime.consume_contact_source_rejected_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_contact_upserted_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_contact_rejected_once(now)))?;
+        retry_runtime(executor.block_on(runtime.queue_scheduler_terminal_once(now)))?;
         retry_runtime(executor.block_on(runtime.relay_outbox_once(now)))?;
         retry_runtime(executor.block_on(runtime.pump_client_realtime_once()))?;
         std::thread::sleep(Duration::from_millis(25));

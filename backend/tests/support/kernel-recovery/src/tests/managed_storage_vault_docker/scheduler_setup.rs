@@ -7,13 +7,35 @@ pub(super) fn configured_scheduler_store(root: &Path, kernel: &Path) -> SqliteCo
 }
 
 pub(super) fn record_scheduler_runtime(store: &SqliteControlStore) {
+    record_scheduler_runtime_with_job_route(store, None);
+}
+
+pub(super) fn record_scheduler_runtime_for_mail_contacts_sync(store: &SqliteControlStore) {
+    record_scheduler_runtime_with_job_route(
+        store,
+        Some((
+            "mail_contacts_sync",
+            "scheduled_sync",
+            scheduler_contract_schema(),
+        )),
+    );
+}
+
+fn record_scheduler_runtime_with_job_route(
+    store: &SqliteControlStore,
+    job_route: Option<(&str, &str, [u8; 32])>,
+) {
     let schema = scheduler_schema();
     let descriptor = scheduler_descriptor(&schema);
-    let grant_epoch = record_scheduler_registration(store, &descriptor);
+    let grant_epoch = record_scheduler_registration(store, &descriptor, job_route);
     record_scheduler_runtime_fixture(store, &schema, &descriptor, grant_epoch);
 }
 
-fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) -> u64 {
+fn record_scheduler_registration(
+    store: &SqliteControlStore,
+    descriptor: &[u8],
+    job_route: Option<(&str, &str, [u8; 32])>,
+) -> u64 {
     let registration = ModuleRegistration::new(
         SCHEDULER_REGISTRATION,
         "scheduler",
@@ -37,7 +59,7 @@ fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) 
         4,
         5_000,
     );
-    let routes = [
+    let mut routes = vec![
         event_route(
             DISPATCH_CAPABILITY,
             ModuleEventEnvelopeKindV1::Command,
@@ -79,6 +101,16 @@ fn record_scheduler_registration(store: &SqliteControlStore, descriptor: &[u8]) 
             scheduler_contract_schema(),
         ),
     ];
+    if let Some((owner, contract, schema_sha256)) = job_route {
+        routes.push(event_route(
+            DISPATCH_CAPABILITY,
+            ModuleEventEnvelopeKindV1::Command,
+            owner,
+            contract,
+            ModuleEventRouteDirectionV1::Publish,
+            schema_sha256,
+        ));
+    }
     store
         .create_pending_registration_with_requests(
             &registration,

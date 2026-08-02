@@ -135,7 +135,7 @@ test('delivery intent assembly is an exact managed event workflow slice', async 
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'attachment_preview',
