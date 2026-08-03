@@ -152,6 +152,34 @@ test('Whisper assembly emits unsigned runtime storage runner and model inputs on
   assert.doesNotMatch(`${assembly}\n${cli}`, /signing|launch|communications_/i);
 });
 
+test('Whisper native release build pins source model toolchain and reproducibility', async () => {
+  const build = await read('backend/scripts/build-whisper-stt-macos.sh');
+
+  assert.match(build, /23ee03506a91ac3d3f0071b40e66a430eebdfa1d/);
+  assert.match(build, /5359861c739e955e79d9a303bcbc70fb988958b1/);
+  assert.match(build, /60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe/);
+  assert.match(build, /readonly MODEL_SIZE_BYTES="147951465"/);
+  assert.match(build, /800fc86838e913fff969b499886c80baeb4ccfd00f0e39906b34aa334f39ab6c/);
+  assert.match(build, /readonly XCODE_VERSION="26\.6"/);
+  assert.match(build, /export PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin"/);
+  assert.match(build, /-DCMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH=OFF/);
+  assert.match(build, /-DCMAKE_IGNORE_PREFIX_PATH="\/opt\/homebrew;\/usr\/local"/);
+  assert.match(build, /-DBUILD_SHARED_LIBS=OFF/);
+  assert.match(build, /-DGGML_STATIC=ON/);
+  assert.match(build, /-DGGML_NATIVE=OFF/);
+  assert.match(build, /-DGGML_BLAS=OFF/);
+  assert.match(build, /-DGGML_METAL=OFF/);
+  assert.match(build, /-DWHISPER_CURL=OFF/);
+  assert.match(build, /otool -L/);
+  assert.match(build, /--verify-reproducibility/);
+  assert.match(build, /cmp -s/);
+  assert.match(build, /"release_eligible": \$\{reproducibility_verified\}/);
+  assert.doesNotMatch(
+    build,
+    /(?:^|\s)brew(?:\s|$)|Command::new|submodule update --remote|--branch\s/m,
+  );
+});
+
 test('Whisper production gate remains closed until managed native conformance exists', async () => {
   const inventory = JSON.parse(
     await read('backend/architecture/communications-settings-reconstruction.json'),
