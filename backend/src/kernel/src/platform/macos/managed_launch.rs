@@ -137,6 +137,44 @@ fn selected_kernel_executable() -> Result<std::path::PathBuf, String> {
     std::env::current_exe().map_err(|_| "Kernel executable path is unavailable".to_owned())
 }
 
+/// Verifies the exact signed descriptor kind without reserving, fencing or
+/// otherwise mutating managed runtime state.
+pub(crate) fn require_bound_module_kind(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    registration_id: &str,
+    expected_module_kind: ModuleKindV1,
+) -> Result<(), String> {
+    let registration = store
+        .module_registration(registration_id)
+        .map_err(|_| "managed runtime registration is unavailable".to_owned())?
+        .ok_or_else(|| "managed runtime registration is unavailable".to_owned())?;
+    let binding = store
+        .effective_bundled_managed_launch_binding(registration_id)
+        .map_err(|_| "managed launch binding is unavailable".to_owned())?
+        .ok_or_else(|| "managed launch binding is unavailable".to_owned())?;
+    let prepared = native_launch::prepare_bound_managed_runtime(
+        &selected_kernel_executable()?,
+        &binding,
+        &runtime_dir
+            .join("managed")
+            .join(format!("kind-preflight-{}", new_instance_id()?)),
+    )?;
+    let result = decode_descriptor_v1(prepared.descriptor_bytes())
+        .map_err(|_| "managed runtime descriptor is invalid".to_owned())
+        .and_then(|descriptor| {
+            if descriptor.module_id != registration.module_id()
+                || descriptor.module_kind != expected_module_kind as i32
+            {
+                Err("managed runtime module kind does not match launch path".to_owned())
+            } else {
+                Ok(())
+            }
+        });
+    let cleanup = prepared.remove();
+    result.and(cleanup)
+}
+
 pub fn start_with_storage_configuration(
     supervisor: &ManagedRuntimeSupervisor,
     store: &SqliteControlStore,

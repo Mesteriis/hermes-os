@@ -47,6 +47,13 @@ message ApplyOwnerManagedIntegrationSettingsV1 {
   bool request_host_bridge = 5;
 }
 
+message ApplyOwnerManagedWorkflowSettingsV1 {
+  string registration_id = 1;
+  string storage_capability_id = 2;
+  string configuration_instance_id = 3;
+  uint64 expected_desired_revision = 4;
+}
+
 message ExportEffectiveOwnerModuleSettingsV1 {
   string registration_id = 1;
   uint64 expected_effective_revision = 2;
@@ -60,6 +67,7 @@ message PrepareOwnerModuleSettingsRequestV1 {
     ApplyOwnerManagedIntegrationSettingsV1 apply_managed_integration = 3;
     ExportEffectiveOwnerModuleSettingsV1 export_effective = 4;
     CreateOwnerModuleSettingsTargetV1 create_configuration_target = 5;
+    ApplyOwnerManagedWorkflowSettingsV1 apply_managed_workflow = 6;
   }
 }
 
@@ -98,6 +106,14 @@ message ApplyOwnerManagedIntegrationSettingsReceiptV1 {
   string configuration_instance_id = 6;
 }
 
+message ApplyOwnerManagedWorkflowSettingsReceiptV1 {
+  string registration_id = 1;
+  string configuration_instance_id = 2;
+  uint64 effective_revision = 3;
+  uint64 runtime_generation = 4;
+  string apply_state = 5;
+}
+
 message ExportEffectiveOwnerModuleSettingsReceiptV1 {
   string registration_id = 1;
   uint32 schema_major = 2;
@@ -115,5 +131,6 @@ message CommitOwnerModuleSettingsResponseV1 {
     ApplyOwnerManagedIntegrationSettingsReceiptV1 applied = 4;
     ExportEffectiveOwnerModuleSettingsReceiptV1 exported = 5;
     CreateOwnerModuleSettingsTargetReceiptV1 created = 6;
+    ApplyOwnerManagedWorkflowSettingsReceiptV1 workflow_applied = 7;
   }
 }

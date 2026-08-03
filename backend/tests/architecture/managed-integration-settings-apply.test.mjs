@@ -19,7 +19,7 @@ const paths = {
     BACKEND_ROOT,
   ),
   kernelApply: new URL(
-    'src/kernel/src/modules/settings/managed_integration.rs',
+    'src/kernel/src/modules/settings/managed_application.rs',
     BACKEND_ROOT,
   ),
   kernelDispatch: new URL(
@@ -80,8 +80,8 @@ test('managed integration Settings apply remains provider-neutral and fail-close
   assert.match(kernelApply, /successor::reserve/);
   assert.match(kernelApply, /ApplyAcknowledgement::RuntimeApplied/);
   assert.match(kernelApply, /SettingsApplyState::BlockedConfig/);
-  assert.match(kernelDispatch, /managed_integration_settings::prepare/);
-  assert.match(kernelDispatch, /managed_integration_settings::wait_for_ready_and_confirm/);
+  assert.match(kernelDispatch, /managed_settings_application::prepare/);
+  assert.match(kernelDispatch, /managed_settings_application::wait_for_ready_and_confirm/);
   assert.doesNotMatch(
     `${kernelApply}\n${kernelDispatch}`,
     /hermes_(?:mail|telegram|whatsapp|zulip)|Mail|Telegram|WhatsApp|Zulip/,

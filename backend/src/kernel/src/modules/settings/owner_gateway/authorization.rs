@@ -31,6 +31,9 @@ pub(super) fn authorize_target(
         Some(prepare_owner_module_settings_request_v1::Operation::ApplyManagedIntegration(
             apply,
         )) => apply_registration_id(apply)?,
+        Some(prepare_owner_module_settings_request_v1::Operation::ApplyManagedWorkflow(apply)) => {
+            apply_workflow_registration_id(apply)?
+        }
         Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
             export_registration_id(export)?
         }
@@ -104,6 +107,19 @@ fn apply_registration_id(
     Ok(&apply.registration_id)
 }
 
+fn apply_workflow_registration_id(
+    apply: &hermes_gateway_protocol::v1::ApplyOwnerManagedWorkflowSettingsV1,
+) -> Result<&str, OwnerModuleSettingsRouteErrorV1> {
+    if apply.registration_id.is_empty()
+        || apply.storage_capability_id.is_empty()
+        || apply.configuration_instance_id.is_empty()
+        || apply.expected_desired_revision == 0
+    {
+        return Err(OwnerModuleSettingsRouteErrorV1::InvalidArgument);
+    }
+    Ok(&apply.registration_id)
+}
+
 fn export_registration_id(
     export: &hermes_gateway_protocol::v1::ExportEffectiveOwnerModuleSettingsV1,
 ) -> Result<&str, OwnerModuleSettingsRouteErrorV1> {
@@ -133,6 +149,9 @@ fn operation_configuration_instance_id(
             Some(&update.configuration_instance_id)
         }
         prepare_owner_module_settings_request_v1::Operation::ApplyManagedIntegration(apply) => {
+            Some(&apply.configuration_instance_id)
+        }
+        prepare_owner_module_settings_request_v1::Operation::ApplyManagedWorkflow(apply) => {
             Some(&apply.configuration_instance_id)
         }
         prepare_owner_module_settings_request_v1::Operation::ExportEffective(export) => {

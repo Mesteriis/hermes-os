@@ -54,6 +54,14 @@ const paths = {
     'src/kernel/src/runtime/lifecycle/integration_launch.rs',
     BACKEND_ROOT,
   ),
+  workflowLaunch: new URL(
+    'src/kernel/src/runtime/lifecycle/workflow_launch.rs',
+    BACKEND_ROOT,
+  ),
+  workflowAdr: new URL(
+    'docs/adr/ADR-0385-owner-authorized-managed-workflow-settings-application.md',
+    PROJECT_ROOT,
+  ),
   gatewayComposition: new URL(
     'src/kernel/src/platform/gateway.rs',
     BACKEND_ROOT,
@@ -78,6 +86,8 @@ test('owner module Settings is one provider-neutral fresh-proof Gateway authorit
     operation,
     state,
     launch,
+    workflowLaunch,
+    workflowAdr,
     gatewayComposition,
     conformance,
   ] = await Promise.all(Object.values(paths).map((path) => readFile(path, 'utf8')));
@@ -114,8 +124,18 @@ test('owner module Settings is one provider-neutral fresh-proof Gateway authorit
   assert.match(values, /SettingsSnapshotV1/);
   assert.match(values, /UnsignedIntegerValue/);
   assert.match(operation, /commit_after_owner_authorization/);
-  assert.match(operation, /managed_integration::prepare/);
+  assert.match(operation, /managed_application::prepare/);
   assert.match(operation, /integration_launch::launch_reserved/);
+  assert.match(contract, /ApplyOwnerManagedWorkflowSettingsV1/);
+  assert.match(contract, /ApplyOwnerManagedWorkflowSettingsReceiptV1/);
+  assert.match(operation, /managed_application::prepare/);
+  assert.match(operation, /workflow_launch::launch_reserved/);
+  assert.match(operation, /Result::WorkflowApplied/);
+  assert.match(workflowLaunch, /ManagedWorkflowRuntimeConfigurationV1/);
+  assert.match(workflowLaunch, /start_reserved_workflow_with_settings/);
+  assert.doesNotMatch(workflowLaunch, /host_bridge|integration_state_root/);
+  assert.match(workflowAdr, /generic `apply_module`/);
+  assert.match(workflowAdr, /workflow apply не является integration, domain или assembly unit/);
   assert.match(operation, /wait_for_ready_and_confirm/);
   assert.match(state, /MAX_PENDING_CHALLENGES: usize = 64/);
   assert.match(state, /pending\.remove/);
@@ -126,7 +146,7 @@ test('owner module Settings is one provider-neutral fresh-proof Gateway authorit
   assert.match(conformance, /denies_lan_mode/);
   assert.match(conformance, /challenge must be single-use/);
   assert.doesNotMatch(
-    `${contract}\n${router}\n${proof}\n${authority}\n${authorization}\n${values}\n${operation}\n${state}\n${launch}`,
+    `${contract}\n${router}\n${proof}\n${authority}\n${authorization}\n${values}\n${operation}\n${state}\n${launch}\n${workflowLaunch}`,
     /hermes_(?:mail|telegram|whatsapp|zulip|communications)|Mail|Telegram|WhatsApp|Zulip/,
   );
 });

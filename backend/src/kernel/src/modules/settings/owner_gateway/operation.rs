@@ -4,6 +4,7 @@ use std::path::Path;
 
 use hermes_gateway_protocol::v1::{
     ApplyOwnerManagedIntegrationSettingsReceiptV1, ApplyOwnerManagedIntegrationSettingsV1,
+    ApplyOwnerManagedWorkflowSettingsReceiptV1, ApplyOwnerManagedWorkflowSettingsV1,
     CommitOwnerModuleSettingsResponseV1, UpdateOwnerModuleSettingsReceiptV1,
     UpdateOwnerModuleSettingsV1, commit_owner_module_settings_response_v1,
 };
@@ -13,8 +14,10 @@ use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use prost::Message;
 
 use super::values::canonical_snapshot;
-use crate::modules::settings::{managed_integration, mutation};
-use crate::runtime::lifecycle::{integration_launch, supervisor::ManagedRuntimeSupervisor};
+use crate::modules::settings::{managed_application, mutation};
+use crate::runtime::lifecycle::{
+    integration_launch, supervisor::ManagedRuntimeSupervisor, workflow_launch,
+};
 
 pub(super) fn update_desired(
     store: &SqliteControlStore,
@@ -61,7 +64,7 @@ pub(super) fn apply_managed_integration(
     operation_id: Vec<u8>,
     apply: ApplyOwnerManagedIntegrationSettingsV1,
 ) -> Result<CommitOwnerModuleSettingsResponseV1, OwnerModuleSettingsRouteErrorV1> {
-    let prepared = managed_integration::prepare(
+    let prepared = managed_application::prepare(
         store,
         supervisor,
         &apply.registration_id,
@@ -84,7 +87,7 @@ pub(super) fn apply_managed_integration(
     let (runtime_generation, host_bridge_socket_path) = match launch {
         Ok(launch) => launch,
         Err(_) => {
-            managed_integration::block_after_launch_failure(
+            managed_application::block_after_launch_failure(
                 store,
                 &apply.registration_id,
                 &apply.configuration_instance_id,
@@ -93,7 +96,7 @@ pub(super) fn apply_managed_integration(
             return Err(OwnerModuleSettingsRouteErrorV1::Unavailable);
         }
     };
-    managed_integration::wait_for_ready_and_confirm(
+    managed_application::wait_for_ready_and_confirm(
         store,
         supervisor,
         &apply.registration_id,
@@ -126,6 +129,82 @@ pub(super) fn apply_managed_integration(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn apply_managed_workflow(
+    store: &SqliteControlStore,
+    runtime_dir: &Path,
+    supervisor: &ManagedRuntimeSupervisor,
+    logical_owner_id: &str,
+    operation_id: Vec<u8>,
+    apply: ApplyOwnerManagedWorkflowSettingsV1,
+) -> Result<CommitOwnerModuleSettingsResponseV1, OwnerModuleSettingsRouteErrorV1> {
+    workflow_launch::require_bound_workflow_kind(store, runtime_dir, &apply.registration_id)
+        .map_err(map_workflow_kind_error)?;
+    let prepared = managed_application::prepare(
+        store,
+        supervisor,
+        &apply.registration_id,
+        &apply.configuration_instance_id,
+        &apply.storage_capability_id,
+        apply.expected_desired_revision,
+    )
+    .map_err(map_apply_preparation_error)?;
+    let launch = workflow_launch::launch_reserved(
+        store,
+        runtime_dir,
+        supervisor,
+        logical_owner_id,
+        &apply.registration_id,
+        &apply.storage_capability_id,
+        &apply.configuration_instance_id,
+        Some(prepared.snapshot_bytes().to_vec()),
+    );
+    let runtime_generation = match launch {
+        Ok(runtime_generation) => runtime_generation,
+        Err(_) => {
+            managed_application::block_after_launch_failure(
+                store,
+                &apply.registration_id,
+                &apply.configuration_instance_id,
+                prepared.revision(),
+            );
+            return Err(OwnerModuleSettingsRouteErrorV1::Unavailable);
+        }
+    };
+    managed_application::wait_for_ready_and_confirm(
+        store,
+        supervisor,
+        &apply.registration_id,
+        &apply.configuration_instance_id,
+        prepared.revision(),
+    )
+    .map_err(|_| OwnerModuleSettingsRouteErrorV1::Unavailable)?;
+    let target = store
+        .settings_configuration_target(&apply.registration_id, &apply.configuration_instance_id)
+        .map_err(|_| OwnerModuleSettingsRouteErrorV1::Internal)?
+        .ok_or(OwnerModuleSettingsRouteErrorV1::Internal)?;
+    if target.effective_revision() != prepared.revision()
+        || target.apply_state() != SettingsApplyState::Current
+    {
+        return Err(OwnerModuleSettingsRouteErrorV1::Internal);
+    }
+    Ok(CommitOwnerModuleSettingsResponseV1 {
+        major: 1,
+        operation_id,
+        result: Some(
+            commit_owner_module_settings_response_v1::Result::WorkflowApplied(
+                ApplyOwnerManagedWorkflowSettingsReceiptV1 {
+                    registration_id: apply.registration_id,
+                    configuration_instance_id: apply.configuration_instance_id,
+                    effective_revision: target.effective_revision(),
+                    runtime_generation,
+                    apply_state: target.apply_state().as_str().to_owned(),
+                },
+            ),
+        ),
+    })
+}
+
 fn map_mutation_error(error: String) -> OwnerModuleSettingsRouteErrorV1 {
     if error.contains("conflict") {
         OwnerModuleSettingsRouteErrorV1::Conflict
@@ -143,5 +222,15 @@ fn map_apply_preparation_error(error: String) -> OwnerModuleSettingsRouteErrorV1
         OwnerModuleSettingsRouteErrorV1::NotFound
     } else {
         OwnerModuleSettingsRouteErrorV1::InvalidArgument
+    }
+}
+
+fn map_workflow_kind_error(error: String) -> OwnerModuleSettingsRouteErrorV1 {
+    if error.contains("kind") {
+        OwnerModuleSettingsRouteErrorV1::InvalidArgument
+    } else if error.contains("unavailable") {
+        OwnerModuleSettingsRouteErrorV1::NotFound
+    } else {
+        OwnerModuleSettingsRouteErrorV1::Internal
     }
 }

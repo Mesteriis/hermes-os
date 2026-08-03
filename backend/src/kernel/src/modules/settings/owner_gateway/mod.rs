@@ -158,6 +158,16 @@ impl OwnerModuleSettingsHandlerV1 for KernelOwnerModuleSettingsHandlerV1 {
                 operation_id,
                 apply,
             ),
+            Some(prepare_owner_module_settings_request_v1::Operation::ApplyManagedWorkflow(
+                apply,
+            )) => operation::apply_managed_workflow(
+                &self.store,
+                &self.runtime_dir,
+                &self.supervisor,
+                principal.owner_id(),
+                operation_id,
+                apply,
+            ),
             Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
                 export::effective(&self.store, operation_id, export)
             }
@@ -194,6 +204,9 @@ fn operation_registration_id(
         Some(prepare_owner_module_settings_request_v1::Operation::ApplyManagedIntegration(
             apply,
         )) => Ok(&apply.registration_id),
+        Some(prepare_owner_module_settings_request_v1::Operation::ApplyManagedWorkflow(apply)) => {
+            Ok(&apply.registration_id)
+        }
         Some(prepare_owner_module_settings_request_v1::Operation::ExportEffective(export)) => {
             Ok(&export.registration_id)
         }

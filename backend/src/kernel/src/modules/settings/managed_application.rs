@@ -1,4 +1,4 @@
-//! Provider-neutral Settings application for one managed integration runtime.
+//! Module-kind-neutral Settings revision, successor fencing and readiness application.
 
 use std::time::{Duration, Instant};
 
@@ -23,12 +23,12 @@ const VALIDATION_FAILED: &str = "settings_validation_failed";
 const REPLACEMENT_FAILED: &str = "managed_replacement_failed";
 const READINESS_FAILED: &str = "managed_readiness_failed";
 
-pub(crate) struct PreparedManagedIntegrationSettingsV1 {
+pub(crate) struct PreparedManagedSettingsV1 {
     revision: u64,
     snapshot_bytes: Vec<u8>,
 }
 
-impl PreparedManagedIntegrationSettingsV1 {
+impl PreparedManagedSettingsV1 {
     #[must_use]
     pub(crate) fn revision(&self) -> u64 {
         self.revision
@@ -41,7 +41,7 @@ impl PreparedManagedIntegrationSettingsV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ManagedIntegrationApplyKindV1 {
+enum ManagedApplyKindV1 {
     InitialLaunch,
     Replacement,
 }
@@ -53,7 +53,7 @@ pub(crate) fn prepare(
     configuration_instance_id: &str,
     storage_capability_id: &str,
     expected_desired_revision: u64,
-) -> Result<PreparedManagedIntegrationSettingsV1, String> {
+) -> Result<PreparedManagedSettingsV1, String> {
     let apply_kind = validate_current_target(
         store,
         supervisor,
@@ -94,7 +94,7 @@ pub(crate) fn prepare(
         expected_desired_revision,
         ApplyAcknowledgement::ApplyStarted,
     )?;
-    if apply_kind == ManagedIntegrationApplyKindV1::Replacement
+    if apply_kind == ManagedApplyKindV1::Replacement
         && let Err(error) =
             reserve_successor_storage(store, supervisor, registration_id, storage_capability_id)
     {
@@ -107,7 +107,7 @@ pub(crate) fn prepare(
         );
         return Err(error);
     }
-    Ok(PreparedManagedIntegrationSettingsV1 {
+    Ok(PreparedManagedSettingsV1 {
         revision: expected_desired_revision,
         snapshot_bytes,
     })
@@ -143,7 +143,7 @@ pub(crate) fn wait_for_ready_and_confirm(
                 revision,
                 READINESS_FAILED,
             );
-            return Err("managed integration did not acknowledge the desired settings".to_owned());
+            return Err("managed module did not acknowledge the desired settings".to_owned());
         }
         std::thread::sleep(READY_POLL_INTERVAL);
     }
@@ -171,49 +171,46 @@ fn validate_current_target(
     configuration_instance_id: &str,
     storage_capability_id: &str,
     expected_desired_revision: u64,
-) -> Result<ManagedIntegrationApplyKindV1, String> {
+) -> Result<ManagedApplyKindV1, String> {
     let registration = store
         .module_registration(registration_id)
         .map_err(store_error)?
         .filter(|registration| registration.state() == ModuleRegistrationState::Approved)
-        .ok_or_else(|| "managed integration registration is unavailable".to_owned())?;
+        .ok_or_else(|| "managed module registration is unavailable".to_owned())?;
     if registration.registration_id() != registration_id
         || storage_capability_id.trim().is_empty()
         || expected_desired_revision == 0
     {
-        return Err("managed integration settings target is unavailable".to_owned());
+        return Err("managed module settings target is unavailable".to_owned());
     }
     let active = supervisor.is_active(registration_id)?;
     let settings = store
         .settings_configuration_target(registration_id, configuration_instance_id)
         .map_err(store_error)?
-        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+        .ok_or_else(|| "managed module settings are unavailable".to_owned())?;
     if settings.desired_revision() != expected_desired_revision
         || settings.effective_revision() >= expected_desired_revision
         || settings.apply_state() != SettingsApplyState::PendingValidation
     {
-        return Err("managed integration settings revision is stale".to_owned());
+        return Err("managed module settings revision is stale".to_owned());
     }
     let storage = store
         .platform_storage_binding(registration_id, storage_capability_id)
         .map_err(store_error)?
         .filter(|binding| binding.state() == PlatformStorageBindingStateV1::Active)
-        .ok_or_else(|| "managed integration Storage binding is unavailable".to_owned())?;
+        .ok_or_else(|| "managed module Storage binding is unavailable".to_owned())?;
     if storage.registration_id() != registration_id
         || storage.capability_id() != storage_capability_id
     {
-        return Err("managed integration Storage binding is unavailable".to_owned());
+        return Err("managed module Storage binding is unavailable".to_owned());
     }
     Ok(classify_apply_kind(settings.effective_revision(), active))
 }
 
-fn classify_apply_kind(
-    effective_revision: u64,
-    runtime_active: bool,
-) -> ManagedIntegrationApplyKindV1 {
+fn classify_apply_kind(effective_revision: u64, runtime_active: bool) -> ManagedApplyKindV1 {
     match (effective_revision, runtime_active) {
-        (_, false) => ManagedIntegrationApplyKindV1::InitialLaunch,
-        (_, true) => ManagedIntegrationApplyKindV1::Replacement,
+        (_, false) => ManagedApplyKindV1::InitialLaunch,
+        (_, true) => ManagedApplyKindV1::Replacement,
     }
 }
 
@@ -226,37 +223,37 @@ fn validate_desired_snapshot(
     let binding = store
         .settings_schema_binding(registration_id)
         .map_err(store_error)?
-        .ok_or_else(|| "managed integration settings are unavailable".to_owned())?;
+        .ok_or_else(|| "managed module settings are unavailable".to_owned())?;
     let schema_bytes = store
         .settings_schema_artifact(registration_id)
         .map_err(store_error)?
-        .ok_or_else(|| "managed integration settings schema is unavailable".to_owned())?;
+        .ok_or_else(|| "managed module settings schema is unavailable".to_owned())?;
     let schema_sha256: [u8; 32] = Sha256::digest(&schema_bytes).into();
     if schema_sha256 != *binding.schema_sha256() {
-        return Err("managed integration settings schema binding is stale".to_owned());
+        return Err("managed module settings schema binding is stale".to_owned());
     }
     let schema = decode_settings_schema_v1(&schema_bytes)
-        .map_err(|_| "managed integration settings schema is invalid".to_owned())?;
+        .map_err(|_| "managed module settings schema is invalid".to_owned())?;
     if schema.definitions.is_empty()
         || schema
             .definitions
             .iter()
             .any(|definition| definition.apply_mode != SettingApplyModeV1::RestartModule as i32)
     {
-        return Err("managed integration settings require an unsupported apply mode".to_owned());
+        return Err("managed module settings require an unsupported apply mode".to_owned());
     }
     let (stored_revision, snapshot_bytes) = store
         .desired_settings_snapshot_for_target(registration_id, configuration_instance_id)
         .map_err(store_error)?
-        .ok_or_else(|| "managed integration desired settings are unavailable".to_owned())?;
+        .ok_or_else(|| "managed module desired settings are unavailable".to_owned())?;
     let snapshot = decode_settings_snapshot_v1(&snapshot_bytes)
-        .map_err(|_| "managed integration desired settings are invalid".to_owned())?;
+        .map_err(|_| "managed module desired settings are invalid".to_owned())?;
     if stored_revision != revision
         || snapshot.revision != revision
         || snapshot.target_id != configuration_instance_id
         || validate_settings_snapshot_against_schema_v1(&schema, &snapshot).is_err()
     {
-        return Err("managed integration desired settings are stale".to_owned());
+        return Err("managed module desired settings are stale".to_owned());
     }
     Ok(snapshot_bytes)
 }
@@ -270,7 +267,7 @@ fn reserve_successor_storage(
     let predecessor = store
         .platform_storage_binding(registration_id, storage_capability_id)
         .map_err(store_error)?
-        .ok_or_else(|| "managed integration Storage binding is unavailable".to_owned())?;
+        .ok_or_else(|| "managed module Storage binding is unavailable".to_owned())?;
     let issue = successor::issue_after(&predecessor)?;
     let (_, binding) = successor::reserve(
         supervisor,
@@ -304,21 +301,21 @@ fn store_error(error: StoreError) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{ManagedIntegrationApplyKindV1, classify_apply_kind};
+    use super::{ManagedApplyKindV1, classify_apply_kind};
 
     #[test]
     fn inactive_runtime_relaunches_for_pending_successor_settings() {
         assert_eq!(
             classify_apply_kind(0, false),
-            ManagedIntegrationApplyKindV1::InitialLaunch
+            ManagedApplyKindV1::InitialLaunch
         );
         assert_eq!(
             classify_apply_kind(3, false),
-            ManagedIntegrationApplyKindV1::InitialLaunch
+            ManagedApplyKindV1::InitialLaunch
         );
         assert_eq!(
             classify_apply_kind(3, true),
-            ManagedIntegrationApplyKindV1::Replacement
+            ManagedApplyKindV1::Replacement
         );
     }
 }

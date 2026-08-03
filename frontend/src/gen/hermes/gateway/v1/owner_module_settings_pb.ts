@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file hermes/gateway/v1/owner_module_settings.proto.
  */
 export const file_hermes_gateway_v1_owner_module_settings: GenFile = /*@__PURE__*/
-  fileDesc("Ci1oZXJtZXMvZ2F0ZXdheS92MS9vd25lcl9tb2R1bGVfc2V0dGluZ3MucHJvdG8SEWhlcm1lcy5nYXRld2F5LnYxIpoCChNPd25lclNldHRpbmdWYWx1ZVYxEhcKDWJvb2xlYW5fdmFsdWUYASABKAhIABIeChRzaWduZWRfaW50ZWdlcl92YWx1ZRgCIAEoEkgAEiAKFnVuc2lnbmVkX2ludGVnZXJfdmFsdWUYAyABKARIABIXCg1kZWNpbWFsX3ZhbHVlGAQgASgJSAASFgoMc3RyaW5nX3ZhbHVlGAUgASgJSAASGQoPZHVyYXRpb25fbWlsbGlzGAYgASgESAASHwoVdGltZXN0YW1wX3VuaXhfbWlsbGlzGAcgASgDSAASFAoKZW51bV92YWx1ZRgIIAEoCUgAEhwKEnJlc291cmNlX3JlZmVyZW5jZRgJIAEoCUgAQgcKBXZhbHVlImAKE093bmVyU2V0dGluZ0VudHJ5VjESEgoKc2V0dGluZ19pZBgBIAEoCRI1CgV2YWx1ZRgCIAEoCzImLmhlcm1lcy5nYXRld2F5LnYxLk93bmVyU2V0dGluZ1ZhbHVlVjEitAEKG1VwZGF0ZU93bmVyTW9kdWxlU2V0dGluZ3NWMRIXCg9yZWdpc3RyYXRpb25faWQYASABKAkSIQoZZXhwZWN0ZWRfZGVzaXJlZF9yZXZpc2lvbhgCIAEoBBI2CgZ2YWx1ZXMYAyADKAsyJi5oZXJtZXMuZ2F0ZXdheS52MS5Pd25lclNldHRpbmdFbnRyeVYxEiEKGWNvbmZpZ3VyYXRpb25faW5zdGFuY2VfaWQYBCABKAkiPAohQ3JlYXRlT3duZXJNb2R1bGVTZXR0aW5nc1RhcmdldFYxEhcKD3JlZ2lzdHJhdGlvbl9pZBgBIAEoCSLDAQomQXBwbHlPd25lck1hbmFnZWRJbnRlZ3JhdGlvblNldHRpbmdzVjESFwoPcmVnaXN0cmF0aW9uX2lkGAEgASgJEh0KFXN0b3JhZ2VfY2FwYWJpbGl0eV9pZBgCIAEoCRIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAMgASgJEiEKGWV4cGVjdGVkX2Rlc2lyZWRfcmV2aXNpb24YBCABKAQSGwoTcmVxdWVzdF9ob3N0X2JyaWRnZRgFIAEoCCKHAQokRXhwb3J0RWZmZWN0aXZlT3duZXJNb2R1bGVTZXR0aW5nc1YxEhcKD3JlZ2lzdHJhdGlvbl9pZBgBIAEoCRIjChtleHBlY3RlZF9lZmZlY3RpdmVfcmV2aXNpb24YAiABKAQSIQoZY29uZmlndXJhdGlvbl9pbnN0YW5jZV9pZBgDIAEoCSKkAwojUHJlcGFyZU93bmVyTW9kdWxlU2V0dGluZ3NSZXF1ZXN0VjESFAoMb3BlcmF0aW9uX2lkGAEgASgMEkgKDnVwZGF0ZV9kZXNpcmVkGAIgASgLMi4uaGVybWVzLmdhdGV3YXkudjEuVXBkYXRlT3duZXJNb2R1bGVTZXR0aW5nc1YxSAASXgoZYXBwbHlfbWFuYWdlZF9pbnRlZ3JhdGlvbhgDIAEoCzI5Lmhlcm1lcy5nYXRld2F5LnYxLkFwcGx5T3duZXJNYW5hZ2VkSW50ZWdyYXRpb25TZXR0aW5nc1YxSAASUwoQZXhwb3J0X2VmZmVjdGl2ZRgEIAEoCzI3Lmhlcm1lcy5nYXRld2F5LnYxLkV4cG9ydEVmZmVjdGl2ZU93bmVyTW9kdWxlU2V0dGluZ3NWMUgAElsKG2NyZWF0ZV9jb25maWd1cmF0aW9uX3RhcmdldBgFIAEoCzI0Lmhlcm1lcy5nYXRld2F5LnYxLkNyZWF0ZU93bmVyTW9kdWxlU2V0dGluZ3NUYXJnZXRWMUgAQgsKCW9wZXJhdGlvbiKEAQokUHJlcGFyZU93bmVyTW9kdWxlU2V0dGluZ3NSZXNwb25zZVYxEg0KBW1ham9yGAEgASgNEhQKDGNoYWxsZW5nZV9pZBgCIAEoCRIXCg9jaGFsbGVuZ2VfYnl0ZXMYAyABKAwSHgoWZXhwaXJlc19hdF91bml4X21pbGxpcxgEIAEoBCJYCiJDb21taXRPd25lck1vZHVsZVNldHRpbmdzUmVxdWVzdFYxEhQKDGNoYWxsZW5nZV9pZBgBIAEoCRIcChRkZXZpY2Vfc2lnbmF0dXJlX3JhdxgCIAEoDCKPAQoiVXBkYXRlT3duZXJNb2R1bGVTZXR0aW5nc1JlY2VpcHRWMRIXCg9yZWdpc3RyYXRpb25faWQYASABKAkSGAoQZGVzaXJlZF9yZXZpc2lvbhgCIAEoBBITCgthcHBseV9zdGF0ZRgDIAEoCRIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAQgASgJIpUBCihDcmVhdGVPd25lck1vZHVsZVNldHRpbmdzVGFyZ2V0UmVjZWlwdFYxEhcKD3JlZ2lzdHJhdGlvbl9pZBgBIAEoCRIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAIgASgJEhgKEGRlc2lyZWRfcmV2aXNpb24YAyABKAQSEwoLYXBwbHlfc3RhdGUYBCABKAki+gEKLUFwcGx5T3duZXJNYW5hZ2VkSW50ZWdyYXRpb25TZXR0aW5nc1JlY2VpcHRWMRIXCg9yZWdpc3RyYXRpb25faWQYASABKAkSGgoSZWZmZWN0aXZlX3JldmlzaW9uGAIgASgEEhoKEnJ1bnRpbWVfZ2VuZXJhdGlvbhgDIAEoBBITCgthcHBseV9zdGF0ZRgEIAEoCRIkChdob3N0X2JyaWRnZV9zb2NrZXRfcGF0aBgFIAEoCUgAiAEBEiEKGWNvbmZpZ3VyYXRpb25faW5zdGFuY2VfaWQYBiABKAlCGgoYX2hvc3RfYnJpZGdlX3NvY2tldF9wYXRoIuwBCitFeHBvcnRFZmZlY3RpdmVPd25lck1vZHVsZVNldHRpbmdzUmVjZWlwdFYxEhcKD3JlZ2lzdHJhdGlvbl9pZBgBIAEoCRIUCgxzY2hlbWFfbWFqb3IYAiABKA0SFwoPc2NoZW1hX3JldmlzaW9uGAMgASgNEhoKEmVmZmVjdGl2ZV9yZXZpc2lvbhgEIAEoBBI2CgZ2YWx1ZXMYBSADKAsyJi5oZXJtZXMuZ2F0ZXdheS52MS5Pd25lclNldHRpbmdFbnRyeVYxEiEKGWNvbmZpZ3VyYXRpb25faW5zdGFuY2VfaWQYBiABKAkilwMKI0NvbW1pdE93bmVyTW9kdWxlU2V0dGluZ3NSZXNwb25zZVYxEg0KBW1ham9yGAEgASgNEhQKDG9wZXJhdGlvbl9pZBgCIAEoDBJICgd1cGRhdGVkGAMgASgLMjUuaGVybWVzLmdhdGV3YXkudjEuVXBkYXRlT3duZXJNb2R1bGVTZXR0aW5nc1JlY2VpcHRWMUgAElMKB2FwcGxpZWQYBCABKAsyQC5oZXJtZXMuZ2F0ZXdheS52MS5BcHBseU93bmVyTWFuYWdlZEludGVncmF0aW9uU2V0dGluZ3NSZWNlaXB0VjFIABJSCghleHBvcnRlZBgFIAEoCzI+Lmhlcm1lcy5nYXRld2F5LnYxLkV4cG9ydEVmZmVjdGl2ZU93bmVyTW9kdWxlU2V0dGluZ3NSZWNlaXB0VjFIABJOCgdjcmVhdGVkGAYgASgLMjsuaGVybWVzLmdhdGV3YXkudjEuQ3JlYXRlT3duZXJNb2R1bGVTZXR0aW5nc1RhcmdldFJlY2VpcHRWMUgAQggKBnJlc3VsdDKRAgoaT3duZXJNb2R1bGVTZXR0aW5nc1NlcnZpY2USegoHUHJlcGFyZRI2Lmhlcm1lcy5nYXRld2F5LnYxLlByZXBhcmVPd25lck1vZHVsZVNldHRpbmdzUmVxdWVzdFYxGjcuaGVybWVzLmdhdGV3YXkudjEuUHJlcGFyZU93bmVyTW9kdWxlU2V0dGluZ3NSZXNwb25zZVYxEncKBkNvbW1pdBI1Lmhlcm1lcy5nYXRld2F5LnYxLkNvbW1pdE93bmVyTW9kdWxlU2V0dGluZ3NSZXF1ZXN0VjEaNi5oZXJtZXMuZ2F0ZXdheS52MS5Db21taXRPd25lck1vZHVsZVNldHRpbmdzUmVzcG9uc2VWMWIGcHJvdG8z");
+  fileDesc("Ci1oZXJtZXMvZ2F0ZXdheS92MS9vd25lcl9tb2R1bGVfc2V0dGluZ3MucHJvdG8SEWhlcm1lcy5nYXRld2F5LnYxIpoCChNPd25lclNldHRpbmdWYWx1ZVYxEhcKDWJvb2xlYW5fdmFsdWUYASABKAhIABIeChRzaWduZWRfaW50ZWdlcl92YWx1ZRgCIAEoEkgAEiAKFnVuc2lnbmVkX2ludGVnZXJfdmFsdWUYAyABKARIABIXCg1kZWNpbWFsX3ZhbHVlGAQgASgJSAASFgoMc3RyaW5nX3ZhbHVlGAUgASgJSAASGQoPZHVyYXRpb25fbWlsbGlzGAYgASgESAASHwoVdGltZXN0YW1wX3VuaXhfbWlsbGlzGAcgASgDSAASFAoKZW51bV92YWx1ZRgIIAEoCUgAEhwKEnJlc291cmNlX3JlZmVyZW5jZRgJIAEoCUgAQgcKBXZhbHVlImAKE093bmVyU2V0dGluZ0VudHJ5VjESEgoKc2V0dGluZ19pZBgBIAEoCRI1CgV2YWx1ZRgCIAEoCzImLmhlcm1lcy5nYXRld2F5LnYxLk93bmVyU2V0dGluZ1ZhbHVlVjEitAEKG1VwZGF0ZU93bmVyTW9kdWxlU2V0dGluZ3NWMRIXCg9yZWdpc3RyYXRpb25faWQYASABKAkSIQoZZXhwZWN0ZWRfZGVzaXJlZF9yZXZpc2lvbhgCIAEoBBI2CgZ2YWx1ZXMYAyADKAsyJi5oZXJtZXMuZ2F0ZXdheS52MS5Pd25lclNldHRpbmdFbnRyeVYxEiEKGWNvbmZpZ3VyYXRpb25faW5zdGFuY2VfaWQYBCABKAkiPAohQ3JlYXRlT3duZXJNb2R1bGVTZXR0aW5nc1RhcmdldFYxEhcKD3JlZ2lzdHJhdGlvbl9pZBgBIAEoCSLDAQomQXBwbHlPd25lck1hbmFnZWRJbnRlZ3JhdGlvblNldHRpbmdzVjESFwoPcmVnaXN0cmF0aW9uX2lkGAEgASgJEh0KFXN0b3JhZ2VfY2FwYWJpbGl0eV9pZBgCIAEoCRIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAMgASgJEiEKGWV4cGVjdGVkX2Rlc2lyZWRfcmV2aXNpb24YBCABKAQSGwoTcmVxdWVzdF9ob3N0X2JyaWRnZRgFIAEoCCKjAQojQXBwbHlPd25lck1hbmFnZWRXb3JrZmxvd1NldHRpbmdzVjESFwoPcmVnaXN0cmF0aW9uX2lkGAEgASgJEh0KFXN0b3JhZ2VfY2FwYWJpbGl0eV9pZBgCIAEoCRIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAMgASgJEiEKGWV4cGVjdGVkX2Rlc2lyZWRfcmV2aXNpb24YBCABKAQihwEKJEV4cG9ydEVmZmVjdGl2ZU93bmVyTW9kdWxlU2V0dGluZ3NWMRIXCg9yZWdpc3RyYXRpb25faWQYASABKAkSIwobZXhwZWN0ZWRfZWZmZWN0aXZlX3JldmlzaW9uGAIgASgEEiEKGWNvbmZpZ3VyYXRpb25faW5zdGFuY2VfaWQYAyABKAki/gMKI1ByZXBhcmVPd25lck1vZHVsZVNldHRpbmdzUmVxdWVzdFYxEhQKDG9wZXJhdGlvbl9pZBgBIAEoDBJICg51cGRhdGVfZGVzaXJlZBgCIAEoCzIuLmhlcm1lcy5nYXRld2F5LnYxLlVwZGF0ZU93bmVyTW9kdWxlU2V0dGluZ3NWMUgAEl4KGWFwcGx5X21hbmFnZWRfaW50ZWdyYXRpb24YAyABKAsyOS5oZXJtZXMuZ2F0ZXdheS52MS5BcHBseU93bmVyTWFuYWdlZEludGVncmF0aW9uU2V0dGluZ3NWMUgAElMKEGV4cG9ydF9lZmZlY3RpdmUYBCABKAsyNy5oZXJtZXMuZ2F0ZXdheS52MS5FeHBvcnRFZmZlY3RpdmVPd25lck1vZHVsZVNldHRpbmdzVjFIABJbChtjcmVhdGVfY29uZmlndXJhdGlvbl90YXJnZXQYBSABKAsyNC5oZXJtZXMuZ2F0ZXdheS52MS5DcmVhdGVPd25lck1vZHVsZVNldHRpbmdzVGFyZ2V0VjFIABJYChZhcHBseV9tYW5hZ2VkX3dvcmtmbG93GAYgASgLMjYuaGVybWVzLmdhdGV3YXkudjEuQXBwbHlPd25lck1hbmFnZWRXb3JrZmxvd1NldHRpbmdzVjFIAEILCglvcGVyYXRpb24ihAEKJFByZXBhcmVPd25lck1vZHVsZVNldHRpbmdzUmVzcG9uc2VWMRINCgVtYWpvchgBIAEoDRIUCgxjaGFsbGVuZ2VfaWQYAiABKAkSFwoPY2hhbGxlbmdlX2J5dGVzGAMgASgMEh4KFmV4cGlyZXNfYXRfdW5peF9taWxsaXMYBCABKAQiWAoiQ29tbWl0T3duZXJNb2R1bGVTZXR0aW5nc1JlcXVlc3RWMRIUCgxjaGFsbGVuZ2VfaWQYASABKAkSHAoUZGV2aWNlX3NpZ25hdHVyZV9yYXcYAiABKAwijwEKIlVwZGF0ZU93bmVyTW9kdWxlU2V0dGluZ3NSZWNlaXB0VjESFwoPcmVnaXN0cmF0aW9uX2lkGAEgASgJEhgKEGRlc2lyZWRfcmV2aXNpb24YAiABKAQSEwoLYXBwbHlfc3RhdGUYAyABKAkSIQoZY29uZmlndXJhdGlvbl9pbnN0YW5jZV9pZBgEIAEoCSKVAQooQ3JlYXRlT3duZXJNb2R1bGVTZXR0aW5nc1RhcmdldFJlY2VpcHRWMRIXCg9yZWdpc3RyYXRpb25faWQYASABKAkSIQoZY29uZmlndXJhdGlvbl9pbnN0YW5jZV9pZBgCIAEoCRIYChBkZXNpcmVkX3JldmlzaW9uGAMgASgEEhMKC2FwcGx5X3N0YXRlGAQgASgJIvoBCi1BcHBseU93bmVyTWFuYWdlZEludGVncmF0aW9uU2V0dGluZ3NSZWNlaXB0VjESFwoPcmVnaXN0cmF0aW9uX2lkGAEgASgJEhoKEmVmZmVjdGl2ZV9yZXZpc2lvbhgCIAEoBBIaChJydW50aW1lX2dlbmVyYXRpb24YAyABKAQSEwoLYXBwbHlfc3RhdGUYBCABKAkSJAoXaG9zdF9icmlkZ2Vfc29ja2V0X3BhdGgYBSABKAlIAIgBARIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAYgASgJQhoKGF9ob3N0X2JyaWRnZV9zb2NrZXRfcGF0aCK1AQoqQXBwbHlPd25lck1hbmFnZWRXb3JrZmxvd1NldHRpbmdzUmVjZWlwdFYxEhcKD3JlZ2lzdHJhdGlvbl9pZBgBIAEoCRIhChljb25maWd1cmF0aW9uX2luc3RhbmNlX2lkGAIgASgJEhoKEmVmZmVjdGl2ZV9yZXZpc2lvbhgDIAEoBBIaChJydW50aW1lX2dlbmVyYXRpb24YBCABKAQSEwoLYXBwbHlfc3RhdGUYBSABKAki7AEKK0V4cG9ydEVmZmVjdGl2ZU93bmVyTW9kdWxlU2V0dGluZ3NSZWNlaXB0VjESFwoPcmVnaXN0cmF0aW9uX2lkGAEgASgJEhQKDHNjaGVtYV9tYWpvchgCIAEoDRIXCg9zY2hlbWFfcmV2aXNpb24YAyABKA0SGgoSZWZmZWN0aXZlX3JldmlzaW9uGAQgASgEEjYKBnZhbHVlcxgFIAMoCzImLmhlcm1lcy5nYXRld2F5LnYxLk93bmVyU2V0dGluZ0VudHJ5VjESIQoZY29uZmlndXJhdGlvbl9pbnN0YW5jZV9pZBgGIAEoCSLyAwojQ29tbWl0T3duZXJNb2R1bGVTZXR0aW5nc1Jlc3BvbnNlVjESDQoFbWFqb3IYASABKA0SFAoMb3BlcmF0aW9uX2lkGAIgASgMEkgKB3VwZGF0ZWQYAyABKAsyNS5oZXJtZXMuZ2F0ZXdheS52MS5VcGRhdGVPd25lck1vZHVsZVNldHRpbmdzUmVjZWlwdFYxSAASUwoHYXBwbGllZBgEIAEoCzJALmhlcm1lcy5nYXRld2F5LnYxLkFwcGx5T3duZXJNYW5hZ2VkSW50ZWdyYXRpb25TZXR0aW5nc1JlY2VpcHRWMUgAElIKCGV4cG9ydGVkGAUgASgLMj4uaGVybWVzLmdhdGV3YXkudjEuRXhwb3J0RWZmZWN0aXZlT3duZXJNb2R1bGVTZXR0aW5nc1JlY2VpcHRWMUgAEk4KB2NyZWF0ZWQYBiABKAsyOy5oZXJtZXMuZ2F0ZXdheS52MS5DcmVhdGVPd25lck1vZHVsZVNldHRpbmdzVGFyZ2V0UmVjZWlwdFYxSAASWQoQd29ya2Zsb3dfYXBwbGllZBgHIAEoCzI9Lmhlcm1lcy5nYXRld2F5LnYxLkFwcGx5T3duZXJNYW5hZ2VkV29ya2Zsb3dTZXR0aW5nc1JlY2VpcHRWMUgAQggKBnJlc3VsdDKRAgoaT3duZXJNb2R1bGVTZXR0aW5nc1NlcnZpY2USegoHUHJlcGFyZRI2Lmhlcm1lcy5nYXRld2F5LnYxLlByZXBhcmVPd25lck1vZHVsZVNldHRpbmdzUmVxdWVzdFYxGjcuaGVybWVzLmdhdGV3YXkudjEuUHJlcGFyZU93bmVyTW9kdWxlU2V0dGluZ3NSZXNwb25zZVYxEncKBkNvbW1pdBI1Lmhlcm1lcy5nYXRld2F5LnYxLkNvbW1pdE93bmVyTW9kdWxlU2V0dGluZ3NSZXF1ZXN0VjEaNi5oZXJtZXMuZ2F0ZXdheS52MS5Db21taXRPd25lck1vZHVsZVNldHRpbmdzUmVzcG9uc2VWMWIGcHJvdG8z");
 
 /**
  * @generated from message hermes.gateway.v1.OwnerSettingValueV1
@@ -192,6 +192,38 @@ export const ApplyOwnerManagedIntegrationSettingsV1Schema: GenMessage<ApplyOwner
   messageDesc(file_hermes_gateway_v1_owner_module_settings, 4);
 
 /**
+ * @generated from message hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsV1
+ */
+export type ApplyOwnerManagedWorkflowSettingsV1 = Message<"hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsV1"> & {
+  /**
+   * @generated from field: string registration_id = 1;
+   */
+  registrationId: string;
+
+  /**
+   * @generated from field: string storage_capability_id = 2;
+   */
+  storageCapabilityId: string;
+
+  /**
+   * @generated from field: string configuration_instance_id = 3;
+   */
+  configurationInstanceId: string;
+
+  /**
+   * @generated from field: uint64 expected_desired_revision = 4;
+   */
+  expectedDesiredRevision: bigint;
+};
+
+/**
+ * Describes the message hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsV1.
+ * Use `create(ApplyOwnerManagedWorkflowSettingsV1Schema)` to create a new message.
+ */
+export const ApplyOwnerManagedWorkflowSettingsV1Schema: GenMessage<ApplyOwnerManagedWorkflowSettingsV1> = /*@__PURE__*/
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 5);
+
+/**
  * @generated from message hermes.gateway.v1.ExportEffectiveOwnerModuleSettingsV1
  */
 export type ExportEffectiveOwnerModuleSettingsV1 = Message<"hermes.gateway.v1.ExportEffectiveOwnerModuleSettingsV1"> & {
@@ -216,7 +248,7 @@ export type ExportEffectiveOwnerModuleSettingsV1 = Message<"hermes.gateway.v1.Ex
  * Use `create(ExportEffectiveOwnerModuleSettingsV1Schema)` to create a new message.
  */
 export const ExportEffectiveOwnerModuleSettingsV1Schema: GenMessage<ExportEffectiveOwnerModuleSettingsV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 5);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 6);
 
 /**
  * @generated from message hermes.gateway.v1.PrepareOwnerModuleSettingsRequestV1
@@ -254,6 +286,12 @@ export type PrepareOwnerModuleSettingsRequestV1 = Message<"hermes.gateway.v1.Pre
      */
     value: CreateOwnerModuleSettingsTargetV1;
     case: "createConfigurationTarget";
+  } | {
+    /**
+     * @generated from field: hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsV1 apply_managed_workflow = 6;
+     */
+    value: ApplyOwnerManagedWorkflowSettingsV1;
+    case: "applyManagedWorkflow";
   } | { case: undefined; value?: undefined };
 };
 
@@ -262,7 +300,7 @@ export type PrepareOwnerModuleSettingsRequestV1 = Message<"hermes.gateway.v1.Pre
  * Use `create(PrepareOwnerModuleSettingsRequestV1Schema)` to create a new message.
  */
 export const PrepareOwnerModuleSettingsRequestV1Schema: GenMessage<PrepareOwnerModuleSettingsRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 6);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 7);
 
 /**
  * @generated from message hermes.gateway.v1.PrepareOwnerModuleSettingsResponseV1
@@ -294,7 +332,7 @@ export type PrepareOwnerModuleSettingsResponseV1 = Message<"hermes.gateway.v1.Pr
  * Use `create(PrepareOwnerModuleSettingsResponseV1Schema)` to create a new message.
  */
 export const PrepareOwnerModuleSettingsResponseV1Schema: GenMessage<PrepareOwnerModuleSettingsResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 7);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 8);
 
 /**
  * @generated from message hermes.gateway.v1.CommitOwnerModuleSettingsRequestV1
@@ -316,7 +354,7 @@ export type CommitOwnerModuleSettingsRequestV1 = Message<"hermes.gateway.v1.Comm
  * Use `create(CommitOwnerModuleSettingsRequestV1Schema)` to create a new message.
  */
 export const CommitOwnerModuleSettingsRequestV1Schema: GenMessage<CommitOwnerModuleSettingsRequestV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 8);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 9);
 
 /**
  * @generated from message hermes.gateway.v1.UpdateOwnerModuleSettingsReceiptV1
@@ -348,7 +386,7 @@ export type UpdateOwnerModuleSettingsReceiptV1 = Message<"hermes.gateway.v1.Upda
  * Use `create(UpdateOwnerModuleSettingsReceiptV1Schema)` to create a new message.
  */
 export const UpdateOwnerModuleSettingsReceiptV1Schema: GenMessage<UpdateOwnerModuleSettingsReceiptV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 9);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 10);
 
 /**
  * @generated from message hermes.gateway.v1.CreateOwnerModuleSettingsTargetReceiptV1
@@ -380,7 +418,7 @@ export type CreateOwnerModuleSettingsTargetReceiptV1 = Message<"hermes.gateway.v
  * Use `create(CreateOwnerModuleSettingsTargetReceiptV1Schema)` to create a new message.
  */
 export const CreateOwnerModuleSettingsTargetReceiptV1Schema: GenMessage<CreateOwnerModuleSettingsTargetReceiptV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 10);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 11);
 
 /**
  * @generated from message hermes.gateway.v1.ApplyOwnerManagedIntegrationSettingsReceiptV1
@@ -422,7 +460,44 @@ export type ApplyOwnerManagedIntegrationSettingsReceiptV1 = Message<"hermes.gate
  * Use `create(ApplyOwnerManagedIntegrationSettingsReceiptV1Schema)` to create a new message.
  */
 export const ApplyOwnerManagedIntegrationSettingsReceiptV1Schema: GenMessage<ApplyOwnerManagedIntegrationSettingsReceiptV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 11);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 12);
+
+/**
+ * @generated from message hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsReceiptV1
+ */
+export type ApplyOwnerManagedWorkflowSettingsReceiptV1 = Message<"hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsReceiptV1"> & {
+  /**
+   * @generated from field: string registration_id = 1;
+   */
+  registrationId: string;
+
+  /**
+   * @generated from field: string configuration_instance_id = 2;
+   */
+  configurationInstanceId: string;
+
+  /**
+   * @generated from field: uint64 effective_revision = 3;
+   */
+  effectiveRevision: bigint;
+
+  /**
+   * @generated from field: uint64 runtime_generation = 4;
+   */
+  runtimeGeneration: bigint;
+
+  /**
+   * @generated from field: string apply_state = 5;
+   */
+  applyState: string;
+};
+
+/**
+ * Describes the message hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsReceiptV1.
+ * Use `create(ApplyOwnerManagedWorkflowSettingsReceiptV1Schema)` to create a new message.
+ */
+export const ApplyOwnerManagedWorkflowSettingsReceiptV1Schema: GenMessage<ApplyOwnerManagedWorkflowSettingsReceiptV1> = /*@__PURE__*/
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 13);
 
 /**
  * @generated from message hermes.gateway.v1.ExportEffectiveOwnerModuleSettingsReceiptV1
@@ -464,7 +539,7 @@ export type ExportEffectiveOwnerModuleSettingsReceiptV1 = Message<"hermes.gatewa
  * Use `create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema)` to create a new message.
  */
 export const ExportEffectiveOwnerModuleSettingsReceiptV1Schema: GenMessage<ExportEffectiveOwnerModuleSettingsReceiptV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 12);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 14);
 
 /**
  * @generated from message hermes.gateway.v1.CommitOwnerModuleSettingsResponseV1
@@ -507,6 +582,12 @@ export type CommitOwnerModuleSettingsResponseV1 = Message<"hermes.gateway.v1.Com
      */
     value: CreateOwnerModuleSettingsTargetReceiptV1;
     case: "created";
+  } | {
+    /**
+     * @generated from field: hermes.gateway.v1.ApplyOwnerManagedWorkflowSettingsReceiptV1 workflow_applied = 7;
+     */
+    value: ApplyOwnerManagedWorkflowSettingsReceiptV1;
+    case: "workflowApplied";
   } | { case: undefined; value?: undefined };
 };
 
@@ -515,7 +596,7 @@ export type CommitOwnerModuleSettingsResponseV1 = Message<"hermes.gateway.v1.Com
  * Use `create(CommitOwnerModuleSettingsResponseV1Schema)` to create a new message.
  */
 export const CommitOwnerModuleSettingsResponseV1Schema: GenMessage<CommitOwnerModuleSettingsResponseV1> = /*@__PURE__*/
-  messageDesc(file_hermes_gateway_v1_owner_module_settings, 13);
+  messageDesc(file_hermes_gateway_v1_owner_module_settings, 15);
 
 /**
  * @generated from service hermes.gateway.v1.OwnerModuleSettingsService
