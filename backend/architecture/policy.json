@@ -14753,6 +14753,7 @@
     "integrationEngineContractPackages": [
       "hermes-ai-contracts",
       "hermes-attachment-security-contract",
+      "hermes-speech-transcript-artifact",
       "hermes-speech-to-text-api"
     ],
     "integrationDomainContractPackages": [

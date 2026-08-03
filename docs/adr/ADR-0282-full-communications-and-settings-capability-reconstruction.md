@@ -26,6 +26,7 @@ slice, executable evidence и только затем frontend activation.
 - [ADR-0287: Telegram operational realtime](ADR-0287-telegram-operational-realtime-replay-boundary.md).
 - [ADR-0353: reply suggestion and AI inference boundary](ADR-0353-communication-reply-suggestion-and-ai-inference-boundary.md).
 - [ADR-0390: call recording custody and Speech-to-Text boundary](ADR-0390-call-recording-custody-and-speech-to-text-boundary.md).
+- [ADR-0391: Whisper STT provider integration](ADR-0391-whisper-stt-provider-integration.md).
 
 ## Контекст
 

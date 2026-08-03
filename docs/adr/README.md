@@ -774,3 +774,9 @@ LLM: запись требует explicit consent и source-owned Blob custody, 
 принадлежит отдельному Speech-to-Text engine, а concrete Whisper execution —
 отдельной integration. Transcript bytes доступны только через actor-bound
 client Blob, не через PostgreSQL, durable events, query или SSE.
+
+ADR-0391 фиксирует concrete Whisper STT provider как отдельную integration:
+canonical transcript является private Blob document, whisper.cpp executable и
+model приходят только как pinned managed artifacts, а process/runtime/storage и
+assembly остаются отдельными build units без Communications или workflow
+dependencies.

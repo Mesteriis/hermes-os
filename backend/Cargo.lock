@@ -5079,6 +5079,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-speech-transcript-artifact"
+version = "0.1.0"
+dependencies = [
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-storage-control"
 version = "0.1.0"
 dependencies = [
@@ -5629,6 +5639,24 @@ dependencies = [
  "prost-types 0.14.4",
  "sha2 0.11.0",
  "tokio",
+]
+
+[[package]]
+name = "hermes-whisper-stt-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-speech-to-text-api",
+ "hermes-speech-transcript-artifact",
+]
+
+[[package]]
+name = "hermes-whisper-stt-process"
+version = "0.1.0"
+dependencies = [
+ "hermes-speech-to-text-api",
+ "hermes-whisper-stt-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
