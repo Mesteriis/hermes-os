@@ -2,11 +2,20 @@
 
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 
+mod validation;
+
+pub use validation::{
+    SpeechToTextContractErrorV1, compute_speech_to_text_request_digest_v1,
+    seal_speech_to_text_request_v1, validate_speech_to_text_request_v1,
+    validate_speech_to_text_result_v1,
+};
+
 pub const PACKAGE: &str = "hermes-speech-to-text-api";
 pub const SPEECH_TO_TEXT_OWNER_V1: &str = "speech_to_text";
 pub const SPEECH_TO_TEXT_MODULE_ID_V1: &str = "hermes-speech-to-text-runtime";
 pub const SPEECH_TO_TEXT_CAPABILITY_ID_V1: &str = "speech_to_text.transcribe.v1";
 pub const SPEECH_TO_TEXT_CONTRACT_NAME_V1: &str = "speech_to_text.transcribe";
+pub const SPEECH_TO_TEXT_PROVIDER_CONTRACT_NAME_V1: &str = "speech_to_text.provider_transcribe";
 pub const SPEECH_TO_TEXT_CONTRACT_MAJOR_V1: u32 = 1;
 pub const SPEECH_TO_TEXT_CONTRACT_REVISION_V1: u32 = 1;
 pub const SPEECH_TO_TEXT_MAX_AUDIO_BYTES_V1: u64 = 512 * 1024 * 1024;
@@ -29,6 +38,17 @@ pub fn speech_to_text_contract_reference_v1() -> ContractReferenceV1 {
     ContractReferenceV1 {
         owner: SPEECH_TO_TEXT_OWNER_V1.to_owned(),
         name: SPEECH_TO_TEXT_CONTRACT_NAME_V1.to_owned(),
+        major: SPEECH_TO_TEXT_CONTRACT_MAJOR_V1,
+        revision: SPEECH_TO_TEXT_CONTRACT_REVISION_V1,
+        schema_sha256: SPEECH_TO_TEXT_SCHEMA_SHA256.to_vec(),
+    }
+}
+
+#[must_use]
+pub fn speech_to_text_provider_contract_reference_v1() -> ContractReferenceV1 {
+    ContractReferenceV1 {
+        owner: SPEECH_TO_TEXT_OWNER_V1.to_owned(),
+        name: SPEECH_TO_TEXT_PROVIDER_CONTRACT_NAME_V1.to_owned(),
         major: SPEECH_TO_TEXT_CONTRACT_MAJOR_V1,
         revision: SPEECH_TO_TEXT_CONTRACT_REVISION_V1,
         schema_sha256: SPEECH_TO_TEXT_SCHEMA_SHA256.to_vec(),
@@ -69,5 +89,9 @@ mod tests {
         assert_eq!(contract.owner, SPEECH_TO_TEXT_OWNER_V1);
         assert_eq!(contract.name, SPEECH_TO_TEXT_CONTRACT_NAME_V1);
         assert_eq!(contract.schema_sha256.len(), 32);
+        assert_eq!(
+            speech_to_text_provider_contract_reference_v1().name,
+            "speech_to_text.provider_transcribe"
+        );
     }
 }

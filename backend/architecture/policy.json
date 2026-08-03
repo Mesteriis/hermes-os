@@ -12880,6 +12880,14 @@
           "features": []
         },
         {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
           "name": "prost-build",
           "kind": "build",
           "source": "crates_io",
@@ -14744,7 +14752,8 @@
     ],
     "integrationEngineContractPackages": [
       "hermes-ai-contracts",
-      "hermes-attachment-security-contract"
+      "hermes-attachment-security-contract",
+      "hermes-speech-to-text-api"
     ],
     "integrationDomainContractPackages": [
       "hermes-contacts-mail-sync-source-api",

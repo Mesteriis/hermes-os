@@ -38,10 +38,12 @@ test('Speech-to-Text contract and core are separate engine build units', async (
 });
 
 test('Speech-to-Text wire contract carries receipts and never private text or provider choice', async () => {
-  const [proto, apiSource, coreSource] = await Promise.all([
+  const [proto, apiSource, validationSource, coreSource, policySource] = await Promise.all([
     read('backend/src/speech-to-text-api/proto/hermes/speech_to_text/v1/speech_to_text.proto'),
     read('backend/src/speech-to-text-api/src/lib.rs'),
+    read('backend/src/speech-to-text-api/src/validation.rs'),
     read('backend/src/speech-to-text-core/src/lib.rs'),
+    read('backend/architecture/policy.json'),
   ]);
 
   for (const required of [
@@ -69,9 +71,16 @@ test('Speech-to-Text wire contract carries receipts and never private text or pr
     assert.ok(!proto.includes(forbidden), `forbidden wire token ${forbidden}`);
   }
   assert.match(apiSource, /speech_to_text\.transcribe\.v1/);
+  assert.match(apiSource, /speech_to_text\.provider_transcribe/);
+  assert.match(validationSource, /custody_transfer_source_proof\.clear\(\)/);
+  assert.match(validationSource, /hermes\.speech-to-text\.request\.v1/);
   assert.match(coreSource, /RequestResultMismatch/);
   assert.match(coreSource, /InvalidConsent/);
   assert.doesNotMatch(coreSource, /hermes_communications|hermes_call_transcription|whisper/);
+  const policy = JSON.parse(policySource);
+  assert.ok(
+    policy.dependencies.integrationEngineContractPackages.includes('hermes-speech-to-text-api'),
+  );
 });
 
 test('Speech-to-Text persistence is an owner-local engine unit without content or custody secrets', async () => {
