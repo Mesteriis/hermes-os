@@ -749,3 +749,6 @@ provider observation, causal cross-subject delivery ждёт prerequisites,
 Contacts provenance refresh не создаёт feedback write, а
 revoke/generation/grant fence срабатывает до IO. Managed gate реализован;
 browser Start/Get/shared-SSE остаётся отдельным условием общего workflow gate.
+ADR-0385 добавляет отдельный owner-proof Settings apply для managed workflow:
+Kernel запускает fresh workflow successor с exact configuration-instance
+catalog и не подменяет workflow integration launch/state/host-bridge semantics.

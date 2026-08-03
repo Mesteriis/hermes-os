@@ -235,7 +235,9 @@ supervises apply; Mail and Contacts do not merge workflow settings.
 Scheduled execution uses the admitted Scheduler durable job contract. Manual
 Start/Get use generated client contracts through Core Gateway. Terminal and
 progress updates use the single replayable client SSE stream; periodic polling
-and handwritten REST are forbidden.
+and handwritten REST are forbidden. Owner-authorized application of this
+workflow's configuration instances follows the distinct managed-workflow path
+in ADR-0385 and cannot reuse managed-integration launch semantics.
 
 ### Privacy и failure isolation
 

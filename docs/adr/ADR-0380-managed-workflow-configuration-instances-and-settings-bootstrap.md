@@ -8,8 +8,9 @@
 runtime protocol, Kernel launch path и Mail-Contacts runtime используют exact
 staged configuration-instance catalog; architecture и pre-commit gates пройдены.
 Managed successor/revoke, multi-instance live conformance и полный
-`mail_contacts_sync_v1` gate остаются planned. Наличие typed workflow Settings
-schema без staged effective snapshot не является runtime evidence.
+`mail_contacts_sync_v1` gate остаются planned. Owner-authorized workflow apply
+определён отдельно в ADR-0385. Наличие typed workflow Settings schema без
+staged effective snapshot не является runtime evidence.
 
 Уточняет:
 
