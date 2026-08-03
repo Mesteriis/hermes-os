@@ -131,7 +131,7 @@ pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
                 "Google People port",
             ),
             string_definition_with_default(ADDRESS_BOOK_PROVIDER, "Address-book provider", "none"),
-            definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
+            required_definition(CONNECTION_ID, SettingValueTypeV1::String, "Connection ID"),
             definition(GMAIL_API_HOST, SettingValueTypeV1::String, "Gmail API host"),
             definition(
                 GMAIL_API_PORT,
@@ -202,7 +202,7 @@ pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
             definition(IMAP_HOST, SettingValueTypeV1::String, "IMAP host"),
             definition(IMAP_PORT, SettingValueTypeV1::UnsignedInteger, "IMAP port"),
             definition(IMAP_USERNAME, SettingValueTypeV1::String, "IMAP username"),
-            definition(
+            required_definition(
                 INBOUND_KIND,
                 SettingValueTypeV1::String,
                 "Inbound transport",
@@ -212,7 +212,7 @@ pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
                 SettingValueTypeV1::String,
                 "SMTP CA certificate",
             ),
-            definition(SMTP_ENABLED, SettingValueTypeV1::Boolean, "SMTP enabled"),
+            required_definition(SMTP_ENABLED, SettingValueTypeV1::Boolean, "SMTP enabled"),
             definition(
                 SMTP_FROM_ADDRESS,
                 SettingValueTypeV1::String,
@@ -221,12 +221,12 @@ pub fn mail_settings_schema_v2() -> SettingsSchemaV1 {
             definition(SMTP_HOST, SettingValueTypeV1::String, "SMTP host"),
             definition(SMTP_PORT, SettingValueTypeV1::UnsignedInteger, "SMTP port"),
             definition(SMTP_USERNAME, SettingValueTypeV1::String, "SMTP username"),
-            definition(
+            required_definition(
                 SYNC_WINDOW,
                 SettingValueTypeV1::UnsignedInteger,
                 "Sync window",
             ),
-            definition(
+            required_definition(
                 SYNC_WINDOWS,
                 SettingValueTypeV1::UnsignedInteger,
                 "Sync windows",
@@ -257,7 +257,18 @@ fn definition(
         kernel_controller_id: String::new(),
         display_name: display_name.to_owned(),
         default_value: None,
+        optional: true,
     }
+}
+
+fn required_definition(
+    setting_id: &str,
+    value_type: SettingValueTypeV1,
+    display_name: &str,
+) -> SettingDefinitionV1 {
+    let mut definition = definition(setting_id, value_type, display_name);
+    definition.optional = false;
+    definition
 }
 
 fn string_definition_with_default(
@@ -575,6 +586,21 @@ mod tests {
                 && definition.fresh_owner_proof_required
         }));
         assert_eq!(schema.definitions.len(), 37);
+        assert_eq!(
+            schema
+                .definitions
+                .iter()
+                .filter(|definition| !definition.optional)
+                .map(|definition| definition.setting_id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                CONNECTION_ID,
+                INBOUND_KIND,
+                SMTP_ENABLED,
+                SYNC_WINDOW,
+                SYNC_WINDOWS
+            ]
+        );
     }
 
     #[test]

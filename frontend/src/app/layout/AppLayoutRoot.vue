@@ -285,6 +285,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 					:language-options="navbar.languageOptions"
 					:compiled-adapter-ids="compiledClientSurfaceAdapterIds"
 					@language-change="navbar.selectLanguage"
+					@refresh-request="navbar.refreshBootstrap(true)"
 				/>
 			</AppLayout>
 		</Toast>

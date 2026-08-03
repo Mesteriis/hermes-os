@@ -96,7 +96,37 @@ where
             }
             "Telegram runtime admission was rejected".to_owned()
         })?;
-    process::serve_admitted_provider_loop(admitted, &runtime)
+    process::serve_admitted_provider_loop(admitted, &runtime).map_err(|error| {
+        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+            eprintln!(
+                "developer_telegram_provider_loop_error={}",
+                provider_loop_error_stage(&error)
+            );
+        }
+        error
+    })
+}
+
+fn provider_loop_error_stage(error: &str) -> &'static str {
+    if error.starts_with("Telegram runtime control channel") {
+        "control"
+    } else if error.starts_with("Telegram runtime provider loop") {
+        "provider"
+    } else if error.starts_with("Telegram durable state restore") {
+        "durable_restore"
+    } else if error.starts_with("Telegram runtime reconfiguration") {
+        "reconfiguration"
+    } else if error.starts_with("Telegram delivery-intent") {
+        "delivery_intent"
+    } else if error.starts_with("Telegram durable execution") {
+        "durable_execution"
+    } else if error.starts_with("Telegram call") {
+        "calls"
+    } else if error.contains("outbox") {
+        "outbox"
+    } else {
+        "runtime"
+    }
 }
 
 fn parse_paths<I>(arguments: &mut std::iter::Peekable<I>) -> Result<InheritedPaths, String>

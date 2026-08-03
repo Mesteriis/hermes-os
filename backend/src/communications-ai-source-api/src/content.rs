@@ -1,11 +1,13 @@
 use prost::Message;
 
 use crate::{
+    COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_MAX_BYTES_V1,
     COMMUNICATION_EXPLANATION_SOURCE_MAX_BYTES_V1, COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1,
     COMMUNICATION_SUMMARY_SOURCE_MAX_BYTES_V1, COMMUNICATION_TRANSLATION_SOURCE_MAX_BYTES_V1,
     wire::{
-        CommunicationExplanationSourceContentV1, CommunicationReplySourceContentV1,
-        CommunicationSummarySourceContentV1, CommunicationTranslationSourceContentV1,
+        CallTranscriptionSourceContentV1, CommunicationExplanationSourceContentV1,
+        CommunicationReplySourceContentV1, CommunicationSummarySourceContentV1,
+        CommunicationTranslationSourceContentV1,
     },
 };
 
@@ -14,6 +16,12 @@ const MAX_SUBJECT_BYTES_V1: usize = 998;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommunicationReplySourceContentErrorV1 {
+    Invalid,
+    Limit,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommunicationCallTranscriptionSourceContentErrorV1 {
     Invalid,
     Limit,
 }
@@ -43,6 +51,13 @@ pub fn encode_communication_reply_source_content_v1(
     Ok(content.encode_to_vec())
 }
 
+pub fn encode_call_transcription_source_content_v1(
+    content: &CallTranscriptionSourceContentV1,
+) -> Result<Vec<u8>, CommunicationCallTranscriptionSourceContentErrorV1> {
+    validate_call_transcription_source_content_v1(content)?;
+    Ok(content.encode_to_vec())
+}
+
 pub fn decode_communication_reply_source_content_v1(
     exact_bytes: &[u8],
 ) -> Result<CommunicationReplySourceContentV1, CommunicationReplySourceContentErrorV1> {
@@ -51,6 +66,18 @@ pub fn decode_communication_reply_source_content_v1(
     validate_communication_reply_source_content_v1(&content)?;
     if content.encode_to_vec() != exact_bytes {
         return Err(CommunicationReplySourceContentErrorV1::Invalid);
+    }
+    Ok(content)
+}
+
+pub fn decode_call_transcription_source_content_v1(
+    exact_bytes: &[u8],
+) -> Result<CallTranscriptionSourceContentV1, CommunicationCallTranscriptionSourceContentErrorV1> {
+    let content = CallTranscriptionSourceContentV1::decode(exact_bytes)
+        .map_err(|_| CommunicationCallTranscriptionSourceContentErrorV1::Invalid)?;
+    validate_call_transcription_source_content_v1(&content)?;
+    if content.encode_to_vec() != exact_bytes {
+        return Err(CommunicationCallTranscriptionSourceContentErrorV1::Invalid);
     }
     Ok(content)
 }
@@ -74,6 +101,30 @@ pub fn validate_communication_reply_source_content_v1(
         || encoded_len > usize::try_from(COMMUNICATION_REPLY_SOURCE_MAX_BYTES_V1).unwrap_or(0)
     {
         return Err(CommunicationReplySourceContentErrorV1::Limit);
+    }
+    Ok(())
+}
+
+pub fn validate_call_transcription_source_content_v1(
+    content: &CallTranscriptionSourceContentV1,
+) -> Result<(), CommunicationCallTranscriptionSourceContentErrorV1> {
+    if content.sender_utf8.len() > MAX_SENDER_BYTES_V1
+        || content.subject_utf8.len() > MAX_SUBJECT_BYTES_V1
+        || content.body_utf8.is_empty()
+        || std::str::from_utf8(&content.sender_utf8).is_err()
+        || std::str::from_utf8(&content.subject_utf8).is_err()
+        || std::str::from_utf8(&content.body_utf8).is_err()
+        || has_control(&content.sender_utf8)
+        || has_control(&content.subject_utf8)
+    {
+        return Err(CommunicationCallTranscriptionSourceContentErrorV1::Invalid);
+    }
+    let encoded_len = content.encoded_len();
+    if encoded_len == 0
+        || encoded_len
+            > usize::try_from(COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_MAX_BYTES_V1).unwrap_or(0)
+    {
+        return Err(CommunicationCallTranscriptionSourceContentErrorV1::Limit);
     }
     Ok(())
 }
@@ -259,6 +310,20 @@ mod tests {
         assert_eq!(
             validate_communication_reply_source_content_v1(&oversized),
             Err(CommunicationReplySourceContentErrorV1::Limit)
+        );
+    }
+
+    #[test]
+    fn call_transcription_content_has_a_distinct_exact_wire_type() {
+        let content = CallTranscriptionSourceContentV1 {
+            sender_utf8: b"Ada <ada@example.test>".to_vec(),
+            subject_utf8: b"Call sample".to_vec(),
+            body_utf8: b"Call transcript line.".to_vec(),
+        };
+        let encoded = encode_call_transcription_source_content_v1(&content).expect("encode");
+        assert_eq!(
+            decode_call_transcription_source_content_v1(&encoded),
+            Ok(content)
         );
     }
 

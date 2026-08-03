@@ -19,6 +19,7 @@ fn settings_schema_requires_ordered_typed_non_secret_definitions() {
             kernel_controller_id: String::new(),
             display_name: "Sync interval".into(),
             default_value: None,
+            optional: false,
         }],
     };
     assert!(decode_settings_schema_v1(&schema.encode_to_vec()).is_ok());
@@ -95,6 +96,7 @@ fn duration_settings_schema() -> SettingsSchemaV1 {
             kernel_controller_id: String::new(),
             display_name: "Sync interval".into(),
             default_value: None,
+            optional: false,
         }],
     }
 }

@@ -525,8 +525,16 @@ impl ManagedRuntimeSupervisor {
     }
 
     pub fn wait_until_ready(&self, registration_id: &str) -> Result<(), String> {
+        self.wait_until_ready_with_timeout(registration_id, MANAGED_RUNTIME_READY_TIMEOUT)
+    }
+
+    pub(crate) fn wait_until_ready_with_timeout(
+        &self,
+        registration_id: &str,
+        timeout: std::time::Duration,
+    ) -> Result<(), String> {
         let receiver = self.take_ready_receiver(registration_id)?;
-        match receiver.recv_timeout(MANAGED_RUNTIME_READY_TIMEOUT) {
+        match receiver.recv_timeout(timeout) {
             Ok(Ok(())) => Ok(()),
             Ok(Err(error)) => Err(error),
             Err(RecvTimeoutError::Timeout) => {

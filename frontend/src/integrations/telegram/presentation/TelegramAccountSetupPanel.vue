@@ -35,6 +35,12 @@ function openWizard(): void {
 	open.value = true
 }
 
+function resumeQrAuthorization(): void {
+	step.value = 2
+	open.value = true
+	qrStartRequest.value += 1
+}
+
 async function handleNext(nextStep: number): Promise<void> {
 	if (nextStep !== 2) return
 	if (!await setup.submit()) {
@@ -70,6 +76,16 @@ function finish(): void {
 			<button type="button" :disabled="!module?.settings" @click="openWizard">
 				<Icon icon="tabler:qrcode" />
 				Add account
+			</button>
+		</div>
+		<div v-if="setup.configured.value" class="provider-account-wizard__launcher">
+			<div>
+				<strong>Telegram QR authorization</strong>
+				<p>Resume the provider-issued QR flow without replacing existing Vault credentials.</p>
+			</div>
+			<button type="button" @click="resumeQrAuthorization">
+				<Icon icon="tabler:qrcode" />
+				Continue QR authorization
 			</button>
 		</div>
 	</section>

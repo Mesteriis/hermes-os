@@ -271,6 +271,7 @@ impl DistributionBundleFixture {
                         hermes_runtime_protocol::v1::setting_value_v1::Value::BooleanValue(true),
                     ),
                 }),
+                optional: false,
             }],
         };
         let settings_schema_bytes = settings_schema.encode_to_vec();

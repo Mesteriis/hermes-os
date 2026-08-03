@@ -245,12 +245,25 @@ impl VaultService {
             lease.request().secret_revision(),
         )
         .map_err(|_| VaultServiceError::LeaseScopeMismatch)?;
-        self.store.resolve_current_secret(&scope).map_err(|error| {
-            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-                eprintln!("developer_vault_resolve_runtime_credential_error={error:?}");
+        match self.store.resolve_current_secret(&scope) {
+            Ok(credential) => Ok(credential),
+            Err(error) => {
+                if error.is_malformed_record() {
+                    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                        eprintln!("developer_vault_recover_malformed_record");
+                    }
+                    let _ = self.store.delete_secret(&scope, now_unix_seconds);
+                } else if error.is_record_not_found() {
+                    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                        eprintln!("developer_vault_missing_record");
+                    }
+                }
+                if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                    eprintln!("developer_vault_resolve_runtime_credential_error={error:?}");
+                }
+                Err(VaultServiceError::SecretUnavailable)
             }
-            VaultServiceError::SecretUnavailable
-        })
+        }
     }
 
     fn store_current_once(

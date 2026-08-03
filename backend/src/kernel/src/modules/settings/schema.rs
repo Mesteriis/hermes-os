@@ -9,7 +9,7 @@ use hermes_kernel_control_store_sqlite::StoreError;
 use hermes_runtime_protocol::v1::{SettingsSchemaV1, SettingsSnapshotV1, SettingsValueEntryV1};
 use hermes_runtime_protocol::validation::descriptor::{
     decode_descriptor_v1, decode_settings_schema_v1, decode_settings_snapshot_v1,
-    validate_settings_snapshot_against_schema_v1,
+    settings_snapshot_is_complete_v1, validate_settings_snapshot_against_schema_v1,
 };
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -93,13 +93,14 @@ where
                     })
             })
             .collect::<Vec<_>>();
-        let complete = values.len() == schema.definitions.len();
         let snapshot = SettingsSnapshotV1 {
             target_id: registration_id.to_owned(),
             revision: 1,
             values,
         };
         validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
+            .map_err(|_| "initial module settings snapshot is invalid".to_owned())?;
+        let complete = settings_snapshot_is_complete_v1(&schema, &snapshot)
             .map_err(|_| "initial module settings snapshot is invalid".to_owned())?;
         store
             .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
@@ -150,13 +151,14 @@ where
                 })
         })
         .collect::<Vec<_>>();
-    let complete = values.len() == schema.definitions.len();
     let snapshot = SettingsSnapshotV1 {
         target_id: configuration_instance_id.to_owned(),
         revision: 1,
         values,
     };
     validate_settings_snapshot_against_schema_v1(&schema, &snapshot)
+        .map_err(|_| "initial configuration target snapshot is invalid".to_owned())?;
+    let complete = settings_snapshot_is_complete_v1(&schema, &snapshot)
         .map_err(|_| "initial configuration target snapshot is invalid".to_owned())?;
     store
         .materialize_initial_settings_snapshot(&SettingsInitialSnapshot {
@@ -328,13 +330,14 @@ fn project_successor_snapshot(
             })
         })
         .collect::<Vec<_>>();
-    let complete = values.len() == successor_schema.definitions.len();
     let snapshot = SettingsSnapshotV1 {
         target_id: registration_id.to_owned(),
         revision,
         values,
     };
     validate_settings_snapshot_against_schema_v1(successor_schema, &snapshot)
+        .map_err(|_| "settings schema successor snapshot is invalid".to_owned())?;
+    let complete = settings_snapshot_is_complete_v1(successor_schema, &snapshot)
         .map_err(|_| "settings schema successor snapshot is invalid".to_owned())?;
     Ok((snapshot, complete))
 }
@@ -489,6 +492,31 @@ mod tests {
         );
     }
 
+    #[test]
+    fn schema_successor_does_not_block_on_missing_optional_definition() {
+        let existing_schema = schema(2, &["account_id"]);
+        let existing_snapshot = SettingsSnapshotV1 {
+            target_id: "registration-mail".to_owned(),
+            revision: 7,
+            values: vec![value("account_id", "account-1")],
+        };
+        let mut successor_schema = schema(2, &["account_id", "branch_endpoint"]);
+        successor_schema.revision = 2;
+        successor_schema.definitions[1].optional = true;
+
+        let (successor, complete) = project_successor_snapshot(
+            "registration-mail",
+            8,
+            &existing_schema,
+            &existing_snapshot,
+            &successor_schema,
+        )
+        .expect("project optional successor");
+
+        assert!(complete);
+        assert_eq!(successor.values, existing_snapshot.values);
+    }
+
     fn schema(major: u32, setting_ids: &[&str]) -> SettingsSchemaV1 {
         SettingsSchemaV1 {
             major,
@@ -510,6 +538,7 @@ mod tests {
             kernel_controller_id: String::new(),
             display_name: setting_id.to_owned(),
             default_value: None,
+            optional: false,
         }
     }
 

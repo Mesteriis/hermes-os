@@ -6,6 +6,7 @@ import { clientSurfaceCatalog } from '../client-runtime/clientSurfaces'
 import type { ClientSurfaceAdapterId } from '../client-runtime/clientSurfaces'
 import { recoveryClientBootstrap, type ClientBootstrapSnapshot } from '../gateway/clientBootstrap'
 import {
+	architectureComponents,
 	eventComponents,
 	publicModuleSettingRows,
 	schedulerComponents,
@@ -28,7 +29,7 @@ const props = withDefaults(defineProps<{
 	compiledAdapterIds: readonly ClientSurfaceAdapterId[]
 }>(), { developmentProfile: 'disabled', currentLanguage: 'ru', languageOptions: () => [] })
 const emit = defineEmits<{ languageChange: [value: string] }>()
-type SystemControlSection = 'system' | 'registry' | 'scheduler' | 'events' | 'composition' | 'interface'
+type SystemControlSection = 'system' | 'registry' | 'scheduler' | 'events' | 'architecture' | 'composition' | 'interface'
 
 const selectedSection = ref<SystemControlSection>('system')
 const bootstrap = computed(() => props.bootstrap ?? recoveryClientBootstrap())
@@ -40,6 +41,7 @@ const compositionRows = computed(() => systemControlSurfaceRows(
 const moduleRows = computed(() => systemControlModuleRows(bootstrap.value.modules))
 const schedulerRows = computed(() => systemControlComponentRows(schedulerComponents, bootstrap.value.systemStatus))
 const eventRows = computed(() => systemControlComponentRows(eventComponents, bootstrap.value.systemStatus))
+const architectureRows = computed(() => systemControlComponentRows(architectureComponents, bootstrap.value.systemStatus))
 const publicSettingsRows = computed(() => publicModuleSettingRows(bootstrap.value.modules))
 const developmentMode = computed(() => props.developmentProfile !== 'disabled')
 const developmentProfileLabel = computed(() => {
@@ -66,6 +68,7 @@ const developmentProfileLabel = computed(() => {
 			<button type="button" :aria-pressed="selectedSection === 'registry'" @click="selectedSection = 'registry'"><Icon icon="tabler:adjustments" />Registry <em>{{ moduleRows.length }}</em></button>
 			<button type="button" :aria-pressed="selectedSection === 'scheduler'" @click="selectedSection = 'scheduler'"><Icon icon="tabler:calendar-time" />Scheduler</button>
 			<button type="button" :aria-pressed="selectedSection === 'events'" @click="selectedSection = 'events'"><Icon icon="tabler:route" />Events</button>
+			<button type="button" :aria-pressed="selectedSection === 'architecture'" @click="selectedSection = 'architecture'"><Icon icon="tabler:architecture" />Architecture blockers and status</button>
 			<button type="button" :aria-pressed="selectedSection === 'composition'" @click="selectedSection = 'composition'"><Icon icon="tabler:layout-grid" />Surfaces</button>
 			<button type="button" :aria-pressed="selectedSection === 'interface'" @click="selectedSection = 'interface'"><Icon icon="tabler:language" />Interface</button>
 		</nav>
@@ -87,6 +90,10 @@ const developmentProfileLabel = computed(() => {
 		<section v-else-if="selectedSection === 'events'" class="system-control-section">
 			<header class="system-control-section__header"><h3>Events</h3></header>
 			<div class="system-control-list" aria-label="Events runtime status"><article v-for="component in eventRows" :key="component.id" class="system-control-row" :class="{ disabled: component.disabled }"><Icon :icon="component.icon" /><span><strong>{{ component.label }}</strong><small>{{ component.reasonCode }}</small></span><strong>{{ component.stateLabel }}</strong></article></div>
+		</section>
+		<section v-else-if="selectedSection === 'architecture'" class="system-control-section">
+			<header class="system-control-section__header"><h3>Architecture blockers and status (platform architecture status)</h3></header>
+			<div class="system-control-list" aria-label="platform architecture status"><article v-for="component in architectureRows" :key="component.id" class="system-control-row" :class="{ disabled: component.disabled }"><Icon :icon="component.icon" /><span><strong>{{ component.label }}</strong><small>{{ component.reasonCode }}</small></span><strong>{{ component.stateLabel }}</strong></article></div>
 		</section>
 		<section v-else-if="selectedSection === 'composition'" class="system-control-section">
 			<header class="system-control-section__header"><h3>Client surfaces</h3></header>

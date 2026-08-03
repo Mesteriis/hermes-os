@@ -6,12 +6,14 @@ import Steps from '../../../shared/ui/Steps.vue'
 import '../../../shared/ui/settings/integrationAccountSetupCard.css'
 import '../../../shared/ui/settings/providerAccountWizard.css'
 import { useMailAccountSetup } from '../setup/useMailAccountSetup'
+import { useMailPendingSettingsActivation } from '../setup/useMailPendingSettingsActivation'
 
 type MailProviderChoice = 'gmail' | 'icloud' | 'imap'
 
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
 const emit = defineEmits<{ completed: [] }>()
 const setup = useMailAccountSetup(() => props.module)
+const pendingActivation = useMailPendingSettingsActivation(() => props.module)
 const open = ref(false)
 const step = ref(1)
 const provider = ref<MailProviderChoice>('gmail')
@@ -80,6 +82,10 @@ async function finish(): Promise<void> {
 	emit('completed')
 	open.value = false
 }
+
+async function activateRecoveredAccounts(): Promise<void> {
+	if (await pendingActivation.activate()) emit('completed')
+}
 </script>
 
 <template>
@@ -102,6 +108,27 @@ async function finish(): Promise<void> {
 			<button type="button" :disabled="!module?.settings" @click="openWizard">
 				<Icon icon="tabler:user-plus" />
 				Add account
+			</button>
+		</div>
+		<div
+			v-if="pendingActivation.pendingCount.value > 0"
+			class="provider-account-wizard__launcher"
+			data-testid="mail-pending-settings-activation"
+		>
+			<div>
+				<strong>Recovered account configuration</strong>
+				<p>{{ pendingActivation.pendingCount.value }} account target{{ pendingActivation.pendingCount.value === 1 ? '' : 's' }} await runtime validation.</p>
+				<p v-if="pendingActivation.message.value" :data-tone="pendingActivation.messageTone.value">
+					{{ pendingActivation.message.value }}
+				</p>
+			</div>
+			<button
+				type="button"
+				:disabled="!pendingActivation.canActivate.value || pendingActivation.busy.value"
+				@click="activateRecoveredAccounts"
+			>
+				<Icon icon="tabler:restore" />
+				{{ pendingActivation.busy.value ? 'Activating…' : 'Activate recovered accounts' }}
 			</button>
 		</div>
 	</section>

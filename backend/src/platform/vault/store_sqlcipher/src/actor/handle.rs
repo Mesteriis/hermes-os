@@ -389,9 +389,7 @@ fn resolve_current_secret(
     let row = rows
         .next()
         .map_err(VaultStoreError::Sqlite)?
-        .ok_or(VaultStoreError::Record(
-            secret_record::SecretRecordError::MalformedRecord,
-        ))?;
+        .ok_or(VaultStoreError::RecordNotFound)?;
     let record = read_record(row).map_err(VaultStoreError::Sqlite)?;
     if rows.next().map_err(VaultStoreError::Sqlite)?.is_some() {
         return Err(VaultStoreError::AmbiguousScope);

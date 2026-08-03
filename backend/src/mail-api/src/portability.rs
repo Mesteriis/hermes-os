@@ -13,7 +13,7 @@ use crate::{
 
 pub const MAIL_ACCOUNT_EXPORT_MAJOR_V1: u32 = 1;
 pub const MAIL_SETTINGS_SCHEMA_MAJOR_V2: u32 = 2;
-pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 3;
+pub const MAIL_SETTINGS_SCHEMA_REVISION_V2: u32 = 4;
 const MAX_REGISTRATION_ID_BYTES: usize = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

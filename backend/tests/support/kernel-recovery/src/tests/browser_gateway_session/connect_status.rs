@@ -629,6 +629,7 @@ fn visible_schema() -> SettingsSchemaV1 {
         kernel_controller_id: String::new(),
         display_name: setting_id.to_owned(),
         default_value: None,
+        optional: false,
     };
     SettingsSchemaV1 {
         major: 1,

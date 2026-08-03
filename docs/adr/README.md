@@ -752,3 +752,25 @@ browser Start/Get/shared-SSE остаётся отдельным условие�
 ADR-0385 добавляет отдельный owner-proof Settings apply для managed workflow:
 Kernel запускает fresh workflow successor с exact configuration-instance
 catalog и не подменяет workflow integration launch/state/host-bridge semantics.
+ADR-0386 добавляет owner-declared optionality в общий Settings protocol: Kernel
+проверяет только безусловно обязательные values, а conditional provider
+semantics остаются в integration runtime; это позволяет additive Mail schema
+successor сохранить существующие account targets без provider heuristics в ядре.
+ADR-0387 оставляет общий managed readiness timeout неизменным, но даёт Storage
+launch bounded deadline по exact числу active bindings, потому что Storage до
+ready обязан получить platform и per-runtime Vault credentials и применить
+авторизованный topology workload.
+ADR-0388 фиксирует live Storage fence reconciliation для development release
+refresh: account-scoped Settings apply может опередить локальный assembly
+checkpoint, поэтому `make dev` сверяет owner-authorized binding status и
+продолжает successor только от live revisions.
+
+ADR-0389 вводит честный `unconfigured` initial launch для workflows, которым
+нужен configuration-instance target: Kernel не запускает child без snapshot,
+а owner Settings apply остаётся единственным путём к готовому runtime.
+
+ADR-0390 отделяет call transcription workflow от Communications text и generic
+LLM: запись требует explicit consent и source-owned Blob custody, распознавание
+принадлежит отдельному Speech-to-Text engine, а concrete Whisper execution —
+отдельной integration. Transcript bytes доступны только через actor-bound
+client Blob, не через PostgreSQL, durable events, query или SSE.

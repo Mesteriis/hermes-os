@@ -194,6 +194,7 @@ export function useClientNavigationSurface() {
 		clearNotifications: () => undefined,
 		dismissNotification: () => undefined,
 		selectNavigationItem,
+		refreshBootstrap,
 		selectNotification: () => undefined,
 		selectLanguage,
 		selectThemeFamily,

@@ -1560,6 +1560,24 @@
         "role": "workflow",
         "owner": "mail_contacts_sync",
         "surface": "assembly"
+      },
+      {
+        "name": "hermes-speech-to-text-api",
+        "role": "engine",
+        "owner": "speech_to_text",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-speech-to-text-core",
+        "role": "engine",
+        "owner": "speech_to_text",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-speech-to-text-persistence",
+        "role": "engine",
+        "owner": "speech_to_text",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5180,6 +5198,24 @@
         },
         {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-speech-to-text-api": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-speech-to-text-core": [
+      ],
+      "hermes-speech-to-text-persistence": [
+        {
+          "name": "hermes-speech-to-text-core",
           "kind": "normal"
         },
         {
@@ -12833,6 +12869,64 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-speech-to-text-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-speech-to-text-core": [
+      ],
+      "hermes-speech-to-text-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -13925,6 +14019,18 @@
       },
       "hermes-attachment-translation-assembly": {
         "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-speech-to-text-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-speech-to-text-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-speech-to-text-persistence": {
+        "primaryKind": "lib",
         "customBuildAllowed": false
       }
     },

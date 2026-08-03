@@ -30,6 +30,7 @@ pub fn whatsapp_settings_schema_v1() -> SettingsSchemaV1 {
             kernel_controller_id: String::new(),
             display_name: "WhatsApp account ID".to_owned(),
             default_value: None,
+            optional: false,
         }],
     }
 }

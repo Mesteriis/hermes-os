@@ -588,6 +588,7 @@ fn settings_schema() -> SettingsSchemaV1 {
                 kernel_controller_id: "mail.controller".to_owned(),
                 display_name: "Internal".to_owned(),
                 default_value: None,
+                optional: false,
             },
             SettingDefinitionV1 {
                 setting_id: "mail.sync.window".to_owned(),
@@ -601,6 +602,7 @@ fn settings_schema() -> SettingsSchemaV1 {
                 kernel_controller_id: String::new(),
                 display_name: "Sync window".to_owned(),
                 default_value: None,
+                optional: false,
             },
         ],
     }

@@ -13,6 +13,7 @@ describe('Telegram account Settings composition', () => {
 		expect(settings).not.toContain('TelegramQrPairingPanel')
 		expect(setup).toContain('<Steps')
 		expect(setup).toContain('TelegramQrPairingPanel')
+		expect(setup).toContain('Continue QR authorization')
 		expect(setup).toContain(':start-request="qrStartRequest"')
 		expect(setup).toContain('Bot tokens are intentionally not part of this contract')
 		expect(pairing).toContain('Telegram user QR login')

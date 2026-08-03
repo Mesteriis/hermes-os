@@ -15,6 +15,7 @@ import {
 import { MailAddressBookProviderV1 } from '../../../gen/hermes/mail/portability/v1/portability_pb'
 import {
 	buildMailAccountExportV1,
+	MAIL_SETTINGS_SCHEMA_REVISION_V2,
 	mailAccountExportSettingsInputs,
 	parseMailAccountExportV1,
 	serializeMailAccountExportV1,
@@ -25,7 +26,7 @@ describe('Mail account portability codec', () => {
 		const settings = create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema, {
 			registrationId: 'mail-registration',
 			schemaMajor: 2,
-			schemaRevision: 3,
+			schemaRevision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
 			effectiveRevision: 7n,
 			values: [
 				stringSetting('mail.address_book.provider', 'none'),
@@ -62,7 +63,7 @@ describe('Mail account portability codec', () => {
 			major: 1,
 			sourceRegistrationId: 'mail-registration',
 			settingsSchemaMajor: 2,
-			settingsSchemaRevision: 3,
+			settingsSchemaRevision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
 			effectiveSettingsRevision: 7n,
 			configuration: {
 				connectionId: 'mail-account',
@@ -92,7 +93,7 @@ describe('Mail account portability codec', () => {
 		const settings = create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema, {
 			registrationId: 'mail-registration',
 			schemaMajor: 2,
-			schemaRevision: 3,
+			schemaRevision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
 			effectiveRevision: 4n,
 			values: [
 				stringSetting('mail.address_book.provider', 'icloud_carddav'),
@@ -141,7 +142,7 @@ describe('Mail account portability codec', () => {
 			create(ExportEffectiveOwnerModuleSettingsReceiptV1Schema, {
 				registrationId: 'mail-registration',
 				schemaMajor: 2,
-				schemaRevision: 3,
+					schemaRevision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
 				effectiveRevision: 1n,
 				values: [
 					stringSetting('mail.address_book.provider', 'none'),

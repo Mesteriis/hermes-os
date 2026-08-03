@@ -497,6 +497,7 @@ pub enum VaultStoreError {
     InsecurePath,
     Anchor,
     Record(secret_record::SecretRecordError),
+    RecordNotFound,
     UnsupportedSchema,
     RootRotationPending,
     Backup,
@@ -516,6 +517,7 @@ impl std::fmt::Display for VaultStoreError {
             Self::InsecurePath => "Vault store path is not private and regular",
             Self::Anchor => "Vault root-key slot is unavailable or invalid",
             Self::Record(_) => "Vault credential record is unavailable or invalid",
+            Self::RecordNotFound => "Vault credential scope has no current record",
             Self::UnsupportedSchema => "Vault store schema is unsupported",
             Self::RootRotationPending => {
                 "Vault root-key rotation requires explicit offline recovery"
@@ -533,3 +535,18 @@ impl std::fmt::Display for VaultStoreError {
 }
 
 impl std::error::Error for VaultStoreError {}
+
+impl VaultStoreError {
+    #[must_use]
+    pub const fn is_malformed_record(&self) -> bool {
+        matches!(
+            self,
+            Self::Record(secret_record::SecretRecordError::MalformedRecord)
+        )
+    }
+
+    #[must_use]
+    pub const fn is_record_not_found(&self) -> bool {
+        matches!(self, Self::RecordNotFound)
+    }
+}

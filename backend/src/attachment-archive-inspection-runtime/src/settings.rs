@@ -92,6 +92,7 @@ fn definition(setting_id: &str, default: u64) -> SettingDefinitionV1 {
         default_value: Some(hermes_runtime_protocol::v1::SettingValueV1 {
             value: Some(Value::UnsignedIntegerValue(default)),
         }),
+        optional: false,
     }
 }
 

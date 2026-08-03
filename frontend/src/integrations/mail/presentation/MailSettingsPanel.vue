@@ -1,40 +1,31 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { ClientModuleBootstrapV1 } from '../../../gen/hermes/gateway/v1/client_bootstrap_pb'
-import {
-	publicModuleSettingRows,
-	publicModuleSettingsReasonCode,
-	settingsApplyStateLabel,
-} from '../../../platform/gateway/publicModuleSettings'
 import ModuleSettingsPanel from '../../../shared/ui/settings/ModuleSettingsPanel.vue'
-import type { ModuleSettingsPanelModel } from '../../../shared/ui/settings/ModuleSettingsPanelModel'
 import MailAccountManagementPanel from './MailAccountManagementPanel.vue'
 import MailAccountSetupPanel from './MailAccountSetupPanel.vue'
 import MailPortabilityPanel from './MailPortabilityPanel.vue'
 import MailGmailPermanentDeleteAuthorizationPanel from './MailGmailPermanentDeleteAuthorizationPanel.vue'
+import { mailSettingsPanelModel } from './mailSettingsPanelModel'
+import { publicModuleSettingRows } from '../../../platform/gateway/publicModuleSettings'
 
-const MAIL_MODULE_ID = 'hermes-mail-runtime'
+const moduleId = 'hermes-mail-runtime'
+
 const props = defineProps<{ module: ClientModuleBootstrapV1 | null }>()
+const emit = defineEmits<{ changed: [] }>()
 const accountRefreshRequest = ref(0)
-const model = computed<ModuleSettingsPanelModel>(() => {
-	const owned = props.module?.moduleId === MAIL_MODULE_ID ? props.module : null
-	const settings = owned?.settings
-	return {
-		title: 'Mail',
-		description: 'Mail owns provider accounts, synchronization and outbound delivery settings.',
-		icon: 'tabler:mail',
-		tone: 'mail',
-		moduleId: MAIL_MODULE_ID,
-		registered: Boolean(owned),
-		applyState: settings ? settingsApplyStateLabel(settings.applyState) : 'No schema',
-		revision: settings ? `${settings.effectiveRevision}/${settings.desiredRevision}` : '—',
-		reasonCode: publicModuleSettingsReasonCode(owned),
-		settings: publicModuleSettingRows(owned ? [owned] : []),
-	}
+const module = computed(() => props.module?.moduleId === moduleId ? props.module : null)
+const moduleSettingsRows = computed(() => publicModuleSettingRows(
+	module.value ? [module.value] : [],
+))
+const model = computed(() => {
+	const sourceModel = mailSettingsPanelModel(module.value)
+	return { ...sourceModel, settings: moduleSettingsRows.value }
 })
 
 function refreshAccounts(): void {
 	accountRefreshRequest.value += 1
+	emit('changed')
 }
 </script>
 

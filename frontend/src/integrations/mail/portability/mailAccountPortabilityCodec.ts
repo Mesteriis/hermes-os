@@ -36,7 +36,7 @@ import {
 
 export const MAIL_ACCOUNT_EXPORT_MAJOR_V1 = 1
 export const MAIL_SETTINGS_SCHEMA_MAJOR_V2 = 2
-export const MAIL_SETTINGS_SCHEMA_REVISION_V2 = 3
+export const MAIL_SETTINGS_SCHEMA_REVISION_V2 = 4
 
 const settingIds = {
 	connectionId: 'mail.connection_id',

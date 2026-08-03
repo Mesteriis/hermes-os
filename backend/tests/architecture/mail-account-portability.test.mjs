@@ -48,6 +48,14 @@ const paths = {
     'frontend/src/integrations/mail/presentation/MailSettingsPanel.vue',
     PROJECT_ROOT,
   ),
+  androidHost: new URL(
+    'frontend/src/platform/vault/ownerVaultProvisioningAndroidHost.ts',
+    PROJECT_ROOT,
+  ),
+  provisioningFactory: new URL(
+    'frontend/src/platform/vault/ownerVaultProvisioningHostFactory.ts',
+    PROJECT_ROOT,
+  ),
   vaultClient: new URL(
     'frontend/src/platform/vault/ownerVaultProvisioningClient.ts',
     PROJECT_ROOT,
@@ -72,6 +80,8 @@ test('Mail account portability is one typed desktop app composition with explici
     workflowTests,
     ui,
     settingsPanel,
+    androidHost,
+    provisioningFactory,
     vaultClient,
     vaultHost,
   ] = await Promise.all(Object.values(paths).map((path) => readFile(path, 'utf8')));
@@ -89,7 +99,7 @@ test('Mail account portability is one typed desktop app composition with explici
     gate: 'owner_vault_provisioning_v1',
     role: 'app',
     owner: 'first_party_client',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: [
       'owner_vault_provisioning_backend_v1',
       'owner_vault_provisioning_desktop_v1',
@@ -144,6 +154,9 @@ test('Mail account portability is one typed desktop app composition with explici
   assert.match(ui, /Complete Gmail OAuth/);
   assert.match(settingsPanel, /MailPortabilityPanel/);
   assert.match(vaultClient, /OwnerVaultProvisioningService/);
+  assert.match(androidHost, /AndroidOwnerVaultProvisioningHostV1/);
+  assert.match(provisioningFactory, /hasAndroidOwnerVaultProvisioningHostV1/);
+  assert.match(provisioningFactory, /new AndroidOwnerVaultProvisioningHostV1/);
   assert.match(vaultHost, /owner_vault_provisioning_host_seal/);
   assert.doesNotMatch(
     `${contract}\n${validator}\n${codec}\n${workflow}\n${ui}`,

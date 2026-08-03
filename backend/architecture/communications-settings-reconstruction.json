@@ -355,7 +355,7 @@
       "gate": "owner_vault_provisioning_v1",
       "role": "app",
       "owner": "first_party_client",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "owner_vault_provisioning_backend_v1",
         "owner_vault_provisioning_desktop_v1"
@@ -802,13 +802,48 @@
       ]
     },
     {
+      "gate": "desktop_call_recording_v1",
+      "role": "integration",
+      "owner": "desktop_call_recording",
+      "state": "planned",
+      "dependsOn": [
+        "communications_call_evidence_v1",
+        "blob_v1",
+        "client_gateway_v1"
+      ]
+    },
+    {
+      "gate": "speech_to_text_engine_v1",
+      "role": "engine",
+      "owner": "speech_to_text",
+      "state": "planned",
+      "dependsOn": [
+        "blob_v1",
+        "capability_routed_module_request_rpc_v1"
+      ]
+    },
+    {
+      "gate": "whisper_stt_provider_v1",
+      "role": "integration",
+      "owner": "whisper_stt",
+      "state": "planned",
+      "dependsOn": [
+        "speech_to_text_engine_v1",
+        "owner_module_settings_gateway_v1"
+      ]
+    },
+    {
       "gate": "call_transcription_v1",
       "role": "workflow",
       "owner": "call_transcription",
       "state": "planned",
       "dependsOn": [
         "communications_call_evidence_v1",
-        "blob_v1"
+        "desktop_call_recording_v1",
+        "speech_to_text_engine_v1",
+        "whisper_stt_provider_v1",
+        "blob_v1",
+        "client_gateway_v1"
       ]
     },
     {

@@ -38,6 +38,7 @@ import {
 } from '../../../gen/hermes/mail/portability/v1/portability_pb'
 import { OwnerVaultActionV1 } from '../../../platform/vault'
 import { serializeMailAccountExportV1 } from './mailAccountPortabilityCodec'
+import { MAIL_SETTINGS_SCHEMA_REVISION_V2 } from './mailAccountPortabilityCodec'
 import {
 	MailAccountPortabilityWorkflowV1,
 	type MailAccountPortabilityPortsV1,
@@ -336,7 +337,7 @@ function imapExportJson(smtp: boolean): string {
 		exportedAtUnixMillis: 1n,
 		sourceRegistrationId: 'source-mail-registration',
 		settingsSchemaMajor: 2,
-		settingsSchemaRevision: 3,
+		settingsSchemaRevision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
 		effectiveSettingsRevision: 1n,
 		connectorProfile: smtp
 			? MailExportConnectorProfileV1.MAIL_EXPORT_CONNECTOR_PROFILE_IMAP_SMTP
@@ -377,7 +378,7 @@ function gmailExportJson(): string {
 		exportedAtUnixMillis: 1n,
 		sourceRegistrationId: 'source-mail-registration',
 		settingsSchemaMajor: 2,
-		settingsSchemaRevision: 3,
+		settingsSchemaRevision: MAIL_SETTINGS_SCHEMA_REVISION_V2,
 		effectiveSettingsRevision: 1n,
 		connectorProfile: MailExportConnectorProfileV1.MAIL_EXPORT_CONNECTOR_PROFILE_GMAIL,
 		readiness: MailExportAccountReadinessV1.MAIL_EXPORT_ACCOUNT_READINESS_READY,

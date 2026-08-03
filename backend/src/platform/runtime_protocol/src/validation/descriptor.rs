@@ -533,6 +533,28 @@ pub fn validate_settings_snapshot_against_schema_v1(
     Ok(())
 }
 
+/// Returns whether every unconditionally required definition has a value.
+///
+/// Conditional semantics remain owned by the module runtime. The protocol only
+/// distinguishes values required for generic materialization from optional
+/// values that may be required by a module-selected branch.
+pub fn settings_snapshot_is_complete_v1(
+    schema: &SettingsSchemaV1,
+    snapshot: &SettingsSnapshotV1,
+) -> Result<bool, SettingsSnapshotValidationError> {
+    validate_settings_snapshot_against_schema_v1(schema, snapshot)?;
+    Ok(schema
+        .definitions
+        .iter()
+        .filter(|definition| !definition.optional)
+        .all(|definition| {
+            snapshot
+                .values
+                .binary_search_by(|entry| entry.setting_id.cmp(&definition.setting_id))
+                .is_ok()
+        }))
+}
+
 fn value_within_protocol_limits(value: &setting_value_v1::Value) -> bool {
     match value {
         setting_value_v1::Value::DecimalValue(value)
@@ -584,15 +606,76 @@ fn value_matches_setting_type(value: &setting_value_v1::Value, value_type: i32) 
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_CLIENT_BLOB_RESPONSE_BYTES, valid_vault_purpose_request, validate_descriptor_v1,
+        MAX_CLIENT_BLOB_RESPONSE_BYTES, settings_snapshot_is_complete_v1,
+        valid_vault_purpose_request, validate_descriptor_v1,
     };
     use crate::v1::{
         CapabilityCriticalityV1, CapabilityDescriptorV1, CapabilityRequestV1, ClientBlobRouteV1,
         ClientRpcRouteV1, ContractReferenceV1, IntegrationStateRequestV1, ModuleDescriptorV1,
         ModuleKindV1, ProvidedSurfaceKindV1, ProvidedSurfaceV1, RuntimeArtifactRequestV1,
-        RuntimeArtifactUseV1, VaultActionV1, VaultPurposeRequestV1, VaultSecretClassV1,
-        VaultTargetScopeV1, capability_request_v1,
+        RuntimeArtifactUseV1, SettingApplyModeV1, SettingClientVisibilityV1, SettingDefinitionV1,
+        SettingMutationAuthorityV1, SettingTargetScopeV1, SettingValueTypeV1, SettingValueV1,
+        SettingsSchemaV1, SettingsSnapshotV1, SettingsValueEntryV1, VaultActionV1,
+        VaultPurposeRequestV1, VaultSecretClassV1, VaultTargetScopeV1, capability_request_v1,
+        setting_value_v1::Value,
     };
+
+    #[test]
+    fn completeness_requires_only_non_optional_definitions() {
+        let schema = SettingsSchemaV1 {
+            major: 1,
+            revision: 1,
+            definitions: vec![
+                settings_definition("account_id", false),
+                settings_definition("branch_endpoint", true),
+            ],
+        };
+        let complete = SettingsSnapshotV1 {
+            target_id: "account-1".to_owned(),
+            revision: 1,
+            values: vec![settings_value("account_id", "account-1")],
+        };
+        let missing_required = SettingsSnapshotV1 {
+            target_id: "account-1".to_owned(),
+            revision: 1,
+            values: vec![settings_value("branch_endpoint", "example.test")],
+        };
+
+        assert_eq!(
+            settings_snapshot_is_complete_v1(&schema, &complete),
+            Ok(true)
+        );
+        assert_eq!(
+            settings_snapshot_is_complete_v1(&schema, &missing_required),
+            Ok(false)
+        );
+    }
+
+    fn settings_definition(setting_id: &str, optional: bool) -> SettingDefinitionV1 {
+        SettingDefinitionV1 {
+            setting_id: setting_id.to_owned(),
+            capability_id: String::new(),
+            value_type: SettingValueTypeV1::String as i32,
+            mutation_authority: SettingMutationAuthorityV1::OperatorManaged as i32,
+            target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
+            apply_mode: SettingApplyModeV1::RestartModule as i32,
+            client_visibility: SettingClientVisibilityV1::Editable as i32,
+            fresh_owner_proof_required: true,
+            kernel_controller_id: String::new(),
+            display_name: setting_id.to_owned(),
+            default_value: None,
+            optional,
+        }
+    }
+
+    fn settings_value(setting_id: &str, value: &str) -> SettingsValueEntryV1 {
+        SettingsValueEntryV1 {
+            setting_id: setting_id.to_owned(),
+            value: Some(SettingValueV1 {
+                value: Some(Value::StringValue(value.to_owned())),
+            }),
+        }
+    }
 
     fn owner_derived_key_purpose() -> VaultPurposeRequestV1 {
         VaultPurposeRequestV1 {

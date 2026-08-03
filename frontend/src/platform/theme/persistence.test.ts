@@ -41,7 +41,7 @@ describe('theme persistence', () => {
 		const result = await savePersistedThemeSettings(settings)
 
 		expect(result.source).toBe('local_storage')
-		expect(result.errorMessage).toContain('saved locally only')
+		expect(result.errorMessage).toContain('local browser storage')
 		expect(JSON.parse(storage.get('hermes-theme-settings') ?? '{}')).toMatchObject({
 			accentColor: 'violet'
 		})
@@ -60,7 +60,7 @@ describe('theme persistence', () => {
 		const result = await loadPersistedThemeSettings()
 
 		expect(result.source).toBe('local_storage')
-		expect(result.errorMessage).toContain('backend unavailable')
+		expect(result.errorMessage).toContain('local browser storage')
 		expect(result.settings.accentColor).toBe('cyan')
 	})
 })

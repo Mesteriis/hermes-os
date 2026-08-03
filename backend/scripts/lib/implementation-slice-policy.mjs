@@ -1312,6 +1312,9 @@ const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES =
 const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES = [
   ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_PRODUCTION_PACKAGES,
   { name: 'hermes-mail-contacts-sync-assembly', role: 'workflow', owner: 'mail_contacts_sync', surface: 'assembly' },
+  { name: 'hermes-speech-to-text-api', role: 'engine', owner: 'speech_to_text', surface: 'contract' },
+  { name: 'hermes-speech-to-text-core', role: 'engine', owner: 'speech_to_text', surface: 'implementation' },
+  { name: 'hermes-speech-to-text-persistence', role: 'engine', owner: 'speech_to_text', surface: 'persistence' },
 ];
 
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
@@ -3884,7 +3887,15 @@ const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   'hermes-mail-contacts-sync-assembly': [
     { name: 'hermes-mail-contacts-sync-persistence', kind: 'normal' },
     { name: 'hermes-mail-contacts-sync-runtime', kind: 'normal' },
+      { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+  'hermes-speech-to-text-api': [
     { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-speech-to-text-core': [],
+  'hermes-speech-to-text-persistence': [
+    { name: 'hermes-speech-to-text-core', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
@@ -5285,6 +5296,17 @@ const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
     { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
+  'hermes-speech-to-text-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-speech-to-text-core': [],
+  'hermes-speech-to-text-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
 };
 
 const FORBIDDEN_DEPENDENCIES = [
@@ -6418,6 +6440,7 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-contacts-mail-sync-source-api',
       'hermes-mail-address-book-contract',
       'hermes-mail-contacts-sync-api',
+      'hermes-speech-to-text-api',
       'hermes-mail-delivery-intent-contract',
       'hermes-telegram-delivery-intent-contract',
       'hermes-whatsapp-delivery-intent-contract',

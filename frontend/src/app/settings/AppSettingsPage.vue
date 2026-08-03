@@ -5,6 +5,8 @@ import type { ClientBootstrapSnapshot } from '../../platform/gateway/clientBoots
 import SystemControlPage from '../../platform/system-control/SystemControlPage.vue'
 import Icon from '../../shared/ui/Icon.vue'
 import MailSettingsComposition from './MailSettingsComposition.vue'
+import PlatformMaintenancePanel from './PlatformMaintenancePanel.vue'
+import SettingsSurfacePlaceholderPanel from './SettingsSurfacePlaceholderPanel.vue'
 import TelegramSettingsPanel from '../../integrations/telegram/presentation/TelegramSettingsPanel.vue'
 import WhatsAppSettingsPanel from '../../integrations/whatsapp/presentation/WhatsAppSettingsPanel.vue'
 import ZulipSettingsPanel from '../../integrations/zulip/presentation/ZulipSettingsPanel.vue'
@@ -24,7 +26,10 @@ const props = defineProps<{
 	compiledAdapterIds: readonly ClientSurfaceAdapterId[]
 	initialOwner?: SettingsOwnerId
 }>()
-const emit = defineEmits<{ languageChange: [value: string] }>()
+const emit = defineEmits<{
+	languageChange: [value: string]
+	refreshRequest: []
+}>()
 const selectedOwner = ref<SettingsOwnerId>(props.initialOwner ?? 'system')
 
 const mailModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'mail'))
@@ -40,6 +45,12 @@ const providerNavigation = [
 	{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram' },
 	{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp' },
 	{ id: 'zulip', label: 'Zulip', icon: 'tabler:brand-zulip' },
+] as const
+
+const compositionNavigation = [
+	{ id: 'ai', label: 'AI', icon: 'tabler:brain' },
+	{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar-bolt' },
+	{ id: 'signalHub', label: 'Signal Hub', icon: 'tabler:signal-3' },
 ] as const
 </script>
 
@@ -75,24 +86,51 @@ const providerNavigation = [
 							<small>Owner-authorized legacy migration</small>
 						</span>
 					</button>
-				</section>
-				<section class="app-settings-navigation__group">
-					<h2>Integrations</h2>
 					<button
-						v-for="owner in providerNavigation"
-						:key="owner.id"
 						type="button"
-						:class="{ active: selectedOwner === owner.id }"
-						@click="selectedOwner = owner.id"
+						:class="{ active: selectedOwner === 'maintenance' }"
+						@click="selectedOwner = 'maintenance'"
 					>
-						<Icon class="tree-icon" :icon="owner.icon" />
+						<Icon class="tree-icon" icon="tabler:wrench" />
 						<span class="app-settings-navigation__copy">
-							<strong>{{ owner.label }}</strong>
-							<small>Provider-owned settings</small>
+							<strong>Maintenance</strong>
+							<small>Owner-neutral maintenance composition</small>
 						</span>
 					</button>
 				</section>
-			</nav>
+				<section class="app-settings-navigation__group">
+					<h2>Integrations</h2>
+						<button
+							v-for="owner in providerNavigation"
+							:key="owner.id"
+							type="button"
+							:class="{ active: selectedOwner === owner.id }"
+							@click="selectedOwner = owner.id"
+						>
+							<Icon class="tree-icon" :icon="owner.icon" />
+							<span class="app-settings-navigation__copy">
+								<strong>{{ owner.label }}</strong>
+								<small>Provider-owned settings</small>
+							</span>
+						</button>
+					</section>
+					<section class="app-settings-navigation__group">
+						<h2>Compositions</h2>
+						<button
+							v-for="item in compositionNavigation"
+							:key="item.id"
+							type="button"
+							:class="{ active: selectedOwner === item.id }"
+							@click="selectedOwner = item.id as SettingsOwnerId"
+						>
+							<Icon class="tree-icon" :icon="item.icon" />
+							<span class="app-settings-navigation__copy">
+								<strong>{{ item.label }}</strong>
+								<small>Owner-composed settings surface</small>
+							</span>
+						</button>
+					</section>
+				</nav>
 
 			<main class="app-settings-content">
 				<SystemControlPage
@@ -110,11 +148,34 @@ const providerNavigation = [
 					:mail-module="mailModule"
 					:telegram-module="telegramModule"
 				/>
+				<PlatformMaintenancePanel
+					v-else-if="selectedOwner === 'maintenance'"
+					:modules="bootstrap.modules"
+				/>
+				<SettingsSurfacePlaceholderPanel
+					v-else-if="selectedOwner === 'ai'"
+					title="AI Control Center"
+					description="AI settings are composed on the app surface from AI-owned capabilities."
+					:capability-ids="['ai_inference_v1', 'communication_reply_suggestion_v1', 'communication_summary_v1', 'communication_translation_v1', 'communication_explanation_v1']"
+				/>
+				<SettingsSurfacePlaceholderPanel
+					v-else-if="selectedOwner === 'calendar'"
+					title="Calendar account settings"
+					description="Calendar owners remain composable through their own admitted integrations."
+					:capability-ids="['calendar_account_settings_composition_v1']"
+				/>
+				<SettingsSurfacePlaceholderPanel
+					v-else-if="selectedOwner === 'signalHub'"
+					title="Signal Hub"
+					description="Signals stay provider-neutral and compose Review attention with platform telemetry."
+					:capability-ids="['review_communications_attention_v1', 'telemetry_diagnostics_surface_v1']"
+				/>
 				<MailSettingsComposition
 					v-else-if="selectedOwner === 'mail'"
 					:modules="bootstrap.modules"
 					:mail-module="mailModule"
 					:sync-module="mailContactsSyncModule"
+					@changed="emit('refreshRequest')"
 				/>
 				<TelegramSettingsPanel v-else-if="selectedOwner === 'telegram'" :module="telegramModule" />
 				<WhatsAppSettingsPanel v-else-if="selectedOwner === 'whatsapp'" :module="whatsAppModule" />

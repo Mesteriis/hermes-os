@@ -12,6 +12,7 @@ const props = defineProps<{
 	mailModule: ClientModuleBootstrapV1 | null
 	syncModule: ClientModuleBootstrapV1 | null
 }>()
+const emit = defineEmits<{ changed: [] }>()
 
 const connections = useMailAccountConnections({
 	canQuery: () => Boolean(props.mailModule?.capabilityIds.includes('mail.account.catalog.query.v1')),
@@ -20,11 +21,16 @@ const connections = useMailAccountConnections({
 const accountChoices = computed(() => mailContactsSyncAccountChoices(connections.connections.value))
 
 onMounted(() => void connections.refresh().catch(() => undefined))
+
+async function refreshMailState(): Promise<void> {
+	await connections.refresh().catch(() => undefined)
+	emit('changed')
+}
 </script>
 
 <template>
 	<div class="mail-settings-owner">
-		<MailSettingsPanel :module="mailModule" />
+		<MailSettingsPanel :module="mailModule" @changed="refreshMailState" />
 		<MailContactsSyncSettingsPanel :module="syncModule" :accounts="accountChoices" />
 	</div>
 </template>

@@ -511,8 +511,9 @@ impl OwnerControlClientV1 {
         match response.result {
             Some(owner_control_response_v1::Result::StartReservedWorkflowRuntime(value))
                 if value.registration_id == registration_id
-                    && value.runtime_generation > 0
-                    && value.launch_state == "accepted" =>
+                    && ((value.runtime_generation > 0 && value.launch_state == "accepted")
+                        || (value.runtime_generation == 0
+                            && value.launch_state == "unconfigured")) =>
             {
                 Ok(value)
             }

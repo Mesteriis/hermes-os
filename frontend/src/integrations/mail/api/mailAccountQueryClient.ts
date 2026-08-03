@@ -13,12 +13,18 @@ import { createBrowserGatewayConnectTransport } from '../../../platform/gateway/
 
 let client: Client<typeof MailAccountQueryService> | null = null
 let catalogClient: Client<typeof MailAccountCatalogService> | null = null
+let catalogRequest: Promise<MailAccountCatalogV1> | null = null
 
-export async function listMailAccounts(): Promise<MailAccountCatalogV1> {
-	return getMailAccountCatalogConnectClient().list(create(
-		MailAccountCatalogRequestV1Schema,
-		{ major: 1 },
-	))
+type MailAccountCatalogClientV1 = Pick<Client<typeof MailAccountCatalogService>, 'list'>
+
+export function listMailAccounts(
+	client: MailAccountCatalogClientV1 = getMailAccountCatalogConnectClient(),
+): Promise<MailAccountCatalogV1> {
+	catalogRequest ??= client.list(create(
+			MailAccountCatalogRequestV1Schema,
+			{ major: 1 },
+		)).finally(() => { catalogRequest = null })
+	return catalogRequest
 }
 
 export async function getMailAccountStatus(
@@ -50,4 +56,5 @@ export function getMailAccountCatalogConnectClient(): Client<typeof MailAccountC
 export function resetMailAccountQueryConnectClientForTests(): void {
 	client = null
 	catalogClient = null
+	catalogRequest = null
 }

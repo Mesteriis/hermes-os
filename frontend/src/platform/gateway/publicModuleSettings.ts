@@ -1,6 +1,7 @@
 import {
 	ClientSettingsApplyStateV1,
 	type ClientModuleBootstrapV1,
+	type ClientModuleSettingsTargetBootstrapV1,
 	type ClientSettingValueV1,
 } from '../../gen/hermes/gateway/v1/client_bootstrap_pb'
 
@@ -27,6 +28,28 @@ export function publicModuleSettingRows(
 			? [{
 				key: `${module.registrationId}:${entry.settingId}`,
 				moduleId: module.moduleId,
+				settingId: entry.settingId,
+				label: entry.displayName || entry.settingId,
+				value: settingValueLabel(entry.value),
+				editable: entry.editable,
+				applyState,
+				blocked,
+			}]
+			: [])
+	})
+}
+
+export function publicModuleSettingsTargetRows(
+	moduleId: string,
+	targets: readonly ClientModuleSettingsTargetBootstrapV1[],
+): readonly PublicModuleSettingRow[] {
+	return targets.flatMap((target) => {
+		const applyState = settingsApplyStateLabel(target.applyState)
+		const blocked = target.applyState !== ClientSettingsApplyStateV1.CURRENT
+		return target.values.flatMap((entry) => entry.value
+			? [{
+				key: `${target.configurationInstanceId}:${entry.settingId}`,
+				moduleId,
 				settingId: entry.settingId,
 				label: entry.displayName || entry.settingId,
 				value: settingValueLabel(entry.value),

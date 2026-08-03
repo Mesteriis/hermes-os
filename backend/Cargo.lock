@@ -5023,6 +5023,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-speech-to-text-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-speech-to-text-core"
+version = "0.1.0"
+
+[[package]]
+name = "hermes-speech-to-text-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-speech-to-text-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-storage-control"
 version = "0.1.0"
 dependencies = [

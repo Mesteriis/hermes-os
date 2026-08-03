@@ -12,6 +12,11 @@ use prost_types::Timestamp;
 use sha2::{Digest, Sha256};
 
 use crate::{
+    COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_MAX_BYTES_V1,
+    COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_MAX_PROOF_BYTES_V1,
+    COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_PREPARE_CONTRACT_NAME_V1,
+    COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_PREPARED_CONTRACT_NAME_V1,
+    COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_REJECTED_CONTRACT_NAME_V1,
     COMMUNICATION_EXPLANATION_SOURCE_MAX_BYTES_V1,
     COMMUNICATION_EXPLANATION_SOURCE_MAX_PROOF_BYTES_V1,
     COMMUNICATION_EXPLANATION_SOURCE_PREPARE_CONTRACT_NAME_V1,
@@ -32,16 +37,20 @@ use crate::{
     COMMUNICATION_TRANSLATION_SOURCE_REJECTED_CONTRACT_NAME_V1,
     COMMUNICATIONS_AI_SOURCE_CAPABILITY_ID_V1, COMMUNICATIONS_AI_SOURCE_CONTRACT_MAJOR_V1,
     COMMUNICATIONS_AI_SOURCE_CONTRACT_REVISION_V1, COMMUNICATIONS_AI_SOURCE_OWNER_V1,
-    COMMUNICATIONS_AI_SOURCE_SCHEMA_SHA256, COMMUNICATIONS_EXPLANATION_SOURCE_CAPABILITY_ID_V1,
+    COMMUNICATIONS_AI_SOURCE_SCHEMA_SHA256,
+    COMMUNICATIONS_CALL_TRANSCRIPTION_SOURCE_CAPABILITY_ID_V1,
+    COMMUNICATIONS_EXPLANATION_SOURCE_CAPABILITY_ID_V1,
     COMMUNICATIONS_SUMMARY_SOURCE_CAPABILITY_ID_V1,
     COMMUNICATIONS_TRANSLATION_SOURCE_CAPABILITY_ID_V1,
     wire::{
-        CommunicationExplanationSourceContentReceiptV1, CommunicationExplanationSourcePreparedV1,
-        CommunicationExplanationSourceRejectedV1, CommunicationReplySourceContentReceiptV1,
-        CommunicationReplySourcePreparedV1, CommunicationReplySourceRejectedV1,
-        CommunicationSummarySourceContentReceiptV1, CommunicationSummarySourcePreparedV1,
-        CommunicationSummarySourceRejectedV1, CommunicationTranslationSourceContentReceiptV1,
-        CommunicationTranslationSourcePreparedV1, CommunicationTranslationSourceRejectedV1,
+        CallTranscriptionSourceContentReceiptV1, CallTranscriptionSourcePreparedV1,
+        CallTranscriptionSourceRejectedV1, CommunicationExplanationSourceContentReceiptV1,
+        CommunicationExplanationSourcePreparedV1, CommunicationExplanationSourceRejectedV1,
+        CommunicationReplySourceContentReceiptV1, CommunicationReplySourcePreparedV1,
+        CommunicationReplySourceRejectedV1, CommunicationSummarySourceContentReceiptV1,
+        CommunicationSummarySourcePreparedV1, CommunicationSummarySourceRejectedV1,
+        CommunicationTranslationSourceContentReceiptV1, CommunicationTranslationSourcePreparedV1,
+        CommunicationTranslationSourceRejectedV1, PrepareCallTranscriptionSourceCommandV1,
         PrepareCommunicationExplanationSourceCommandV1, PrepareCommunicationReplySourceCommandV1,
         PrepareCommunicationSummarySourceCommandV1, PrepareCommunicationTranslationSourceCommandV1,
     },
@@ -66,6 +75,10 @@ pub enum CommunicationReplySourceEnvelopeBuildErrorV1 {
 
 pub type CommunicationSummarySourceEnvelopeContextV1 = CommunicationReplySourceEnvelopeContextV1;
 pub type CommunicationSummarySourceEnvelopeBuildErrorV1 =
+    CommunicationReplySourceEnvelopeBuildErrorV1;
+pub type CommunicationCallTranscriptionSourceEnvelopeContextV1 =
+    CommunicationReplySourceEnvelopeContextV1;
+pub type CommunicationCallTranscriptionSourceEnvelopeBuildErrorV1 =
     CommunicationReplySourceEnvelopeBuildErrorV1;
 pub type CommunicationTranslationSourceEnvelopeContextV1 =
     CommunicationReplySourceEnvelopeContextV1;
@@ -166,6 +179,102 @@ pub fn build_communication_reply_source_rejected_outbox_record_v1(
         run_id,
         "rejected",
         COMMUNICATION_REPLY_SOURCE_REJECTED_CONTRACT_NAME_V1,
+        ResultOutcomeV1::Rejected,
+        payload.encode_to_vec(),
+        context,
+    )
+}
+
+pub fn build_communication_call_transcription_source_prepare_outbox_record_v1(
+    run_id: [u8; 16],
+    source_message_id: [u8; 16],
+    expected_source_revision: u64,
+    logical_owner_id: &str,
+    deadline_unix_seconds: i64,
+    context: &CommunicationCallTranscriptionSourceEnvelopeContextV1,
+) -> Result<OutboxRecordV1, CommunicationCallTranscriptionSourceEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    if !valid_id(&run_id)
+        || !valid_id(&source_message_id)
+        || expected_source_revision == 0
+        || !valid_logical_owner_id(logical_owner_id)
+        || deadline_unix_seconds <= context.recorded_at_unix_seconds
+    {
+        return Err(CommunicationReplySourceEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    let payload = PrepareCallTranscriptionSourceCommandV1 {
+        run_id: run_id.to_vec(),
+        source_message_id: source_message_id.to_vec(),
+        expected_source_revision,
+        logical_owner_id: logical_owner_id.to_owned(),
+    }
+    .encode_to_vec();
+    build_envelope(
+        run_id,
+        &run_id,
+        &[],
+        COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_PREPARE_CONTRACT_NAME_V1,
+        Semantics::Command(CommandMetadataV1 {
+            command_id: run_id.to_vec(),
+            target_capability: COMMUNICATIONS_CALL_TRANSCRIPTION_SOURCE_CAPABILITY_ID_V1.to_owned(),
+            idempotency_key: Sha256::digest(
+                [
+                    b"communications-ai-call-transcription-source-prepare-v1".as_slice(),
+                    &run_id,
+                ]
+                .concat(),
+            )
+            .to_vec(),
+            deadline: Some(Timestamp {
+                seconds: deadline_unix_seconds,
+                nanos: 0,
+            }),
+            logical_attempt: 1,
+        }),
+        payload,
+        context,
+    )
+}
+
+pub fn build_communication_call_transcription_source_prepared_outbox_record_v1(
+    command_message_id: [u8; 16],
+    payload: CallTranscriptionSourcePreparedV1,
+    context: &CommunicationCallTranscriptionSourceEnvelopeContextV1,
+) -> Result<OutboxRecordV1, CommunicationCallTranscriptionSourceEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    let run_id = validate_call_transcription_prepared_payload(&payload)?;
+    if !valid_id(&command_message_id) {
+        return Err(CommunicationReplySourceEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    build_call_transcription_result(
+        command_message_id,
+        run_id,
+        "prepared",
+        COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_PREPARED_CONTRACT_NAME_V1,
+        ResultOutcomeV1::Succeeded,
+        payload.encode_to_vec(),
+        context,
+    )
+}
+
+pub fn build_communication_call_transcription_source_rejected_outbox_record_v1(
+    command_message_id: [u8; 16],
+    payload: CallTranscriptionSourceRejectedV1,
+    context: &CommunicationCallTranscriptionSourceEnvelopeContextV1,
+) -> Result<OutboxRecordV1, CommunicationCallTranscriptionSourceEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    let run_id = id16(&payload.run_id)?;
+    if !valid_id(&command_message_id)
+        || !valid_logical_owner_id(&payload.logical_owner_id)
+        || payload.code == 0
+    {
+        return Err(CommunicationReplySourceEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    build_call_transcription_result(
+        command_message_id,
+        run_id,
+        "rejected",
+        COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_REJECTED_CONTRACT_NAME_V1,
         ResultOutcomeV1::Rejected,
         payload.encode_to_vec(),
         context,
@@ -512,6 +621,32 @@ fn build_translation_result(
     )
 }
 
+fn build_call_transcription_result(
+    command_message_id: [u8; 16],
+    run_id: [u8; 16],
+    label: &str,
+    contract_name: &str,
+    outcome: ResultOutcomeV1,
+    payload: Vec<u8>,
+    context: &CommunicationCallTranscriptionSourceEnvelopeContextV1,
+) -> Result<OutboxRecordV1, CommunicationCallTranscriptionSourceEnvelopeBuildErrorV1> {
+    build_envelope(
+        call_transcription_result_message_id(label.as_bytes(), &run_id),
+        &run_id,
+        &command_message_id,
+        contract_name,
+        Semantics::Result(ResultMetadataV1 {
+            command_id: run_id.to_vec(),
+            command_message_id: command_message_id.to_vec(),
+            outcome: outcome as i32,
+            completed_at: Some(timestamp(context)),
+            execution_attempt: 1,
+        }),
+        payload,
+        context,
+    )
+}
+
 fn build_summary_result(
     command_message_id: [u8; 16],
     run_id: [u8; 16],
@@ -683,6 +818,24 @@ fn validate_translation_prepared_payload(
     Ok(run_id)
 }
 
+fn validate_call_transcription_prepared_payload(
+    payload: &CallTranscriptionSourcePreparedV1,
+) -> Result<[u8; 16], CommunicationCallTranscriptionSourceEnvelopeBuildErrorV1> {
+    let run_id = id16(&payload.run_id)?;
+    id16(&payload.source_message_id)?;
+    id16(&payload.source_evidence_id)?;
+    if payload.source_evidence_revision == 0
+        || !valid_logical_owner_id(&payload.logical_owner_id)
+        || payload
+            .source_content
+            .as_ref()
+            .is_none_or(|receipt| !valid_call_transcription_source_receipt(receipt))
+    {
+        return Err(CommunicationReplySourceEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    Ok(run_id)
+}
+
 fn validate_explanation_prepared_payload(
     payload: &CommunicationExplanationSourcePreparedV1,
 ) -> Result<[u8; 16], CommunicationExplanationSourceEnvelopeBuildErrorV1> {
@@ -738,6 +891,20 @@ fn valid_summary_source_receipt(receipt: &CommunicationSummarySourceContentRecei
             <= COMMUNICATION_SUMMARY_SOURCE_MAX_PROOF_BYTES_V1
 }
 
+fn valid_call_transcription_source_receipt(
+    receipt: &CallTranscriptionSourceContentReceiptV1,
+) -> bool {
+    receipt.reference_id.len() == 16
+        && receipt.reference_id.iter().any(|byte| *byte != 0)
+        && (1..=COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_MAX_BYTES_V1)
+            .contains(&receipt.declared_bytes)
+        && receipt.sha256.len() == 32
+        && receipt.sha256.iter().any(|byte| *byte != 0)
+        && !receipt.custody_transfer_source_proof.is_empty()
+        && receipt.custody_transfer_source_proof.len()
+            <= COMMUNICATION_CALL_TRANSCRIPTION_SOURCE_MAX_PROOF_BYTES_V1
+}
+
 fn valid_source_receipt(receipt: &CommunicationReplySourceContentReceiptV1) -> bool {
     receipt.reference_id.len() == 16
         && receipt.reference_id.iter().any(|byte| *byte != 0)
@@ -783,6 +950,14 @@ fn result_message_id(label: &[u8], run_id: &[u8; 16]) -> [u8; 16] {
 fn summary_result_message_id(label: &[u8], run_id: &[u8; 16]) -> [u8; 16] {
     let mut hasher = Sha256::new();
     hasher.update(b"communications-ai-summary-source-result-v1");
+    hasher.update(label);
+    hasher.update(run_id);
+    hasher.finalize()[..16].try_into().expect("digest prefix")
+}
+
+fn call_transcription_result_message_id(label: &[u8], run_id: &[u8; 16]) -> [u8; 16] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"communications-ai-call-transcription-source-result-v1");
     hasher.update(label);
     hasher.update(run_id);
     hasher.finalize()[..16].try_into().expect("digest prefix")

@@ -105,6 +105,7 @@ fn definition(
         kernel_controller_id: String::new(),
         display_name: display_name.to_owned(),
         default_value: None,
+        optional: false,
     }
 }
 

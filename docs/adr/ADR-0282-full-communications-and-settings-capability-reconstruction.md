@@ -25,6 +25,7 @@ slice, executable evidence и только затем frontend activation.
 - [ADR-0281: frontend clean-room composition](ADR-0281-communications-frontend-clean-room-composition.md);
 - [ADR-0287: Telegram operational realtime](ADR-0287-telegram-operational-realtime-replay-boundary.md).
 - [ADR-0353: reply suggestion and AI inference boundary](ADR-0353-communication-reply-suggestion-and-ai-inference-boundary.md).
+- [ADR-0390: call recording custody and Speech-to-Text boundary](ADR-0390-call-recording-custody-and-speech-to-text-boundary.md).
 
 ## Контекст
 
@@ -290,6 +291,20 @@ Each workflow:
 - `call_transcription` owns transcription execution and candidate output.
 - App composes canonical call evidence with exact provider actions.
 
+ADR-0390 closes an underspecified dependency in the original inventory:
+transcription cannot derive audio from Communications text or use generic LLM
+generation. The first exact contour therefore has three independent
+prerequisites before `call_transcription_v1`:
+
+- `desktop_call_recording_v1` — explicit-consent recording integration and
+  source-owned Blob custody;
+- `speech_to_text_engine_v1` — provider-neutral STT engine contract/runtime;
+- `whisper_stt_provider_v1` — separately admitted concrete STT integration.
+
+These gates do not merge recording, workflow, engine or integration owners.
+Transcript bytes remain a workflow-owned Blob artifact and do not enter
+Communications persistence, durable events, query responses or SSE.
+
 Zoom, Google Meet, Microsoft Teams, Telemost and phone integrations are not
 manufactured from historical cards. Each requires a separate integration ADR,
 package inventory, credentials, runtime and provider conformance before it can
@@ -449,7 +464,10 @@ runtime не является domain, а app composition не становитс
 | Contacts identity command for Mail address-book entries | Contacts | `contacts_mail_identity_command_v1` |
 | Mail address-book synchronization | `mail_contacts_sync` workflow plus Contacts command | `mail_contacts_sync_v1` after `contacts_mail_identity_command_v1` |
 | Calls aggregation | app plus Communications call evidence | `communications_call_evidence_v1` |
-| Recording/transcript | Blob plus transcription workflow | `call_transcription_v1` |
+| Explicit-consent desktop recording | Desktop recording integration plus Blob | `desktop_call_recording_v1` |
+| Provider-neutral speech recognition | Speech-to-Text engine | `speech_to_text_engine_v1` |
+| Concrete local Whisper execution | Whisper STT integration | `whisper_stt_provider_v1` |
+| Recording/transcript | Blob plus transcription workflow | `call_transcription_v1` after all three STT/recording gates |
 | App preferences | client/app | `application_preferences_v1` |
 | Background jobs | Scheduler | `scheduler_settings_surface_v1` |
 | Trace Logs | Telemetry | `telemetry_diagnostics_surface_v1` |

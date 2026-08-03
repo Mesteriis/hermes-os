@@ -22,6 +22,9 @@ use crate::runtime::managed::execution::ManagedChildExecutionPolicy;
 const STORAGE_MODULE_ID: &str = "storage";
 const MAX_ATTEMPTS: u8 = 3;
 const MAX_RUNTIME: Duration = Duration::from_secs(300);
+const READY_BASE_SECONDS: u64 = 15;
+const READY_SECONDS_PER_BINDING: u64 = 2;
+const READY_MAX_SECONDS: u64 = 120;
 
 pub fn start(
     supervisor: &ManagedRuntimeSupervisor,
@@ -82,7 +85,10 @@ pub(crate) fn start_from_kernel(
         ManagedChildExecutionPolicy::new(MAX_ATTEMPTS, MAX_RUNTIME)?,
         contracts,
     )?;
-    supervisor.wait_until_ready(STORAGE_PROCESS_ID)?;
+    supervisor.wait_until_ready_with_timeout(
+        STORAGE_PROCESS_ID,
+        storage_ready_timeout(desired_bindings.len()),
+    )?;
     match status::wait_current(store, &supervisor.relay_port()) {
         Ok(status) if status.runtime_generation() == runtime_generation => Ok(runtime_generation),
         Ok(_) | Err(_) => {
@@ -90,6 +96,15 @@ pub(crate) fn start_from_kernel(
             Err("Storage runtime did not confirm its managed status".to_owned())
         }
     }
+}
+
+fn storage_ready_timeout(active_binding_count: usize) -> Duration {
+    let active_binding_count = u64::try_from(active_binding_count).unwrap_or(u64::MAX);
+    Duration::from_secs(
+        READY_BASE_SECONDS
+            .saturating_add(active_binding_count.saturating_mul(READY_SECONDS_PER_BINDING))
+            .min(READY_MAX_SECONDS),
+    )
 }
 
 fn desired_configuration(
@@ -285,4 +300,19 @@ pub(crate) fn inherited_arguments(contracts: &StagedRuntimeContracts) -> Vec<Str
         arguments.push(path.display().to_string());
     }
     arguments
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{READY_MAX_SECONDS, storage_ready_timeout};
+
+    #[test]
+    fn readiness_deadline_is_bounded_by_exact_storage_workload() {
+        assert_eq!(storage_ready_timeout(0).as_secs(), 15);
+        assert_eq!(storage_ready_timeout(16).as_secs(), 47);
+        assert_eq!(
+            storage_ready_timeout(usize::MAX).as_secs(),
+            READY_MAX_SECONDS
+        );
+    }
 }

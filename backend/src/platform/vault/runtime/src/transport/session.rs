@@ -147,7 +147,7 @@ fn validate_storage_command(
                 && purpose.allowed_secret_classes() == [SecretClassV1::PlatformCredential]
                 && matches!(
                     purpose.actions(),
-                    [VaultActionV1::Create] | [VaultActionV1::Resolve]
+                    [VaultActionV1::Create] | [VaultActionV1::Resolve] | [VaultActionV1::Delete]
                 ))
             .then_some(())
             .ok_or(VaultTransportError::InvalidBinding)
@@ -159,9 +159,12 @@ fn validate_storage_command(
             .ok_or(VaultTransportError::InvalidBinding),
         VaultTransportCommandV1::RevokeAudience => Ok(()),
         VaultTransportCommandV1::StoreLease { .. }
-        | VaultTransportCommandV1::RetireLease { .. }
-        | VaultTransportCommandV1::DeleteLease { .. }
-        | VaultTransportCommandV1::EnsureOwnerDerivedKey { .. }
+        | VaultTransportCommandV1::RetireLease { .. } => Err(VaultTransportError::InvalidBinding),
+        VaultTransportCommandV1::DeleteLease { secret_class, .. } => (*secret_class
+            == SecretClassV1::PlatformCredential)
+            .then_some(())
+            .ok_or(VaultTransportError::InvalidBinding),
+        VaultTransportCommandV1::EnsureOwnerDerivedKey { .. }
         | VaultTransportCommandV1::ReplaceLease { .. }
         | VaultTransportCommandV1::ProvisionLease { .. } => {
             Err(VaultTransportError::InvalidBinding)

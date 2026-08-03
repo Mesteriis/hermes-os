@@ -105,11 +105,27 @@ where
         };
         match existing {
             Ok(credential) => Ok(credential),
+            Err(StorageCredentialLeaseErrorV1::Unavailable) => {
+                self.rebuild_runtime_credential(binding).await
+            }
             Err(StorageCredentialLeaseErrorV1::Rejected) => {
+                self.rebuild_runtime_credential(binding).await
+            }
+        }
+    }
+
+    async fn rebuild_runtime_credential(
+        &mut self,
+        binding: &StorageBindingV1,
+    ) -> Result<Zeroizing<Vec<u8>>, StorageCredentialLeaseErrorV1> {
+        match self.create_runtime_credential(binding).await {
+            Ok(credential) => Ok(credential),
+            Err(StorageCredentialLeaseErrorV1::Unavailable) => {
+                self.issue_runtime_credential_recreate(binding).await?;
                 self.create_runtime_credential(binding).await
             }
-            Err(StorageCredentialLeaseErrorV1::Unavailable) => {
-                Err(StorageCredentialLeaseErrorV1::Unavailable)
+            Err(StorageCredentialLeaseErrorV1::Rejected) => {
+                Err(StorageCredentialLeaseErrorV1::Rejected)
             }
         }
     }
@@ -131,6 +147,24 @@ where
         valid_record_id(&record_id)?;
         let lease_id = self.issue_runtime_credential(binding).await?;
         self.resolve_runtime_credential(binding, lease_id).await
+    }
+
+    async fn issue_runtime_credential_recreate(
+        &mut self,
+        binding: &StorageBindingV1,
+    ) -> Result<(), StorageCredentialLeaseErrorV1> {
+        let lease_id = self
+            .issue_credential(binding, VaultActionV1::Delete)
+            .await?;
+        self.execute(
+            binding,
+            &VaultTransportCommandV1::DeleteLease {
+                lease_id,
+                secret_class: SecretClassV1::PlatformCredential,
+            },
+        )
+        .await
+        .map(|_| ())
     }
 
     async fn execute(

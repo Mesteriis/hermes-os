@@ -106,6 +106,7 @@ fn definition(
         default_value: Some(hermes_runtime_protocol::v1::SettingValueV1 {
             value: Some(default_value),
         }),
+        optional: false,
     }
 }
 

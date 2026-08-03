@@ -377,7 +377,9 @@ fn run(cli: Cli) -> Result<(), String> {
         Command::Admit => {
             let client = client(&data_dir)?;
             let signer = FileOwnerSigner::open(&data_dir)?;
-            let owner_session_id = client.open_owner_session(&signer)?;
+            let owner_session_id = client.open_owner_session(&signer).map_err(|error| {
+                admission_error("development_assembly", "open_owner_session", error)
+            })?;
             let reservation_path = data_dir.join(ENSEMBLE_RESERVATION_FILE);
             let existing_state = read_state_if_present(&state_path)?;
             let reconciliation = reconcile_plan(
@@ -405,7 +407,9 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             let client = client(&data_dir)?;
             let signer = FileOwnerSigner::open(&data_dir)?;
-            let owner_session_id = client.open_owner_session(&signer)?;
+            let owner_session_id = client.open_owner_session(&signer).map_err(|error| {
+                admission_error("development_assembly", "open_owner_session", error)
+            })?;
             start_ensemble(&client, &owner_session_id, &state)?;
             Ok(())
         }
@@ -502,11 +506,16 @@ fn start_ensemble(
                 )?;
             }
             ModuleRuntimeKindV1::Workflow => {
-                client.start_reserved_workflow_runtime(
+                let started = client.start_reserved_workflow_runtime(
                     owner_session_id,
                     &module.registration_id,
                     &module.storage_capability_id,
                 )?;
+                println!(
+                    "{}_runtime={}",
+                    plan.runtime_artifact_id, started.launch_state
+                );
+                continue;
             }
             ModuleRuntimeKindV1::Integration => {
                 let started = client.start_reserved_integration_runtime(
@@ -865,16 +874,46 @@ fn refresh_plan(
             )?);
             continue;
         };
-        client
-            .begin_managed_storage_binding_revocation(
+        let live_storage = client
+            .managed_storage_binding_status(
                 owner_session_id,
                 &previous.registration_id,
                 &previous.storage_capability_id,
-                previous.storage_binding_revision,
             )
             .map_err(|error| {
-                admission_error(plan.runtime_artifact_id, "revoke_storage_binding", error)
+                admission_error(plan.runtime_artifact_id, "inspect_storage_binding", error)
             })?;
+        let (role_epoch, credential_lease_revision) = refresh_storage_successor_fences(
+            previous,
+            live_storage.binding_revision,
+            live_storage.role_epoch,
+            live_storage.credential_lease_revision,
+        )
+        .map_err(|error| {
+            admission_error(plan.runtime_artifact_id, "inspect_storage_binding", error)
+        })?;
+        match live_storage.binding_state.as_str() {
+            "active" | "revoking" => complete_storage_binding_revocation(|| {
+                client
+                    .begin_managed_storage_binding_revocation(
+                        owner_session_id,
+                        &previous.registration_id,
+                        &previous.storage_capability_id,
+                        live_storage.binding_revision,
+                    )
+                    .map(|_| ())
+            })
+            .map_err(|error| {
+                admission_error(plan.runtime_artifact_id, "revoke_storage_binding", error)
+            })?,
+            _ => {
+                return Err(admission_error(
+                    plan.runtime_artifact_id,
+                    "inspect_storage_binding",
+                    "Storage binding state is invalid".to_owned(),
+                ));
+            }
+        }
         client
             .upgrade_bundled_managed_registration(
                 owner_session_id,
@@ -904,8 +943,6 @@ fn refresh_plan(
         let reservation = client
             .reserve_bundled_managed_runtime(owner_session_id, &previous.registration_id)
             .map_err(|error| admission_error(plan.runtime_artifact_id, "reserve_runtime", error))?;
-        let (role_epoch, credential_lease_revision) =
-            successor_fences(previous.role_epoch, previous.credential_lease_revision)?;
         modules.push(ModuleReservationV1 {
             runtime_artifact_id: previous.runtime_artifact_id.clone(),
             registration_id: previous.registration_id.clone(),
@@ -931,6 +968,30 @@ fn refresh_plan(
     };
     write_reservation(reservation_path, &reservation)?;
     finish_ensemble_bindings(client, owner_session_id, reservation)
+}
+
+fn complete_storage_binding_revocation(
+    mut revoke: impl FnMut() -> Result<(), String>,
+) -> Result<(), String> {
+    match revoke() {
+        Ok(()) => Ok(()),
+        Err(_) => revoke(),
+    }
+}
+
+fn refresh_storage_successor_fences(
+    previous: &ModuleAssemblyStateV1,
+    binding_revision: u64,
+    role_epoch: u64,
+    credential_lease_revision: u64,
+) -> Result<(u64, u64), String> {
+    if binding_revision < previous.storage_binding_revision
+        || role_epoch < previous.role_epoch
+        || credential_lease_revision < previous.credential_lease_revision
+    {
+        return Err("Live Storage binding regressed behind the assembly checkpoint".to_owned());
+    }
+    successor_fences(role_epoch, credential_lease_revision)
 }
 
 fn successor_fences(role_epoch: u64, credential_lease_revision: u64) -> Result<(u64, u64), String> {
@@ -1985,6 +2046,57 @@ mod tests {
         assert_eq!(successor_fences(2, 3), Ok((3, 4)));
         assert!(successor_fences(u64::MAX, 1).is_err());
         assert!(successor_fences(1, u64::MAX).is_err());
+    }
+
+    #[test]
+    fn refresh_uses_live_storage_fences_after_owner_settings_apply() {
+        let previous = fixture_state(33).modules.remove(0);
+        assert_eq!(
+            refresh_storage_successor_fences(
+                &previous,
+                previous.storage_binding_revision + 2,
+                previous.role_epoch + 2,
+                previous.credential_lease_revision + 2,
+            ),
+            Ok((
+                previous.role_epoch + 3,
+                previous.credential_lease_revision + 3
+            )),
+        );
+        assert!(
+            refresh_storage_successor_fences(
+                &previous,
+                previous.storage_binding_revision - 1,
+                previous.role_epoch,
+                previous.credential_lease_revision,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn refresh_retries_a_revocation_after_kernel_fences_storage() {
+        let mut attempts = 0;
+        assert_eq!(
+            complete_storage_binding_revocation(|| {
+                attempts += 1;
+                (attempts == 2)
+                    .then_some(())
+                    .ok_or_else(|| "revocation is incomplete".to_owned())
+            }),
+            Ok(()),
+        );
+        assert_eq!(attempts, 2);
+
+        let mut denied_attempts = 0;
+        assert!(
+            complete_storage_binding_revocation(|| {
+                denied_attempts += 1;
+                Err("operation denied".to_owned())
+            })
+            .is_err()
+        );
+        assert_eq!(denied_attempts, 2);
     }
 
     #[test]

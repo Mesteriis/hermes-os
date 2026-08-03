@@ -5,9 +5,11 @@ use std::path::Path;
 use hermes_kernel_control_store::PlatformStorageBindingStateV1;
 use hermes_kernel_control_store_sqlite::SqliteControlStore;
 use hermes_runtime_protocol::{
-    v1::{ManagedWorkflowRuntimeConfigurationV1, ModuleKindV1},
+    v1::{
+        ManagedWorkflowRuntimeConfigurationV1, ModuleKindV1, SettingTargetScopeV1, SettingsSchemaV1,
+    },
     validation::{
-        descriptor::decode_settings_snapshot_v1,
+        descriptor::{decode_settings_schema_v1, decode_settings_snapshot_v1},
         managed_workflow_runtime::validate_managed_workflow_runtime_configuration,
     },
 };
@@ -27,9 +29,31 @@ pub(crate) fn require_bound_workflow_kind(
 
 use crate::platform::macos::managed_launch as macos_managed_runtime_launch;
 use crate::runtime::lifecycle::{
-    integration_launch::admitted_workflow_configuration_instances,
+    integration_launch::{
+        admitted_workflow_configuration_instances, startup_configuration_instance,
+    },
     supervisor::ManagedRuntimeSupervisor,
 };
+
+pub(crate) fn configuration_required_but_unavailable(
+    store: &SqliteControlStore,
+    registration_id: &str,
+) -> Result<bool, String> {
+    let schema_bytes = store
+        .settings_schema_artifact(registration_id)
+        .map_err(|_| "managed workflow settings schema is unavailable".to_owned())?
+        .ok_or_else(|| "managed workflow settings schema is unavailable".to_owned())?;
+    let schema = decode_settings_schema_v1(&schema_bytes)
+        .map_err(|_| "managed workflow settings schema is invalid".to_owned())?;
+    Ok(schema_requires_configuration(&schema)
+        && startup_configuration_instance(store, registration_id, "")?.is_none())
+}
+
+fn schema_requires_configuration(schema: &SettingsSchemaV1) -> bool {
+    schema.definitions.iter().any(|definition| {
+        definition.target_scope == SettingTargetScopeV1::ConfigurationInstance as i32
+    })
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn launch_reserved(
@@ -170,4 +194,35 @@ fn effective_granted_capability_ids(
                 .map(|grants| grants.capability_ids().to_vec())
         })
         .ok_or_else(|| "managed workflow grants are unavailable".to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use hermes_runtime_protocol::v1::{
+        SettingDefinitionV1, SettingTargetScopeV1, SettingsSchemaV1,
+    };
+
+    use super::schema_requires_configuration;
+
+    #[test]
+    fn only_configuration_scoped_workflow_settings_defer_initial_launch() {
+        let configuration_scoped = SettingsSchemaV1 {
+            definitions: vec![SettingDefinitionV1 {
+                target_scope: SettingTargetScopeV1::ConfigurationInstance as i32,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let registration_scoped = SettingsSchemaV1 {
+            definitions: vec![SettingDefinitionV1 {
+                target_scope: SettingTargetScopeV1::ModuleRegistration as i32,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        assert!(schema_requires_configuration(&configuration_scoped));
+        assert!(!schema_requires_configuration(&registration_scoped));
+        assert!(!schema_requires_configuration(&SettingsSchemaV1::default()));
+    }
 }

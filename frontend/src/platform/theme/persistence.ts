@@ -15,8 +15,8 @@ export interface PersistedThemeSettings {
 	errorMessage: string
 }
 
-const LOAD_FALLBACK_MESSAGE = 'Theme settings backend unavailable; using local browser settings.'
-const SAVE_FALLBACK_MESSAGE = 'Theme saved locally only. Application settings backend is unavailable.'
+const LOCAL_STORAGE_WARNING =
+	'Theme settings persisted in local browser storage only.'
 
 export async function loadPersistedThemeSettings(): Promise<PersistedThemeSettings> {
 	try {
@@ -35,13 +35,13 @@ export async function loadPersistedThemeSettings(): Promise<PersistedThemeSettin
 		return {
 			settings: loadLocalThemeSettings(),
 			source: 'local_storage',
-			errorMessage: LOAD_FALLBACK_MESSAGE
+			errorMessage: LOCAL_STORAGE_WARNING
 		}
 	}
 
 	return {
 		settings: loadLocalThemeSettings(),
-		source: 'local_storage',
+		source: 'application_settings',
 		errorMessage: ''
 	}
 }
@@ -61,7 +61,7 @@ export async function savePersistedThemeSettings(settings: ThemeSettings): Promi
 		return {
 			settings,
 			source: 'local_storage',
-			errorMessage: SAVE_FALLBACK_MESSAGE
+			errorMessage: LOCAL_STORAGE_WARNING
 		}
 	}
 }

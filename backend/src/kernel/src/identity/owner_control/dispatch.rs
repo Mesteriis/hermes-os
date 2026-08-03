@@ -510,6 +510,20 @@ fn start_reserved_workflow_runtime(
     request: StartReservedWorkflowRuntimeRequestV1,
 ) -> Result<OwnerResult, String> {
     let logical_owner = sessions.authorized_owner(store, &request.owner_session_id)?;
+    if request.configuration_instance_id.is_empty()
+        && managed_workflow_launch::configuration_required_but_unavailable(
+            store,
+            &request.registration_id,
+        )?
+    {
+        return Ok(OwnerResult::StartReservedWorkflowRuntime(
+            StartReservedWorkflowRuntimeResponseV1 {
+                registration_id: request.registration_id,
+                runtime_generation: 0,
+                launch_state: "unconfigured".to_owned(),
+            },
+        ));
+    }
     managed_workflow_launch::launch_reserved(
         store,
         runtime_dir,
