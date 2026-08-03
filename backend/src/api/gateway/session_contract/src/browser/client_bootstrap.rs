@@ -217,6 +217,7 @@ pub struct ClientModuleProjectionV1 {
     capability_ids: Vec<String>,
     sections_enabled: bool,
     settings: Option<ClientModuleSettingsProjectionV1>,
+    settings_targets: Vec<ClientModuleSettingsTargetProjectionV1>,
 }
 
 impl ClientModuleProjectionV1 {
@@ -228,6 +229,7 @@ impl ClientModuleProjectionV1 {
         capability_ids: Vec<String>,
         sections_enabled: bool,
         settings: Option<ClientModuleSettingsProjectionV1>,
+        settings_targets: Vec<ClientModuleSettingsTargetProjectionV1>,
     ) -> Self {
         Self {
             registration_id,
@@ -236,6 +238,7 @@ impl ClientModuleProjectionV1 {
             capability_ids,
             sections_enabled,
             settings,
+            settings_targets,
         }
     }
     #[must_use]
@@ -261,6 +264,65 @@ impl ClientModuleProjectionV1 {
     #[must_use]
     pub fn settings(&self) -> Option<&ClientModuleSettingsProjectionV1> {
         self.settings.as_ref()
+    }
+    #[must_use]
+    pub fn settings_targets(&self) -> &[ClientModuleSettingsTargetProjectionV1] {
+        &self.settings_targets
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientModuleSettingsTargetProjectionV1 {
+    configuration_instance_id: String,
+    desired_revision: u64,
+    effective_revision: u64,
+    apply_state: String,
+    sanitized_reason_code: Option<String>,
+    values: Vec<ClientSettingValueEntryV1>,
+}
+
+impl ClientModuleSettingsTargetProjectionV1 {
+    #[must_use]
+    pub fn new(
+        configuration_instance_id: String,
+        desired_revision: u64,
+        effective_revision: u64,
+        apply_state: String,
+        sanitized_reason_code: Option<String>,
+        values: Vec<ClientSettingValueEntryV1>,
+    ) -> Self {
+        Self {
+            configuration_instance_id,
+            desired_revision,
+            effective_revision,
+            apply_state,
+            sanitized_reason_code,
+            values,
+        }
+    }
+    #[must_use]
+    pub fn configuration_instance_id(&self) -> &str {
+        &self.configuration_instance_id
+    }
+    #[must_use]
+    pub const fn desired_revision(&self) -> u64 {
+        self.desired_revision
+    }
+    #[must_use]
+    pub const fn effective_revision(&self) -> u64 {
+        self.effective_revision
+    }
+    #[must_use]
+    pub fn apply_state(&self) -> &str {
+        &self.apply_state
+    }
+    #[must_use]
+    pub fn sanitized_reason_code(&self) -> Option<&str> {
+        self.sanitized_reason_code.as_deref()
+    }
+    #[must_use]
+    pub fn values(&self) -> &[ClientSettingValueEntryV1] {
+        &self.values
     }
 }
 

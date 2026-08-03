@@ -4,10 +4,10 @@ mod browser;
 
 pub use browser::client_bootstrap::{
     ClientBootstrapAuthority, ClientBootstrapProjectionV1, ClientModuleProjectionV1,
-    ClientModuleSettingsProjectionV1, ClientSettingValueEntryV1, ClientSettingValueV1,
-    ClientSurfaceAvailabilityProjectionV1, ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1,
-    ClientSystemComponentIdV1, ClientSystemComponentStateV1,
-    ClientSystemComponentStatusProjectionV1,
+    ClientModuleSettingsProjectionV1, ClientModuleSettingsTargetProjectionV1,
+    ClientSettingValueEntryV1, ClientSettingValueV1, ClientSurfaceAvailabilityProjectionV1,
+    ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1, ClientSystemComponentIdV1,
+    ClientSystemComponentStateV1, ClientSystemComponentStatusProjectionV1,
 };
 pub use browser::enrollment::{
     BrowserEnrollmentAuthority, BrowserEnrollmentInputV1, BrowserEnrollmentV1,

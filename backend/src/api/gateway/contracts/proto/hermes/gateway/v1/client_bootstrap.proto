@@ -88,6 +88,16 @@ message ClientModuleBootstrapV1 {
   repeated string capability_ids = 4;
   bool sections_enabled = 5;
   ClientModuleSettingsBootstrapV1 settings = 6;
+  repeated ClientModuleSettingsTargetBootstrapV1 settings_targets = 7;
+}
+
+message ClientModuleSettingsTargetBootstrapV1 {
+  string configuration_instance_id = 1;
+  uint64 desired_revision = 2;
+  uint64 effective_revision = 3;
+  ClientSettingsApplyStateV1 apply_state = 4;
+  string sanitized_reason_code = 5;
+  repeated ClientSettingValueEntryV1 values = 6;
 }
 
 message ClientModuleSettingsBootstrapV1 {

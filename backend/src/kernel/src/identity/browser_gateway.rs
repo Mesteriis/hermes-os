@@ -7,8 +7,9 @@ use hermes_gateway_session_contract::{
     BrowserDeviceCredentialV1, BrowserDevicePrincipalV1, BrowserEnrollmentAuthority,
     BrowserEnrollmentV1, BrowserPairingAuthority, ClientBootstrapAuthority,
     ClientBootstrapProjectionV1, ClientModuleProjectionV1, ClientModuleSettingsProjectionV1,
-    ClientSettingValueEntryV1, ClientSettingValueV1, ClientSurfaceAvailabilityProjectionV1,
-    ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1, GatewayIdentityFenceV1,
+    ClientModuleSettingsTargetProjectionV1, ClientSettingValueEntryV1, ClientSettingValueV1,
+    ClientSurfaceAvailabilityProjectionV1, ClientSurfaceAvailabilityStateV1, ClientSurfaceIdV1,
+    GatewayIdentityFenceV1,
 };
 use hermes_kernel_control_store::{
     BrowserDeviceEnrollmentInputV1, BrowserDeviceEnrollmentV1, BrowserDeviceIdentityV1,
@@ -295,6 +296,11 @@ fn project_module(
     }
     let (default_target_current, settings) =
         project_settings(store, registration.registration_id())?;
+    let settings_targets = project_settings_targets(
+        store,
+        registration.registration_id(),
+        grants.capability_ids(),
+    )?;
     let sections_enabled = default_target_current
         || catalog_has_current_configuration(
             store,
@@ -308,7 +314,50 @@ fn project_module(
         grants.capability_ids().to_vec(),
         sections_enabled,
         settings,
+        settings_targets,
     ))
+}
+
+fn project_settings_targets(
+    store: &SqliteControlStore,
+    registration_id: &str,
+    capability_ids: &[String],
+) -> Result<Vec<ClientModuleSettingsTargetProjectionV1>, String> {
+    if !capability_ids
+        .iter()
+        .any(|capability_id| capability_id == SETTINGS_CONFIGURATION_CATALOG_CAPABILITY_ID)
+    {
+        return Ok(Vec::new());
+    }
+    let targets = store
+        .settings_configuration_targets(registration_id)
+        .map_err(store_error)?;
+    if targets.len() > 64 {
+        return Err(bootstrap_unavailable());
+    }
+    targets
+        .into_iter()
+        .map(|target| {
+            let values = if target.apply_state() == SettingsApplyState::BlockedConfig {
+                Vec::new()
+            } else {
+                visible_settings_for_target(
+                    store,
+                    registration_id,
+                    target.configuration_instance_id(),
+                    target.desired_revision(),
+                )?
+            };
+            Ok(ClientModuleSettingsTargetProjectionV1::new(
+                target.configuration_instance_id().to_owned(),
+                target.desired_revision(),
+                target.effective_revision(),
+                target.apply_state().as_str().to_owned(),
+                target.sanitized_reason_code().map(str::to_owned),
+                values,
+            ))
+        })
+        .collect()
 }
 
 fn catalog_has_current_configuration(
@@ -346,7 +395,12 @@ fn project_settings(
     let current = binding.desired_revision() == binding.effective_revision()
         && binding.apply_state() == SettingsApplyState::Current;
     let values = if current {
-        visible_settings(store, registration_id, binding.desired_revision())?
+        visible_settings_for_target(
+            store,
+            registration_id,
+            registration_id,
+            binding.desired_revision(),
+        )?
     } else {
         Vec::new()
     };
@@ -362,14 +416,15 @@ fn project_settings(
     Ok((current, Some(settings)))
 }
 
-fn visible_settings(
+fn visible_settings_for_target(
     store: &SqliteControlStore,
     registration_id: &str,
+    configuration_instance_id: &str,
     desired_revision: u64,
 ) -> Result<Vec<ClientSettingValueEntryV1>, String> {
     let schema = settings_schema(store, registration_id)?;
     let Some((revision, bytes)) = store
-        .desired_settings_snapshot(registration_id)
+        .desired_settings_snapshot_for_target(registration_id, configuration_instance_id)
         .map_err(store_error)?
     else {
         return (desired_revision == 0)
@@ -378,7 +433,7 @@ fn visible_settings(
     };
     let snapshot = decode_settings_snapshot_v1(&bytes).map_err(|_| bootstrap_unavailable())?;
     if revision != desired_revision
-        || snapshot.target_id != registration_id
+        || snapshot.target_id != configuration_instance_id
         || snapshot.revision != desired_revision
     {
         return Err(bootstrap_unavailable());

@@ -1,16 +1,16 @@
 use bytes::Bytes;
 use hermes_gateway_protocol::v1::{
     ClientBootstrapRequestV1, ClientBootstrapResponseV1, ClientModuleBootstrapV1,
-    ClientModuleSettingsBootstrapV1, ClientSettingValueEntryV1, ClientSettingValueV1 as WireValue,
-    ClientSettingsApplyStateV1, ClientSurfaceAvailabilityStateV1 as WireSurfaceState,
-    ClientSurfaceAvailabilityV1, ClientSurfaceIdV1 as WireSurfaceId,
-    client_setting_value_v1::Value,
+    ClientModuleSettingsBootstrapV1, ClientModuleSettingsTargetBootstrapV1,
+    ClientSettingValueEntryV1, ClientSettingValueV1 as WireValue, ClientSettingsApplyStateV1,
+    ClientSurfaceAvailabilityStateV1 as WireSurfaceState, ClientSurfaceAvailabilityV1,
+    ClientSurfaceIdV1 as WireSurfaceId, client_setting_value_v1::Value,
 };
 use hermes_gateway_session_contract::{
     BrowserAuthenticationAuthority, ClientBootstrapAuthority, ClientBootstrapProjectionV1,
     ClientModuleProjectionV1, ClientModuleSettingsProjectionV1,
-    ClientSettingValueEntryV1 as ProjectionEntry, ClientSettingValueV1 as ProjectionValue,
-    ClientSurfaceAvailabilityProjectionV1,
+    ClientModuleSettingsTargetProjectionV1, ClientSettingValueEntryV1 as ProjectionEntry,
+    ClientSettingValueV1 as ProjectionValue, ClientSurfaceAvailabilityProjectionV1,
     ClientSurfaceAvailabilityStateV1 as ProjectionSurfaceState,
     ClientSurfaceIdV1 as ProjectionSurfaceId,
 };
@@ -151,6 +151,27 @@ fn module(module: &ClientModuleProjectionV1) -> ClientModuleBootstrapV1 {
         capability_ids: module.capability_ids().to_vec(),
         sections_enabled: module.sections_enabled(),
         settings: module.settings().map(settings),
+        settings_targets: module
+            .settings_targets()
+            .iter()
+            .map(settings_target)
+            .collect(),
+    }
+}
+
+fn settings_target(
+    target: &ClientModuleSettingsTargetProjectionV1,
+) -> ClientModuleSettingsTargetBootstrapV1 {
+    ClientModuleSettingsTargetBootstrapV1 {
+        configuration_instance_id: target.configuration_instance_id().to_owned(),
+        desired_revision: target.desired_revision(),
+        effective_revision: target.effective_revision(),
+        apply_state: apply_state(target.apply_state()) as i32,
+        sanitized_reason_code: target
+            .sanitized_reason_code()
+            .unwrap_or_default()
+            .to_owned(),
+        values: target.values().iter().map(setting).collect(),
     }
 }
 

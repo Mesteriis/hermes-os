@@ -5,13 +5,16 @@ import { describe, expect, it } from 'vitest'
 describe('app settings clean-room composition', () => {
 	it('composes platform and exact integration-owned panels without a settings domain', () => {
 		const page = readFileSync(new URL('./AppSettingsPage.vue', import.meta.url), 'utf8')
+		const mailComposition = readFileSync(new URL('./MailSettingsComposition.vue', import.meta.url), 'utf8')
 		const modules = readFileSync(new URL('./clientSettingsModules.ts', import.meta.url), 'utf8')
 		const layout = readFileSync(new URL('../layout/AppLayoutRoot.vue', import.meta.url), 'utf8')
 		const main = readFileSync(new URL('../../main.ts', import.meta.url), 'utf8')
 		const globalSurfaces = readFileSync(new URL('../../styles/surfaces.css', import.meta.url), 'utf8')
 
 		expect(page).toContain('SystemControlPage')
-		expect(page).toContain('MailSettingsPanel')
+		expect(page).toContain('MailSettingsComposition')
+		expect(mailComposition).toContain('MailSettingsPanel')
+		expect(mailComposition).toContain('MailContactsSyncSettingsPanel')
 		expect(page).toContain('TelegramSettingsPanel')
 		expect(page).toContain('WhatsAppSettingsPanel')
 		expect(page).toContain('ZulipSettingsPanel')

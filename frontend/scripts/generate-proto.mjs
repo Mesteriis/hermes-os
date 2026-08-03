@@ -52,6 +52,13 @@ const attachmentPreviewEvidenceReplayProtoRoot = join(
   'proto'
 )
 const mailProtoRoot = join(repoRoot, 'backend', 'src', 'mail-api', 'proto')
+const mailContactsSyncProtoRoot = join(
+  repoRoot,
+  'backend',
+  'src',
+  'mail-contacts-sync-api',
+  'proto'
+)
 const telegramProtoRoot = join(repoRoot, 'backend', 'src', 'telegram-api', 'proto')
 const telegramAutomationProtoRoot = join(repoRoot, 'backend', 'src', 'telegram-automation-api', 'proto')
 const whatsappProtoRoot = join(repoRoot, 'backend', 'src', 'whatsapp-api', 'proto')
@@ -137,6 +144,7 @@ const protoFiles = [
   join(mailProtoRoot, 'hermes', 'mail', 'operational', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'sync_health', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'portability', 'v1', 'portability.proto'),
+  join(mailContactsSyncProtoRoot, 'hermes', 'mail_contacts_sync', 'v1', 'sync.proto'),
   join(telegramProtoRoot, 'hermes', 'telegram', 'v1', 'client.proto'),
   join(telegramAutomationProtoRoot, 'hermes', 'telegram', 'automation', 'v1', 'automation.proto'),
   join(whatsappProtoRoot, 'hermes', 'whatsapp', 'v1', 'client.proto'),
@@ -169,6 +177,7 @@ const result = spawnSync(
     `-I${attachmentPreviewProtoRoot}`,
     `-I${attachmentPreviewEvidenceReplayProtoRoot}`,
     `-I${mailProtoRoot}`,
+    `-I${mailContactsSyncProtoRoot}`,
     `-I${telegramProtoRoot}`,
     `-I${telegramAutomationProtoRoot}`,
     `-I${whatsappProtoRoot}`,

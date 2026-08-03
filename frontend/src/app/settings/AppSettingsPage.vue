@@ -4,7 +4,7 @@ import type { ClientSurfaceAdapterId } from '../../platform/client-runtime/clien
 import type { ClientBootstrapSnapshot } from '../../platform/gateway/clientBootstrap'
 import SystemControlPage from '../../platform/system-control/SystemControlPage.vue'
 import Icon from '../../shared/ui/Icon.vue'
-import MailSettingsPanel from '../../integrations/mail/presentation/MailSettingsPanel.vue'
+import MailSettingsComposition from './MailSettingsComposition.vue'
 import TelegramSettingsPanel from '../../integrations/telegram/presentation/TelegramSettingsPanel.vue'
 import WhatsAppSettingsPanel from '../../integrations/whatsapp/presentation/WhatsAppSettingsPanel.vue'
 import ZulipSettingsPanel from '../../integrations/zulip/presentation/ZulipSettingsPanel.vue'
@@ -28,6 +28,9 @@ const emit = defineEmits<{ languageChange: [value: string] }>()
 const selectedOwner = ref<SettingsOwnerId>(props.initialOwner ?? 'system')
 
 const mailModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'mail'))
+const mailContactsSyncModule = computed(() => props.bootstrap.modules.find(
+	(module) => module.moduleId === 'hermes-mail-contacts-sync-runtime',
+) ?? null)
 const telegramModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'telegram'))
 const whatsAppModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'whatsapp'))
 const zulipModule = computed(() => clientSettingsModule(props.bootstrap.modules, 'zulip'))
@@ -107,7 +110,12 @@ const providerNavigation = [
 					:mail-module="mailModule"
 					:telegram-module="telegramModule"
 				/>
-				<MailSettingsPanel v-else-if="selectedOwner === 'mail'" :module="mailModule" />
+				<MailSettingsComposition
+					v-else-if="selectedOwner === 'mail'"
+					:modules="bootstrap.modules"
+					:mail-module="mailModule"
+					:sync-module="mailContactsSyncModule"
+				/>
 				<TelegramSettingsPanel v-else-if="selectedOwner === 'telegram'" :module="telegramModule" />
 				<WhatsAppSettingsPanel v-else-if="selectedOwner === 'whatsapp'" :module="whatsAppModule" />
 				<ZulipSettingsPanel v-else :module="zulipModule" />

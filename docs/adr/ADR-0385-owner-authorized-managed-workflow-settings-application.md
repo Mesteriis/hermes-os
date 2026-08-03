@@ -4,9 +4,13 @@
 
 Дата: 2026-08-03
 
-Состояние реализации: planned. Решение должно быть реализовано до browser
-Start/Get/shared-SSE gate `mail_contacts_sync_v1`; наличие ADR само по себе не
-доказывает workflow reconfiguration или browser completion.
+Состояние реализации: backend contract и managed lifecycle implemented.
+Отдельный workflow apply проходит descriptor-kind preflight, запускает fenced
+successor и подтверждает effective revision только после runtime readiness;
+configuration-target catalog доступен в sanitized client bootstrap. Полный
+browser Start/Get/shared-SSE gate `mail_contacts_sync_v1` остаётся planned до
+настройки реального Mail account и получения соответствующего typed status
+frame. Наличие UI и mocked SSE само по себе этот gate не открывает.
 
 Уточняет:
 

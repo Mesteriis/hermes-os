@@ -4,6 +4,8 @@ import { createClient, type Client } from '@connectrpc/connect'
 import {
 	ApplyOwnerManagedIntegrationSettingsV1Schema,
 	type ApplyOwnerManagedIntegrationSettingsReceiptV1,
+	ApplyOwnerManagedWorkflowSettingsV1Schema,
+	type ApplyOwnerManagedWorkflowSettingsReceiptV1,
 	CommitOwnerModuleSettingsRequestV1Schema,
 	type CommitOwnerModuleSettingsResponseV1,
 	type CreateOwnerModuleSettingsTargetReceiptV1,
@@ -57,6 +59,14 @@ export type ApplyOwnerManagedIntegrationSettingsInputV1 = {
 	configurationInstanceId: string
 	expectedDesiredRevision: bigint
 	requestHostBridge: boolean
+}
+
+export type ApplyOwnerManagedWorkflowSettingsInputV1 = {
+	operationId?: Uint8Array
+	registrationId: string
+	storageCapabilityId: string
+	configurationInstanceId: string
+	expectedDesiredRevision: bigint
 }
 
 export type ExportEffectiveOwnerModuleSettingsInputV1 = {
@@ -154,6 +164,30 @@ export class OwnerModuleSettingsClientV1 {
 			},
 		)
 		if (response.result.case !== 'applied') throw unexpectedResult()
+		return response.result.value
+	}
+
+	async applyManagedWorkflow(
+		input: ApplyOwnerManagedWorkflowSettingsInputV1,
+	): Promise<ApplyOwnerManagedWorkflowSettingsReceiptV1> {
+		validateRegistrationId(input.registrationId)
+		validateIdentifier(input.storageCapabilityId)
+		validateIdentifier(input.configurationInstanceId)
+		validateRevision(input.expectedDesiredRevision)
+
+		const response = await this.execute(
+			input.operationId,
+			{
+				case: 'applyManagedWorkflow',
+				value: create(ApplyOwnerManagedWorkflowSettingsV1Schema, {
+					registrationId: input.registrationId,
+					storageCapabilityId: input.storageCapabilityId,
+					configurationInstanceId: input.configurationInstanceId,
+					expectedDesiredRevision: input.expectedDesiredRevision,
+				}),
+			},
+		)
+		if (response.result.case !== 'workflowApplied') throw unexpectedResult()
 		return response.result.value
 	}
 

@@ -142,7 +142,10 @@ test('root make dev owns one loopback full-stack browser assembly', async () => 
   assert.match(release, /development-distribution-generation/);
 
   assert.match(developmentAssembly, /begin_managed_storage_binding_revocation/);
-  assert.match(developmentAssembly, /managed_storage_binding_status/);
+  assert.match(
+    developmentAssembly,
+    /begin_managed_storage_binding_revocation[\s\S]*previous\.storage_binding_revision/,
+  );
   assert.match(developmentAssembly, /upgrade_bundled_managed_registration/);
   assert.match(developmentAssembly, /successor_fences/);
   assert.match(developmentAssembly, /ReservationReleaseV1::Predecessor/);

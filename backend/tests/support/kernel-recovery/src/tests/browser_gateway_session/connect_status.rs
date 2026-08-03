@@ -281,6 +281,16 @@ fn assert_current_surface_availability(bootstrap: &ClientBootstrapResponseV1) {
         "current account-scoped target must enable catalog-backed sections; capabilities={:?}, settings={:?}",
         catalog_module.capability_ids, catalog_module.settings
     );
+    assert_eq!(catalog_module.settings_targets.len(), 2);
+    let current_target = catalog_module
+        .settings_targets
+        .iter()
+        .find(|target| target.configuration_instance_id == "configuration-current")
+        .expect("current client-safe configuration target");
+    assert_eq!(current_target.desired_revision, 1);
+    assert_eq!(current_target.effective_revision, 1);
+    assert_eq!(current_target.values.len(), 1);
+    assert_eq!(current_target.values[0].setting_id, "visible.flag");
     let settings_surface = bootstrap
         .surfaces
         .iter()
@@ -577,7 +587,7 @@ fn admit_current_catalog_target(fixture: &AuthenticationHttpFixture) {
             registration_id: "registration-catalog".to_owned(),
             configuration_instance_id: "configuration-current".to_owned(),
             created_operation_id: Some([7; 16]),
-            snapshot_bytes: vec![1],
+            snapshot_bytes: current_snapshot("configuration-current", 1).encode_to_vec(),
             complete: true,
         })
         .expect("materialize catalog target");

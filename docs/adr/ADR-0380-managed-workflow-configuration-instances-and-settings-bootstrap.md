@@ -7,9 +7,10 @@
 Состояние реализации: статический contract slice implemented. Owner-neutral
 runtime protocol, Kernel launch path и Mail-Contacts runtime используют exact
 staged configuration-instance catalog; architecture и pre-commit gates пройдены.
-Managed successor/revoke, multi-instance live conformance и полный
-`mail_contacts_sync_v1` gate остаются planned. Owner-authorized workflow apply
-определён отдельно в ADR-0385. Наличие typed workflow Settings schema без
+Managed successor/revoke и owner-authorized workflow apply реализованы по
+ADR-0385. Multi-instance live conformance и полный `mail_contacts_sync_v1` gate
+остаются planned до настройки реального Mail account и browser
+Start/Get/shared-SSE evidence. Наличие typed workflow Settings schema без
 staged effective snapshot не является runtime evidence.
 
 Уточняет:
@@ -88,7 +89,8 @@ scheduled run без влияния на manual Start.
 
 ## Gate
 
-Решение считается реализованным только после protocol compatibility tests,
-Kernel selection/staging negatives, managed successor/revoke evidence и
-Mail-Contacts multi-instance Scheduler/client conformance. До этого
-`mail_contacts_sync_v1` остаётся `planned`.
+Protocol compatibility, Kernel selection/staging negatives и managed
+successor/revoke evidence реализованы. Полный gate требует Mail-Contacts
+multi-instance Scheduler/client conformance и browser Start/Get/shared-SSE на
+реальном настроенном Mail account; до этого `mail_contacts_sync_v1` остаётся
+`planned`.

@@ -1143,3 +1143,35 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
     /--artifact-fragment "\$contacts_assembly\/contacts\.release-artifacts\.json"/,
   );
 });
+
+test('Mail Contacts Sync frontend is app-composed and uses generated Start/Get with shared SSE', async () => {
+  const [composition, panel, query, api, commandClient, queryClient, generated] =
+    await Promise.all([
+      readFile(new URL('frontend/src/app/settings/MailSettingsComposition.vue', PROJECT_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/workflows/mail-contacts-sync/presentation/MailContactsSyncSettingsPanel.vue', PROJECT_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/workflows/mail-contacts-sync/queries/useMailContactsSyncSettings.ts', PROJECT_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/workflows/mail-contacts-sync/api/mailContactsSync.ts', PROJECT_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/platform/connect/mailContactsSyncCommandClient.ts', PROJECT_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/platform/connect/mailContactsSyncQueryClient.ts', PROJECT_ROOT), 'utf8'),
+      readFile(new URL('frontend/src/gen/hermes/mail_contacts_sync/v1/sync_pb.ts', PROJECT_ROOT), 'utf8'),
+    ]);
+
+  assert.match(composition, /MailSettingsPanel/);
+  assert.match(composition, /MailContactsSyncSettingsPanel/);
+  assert.doesNotMatch(composition, /setInterval|setTimeout/);
+  assert.match(panel, /Mail account/);
+  assert.match(panel, /Apply configuration/);
+  assert.match(panel, /Sync now/);
+  assert.match(query, /await realtime\.ready/);
+  assert.ok(query.indexOf('await realtime.ready') < query.indexOf('await startMailContactsSync'));
+  assert.match(query, /realtime\.attachRun\(runId\)/);
+  assert.match(query, /status\.value = await getMailContactsSync\(runId\)/);
+  assert.doesNotMatch(query, /setInterval|setTimeout|poll/i);
+  assert.match(api, /getBrowserGatewayRealtimeHub/);
+  assert.match(api, /mail_contacts_sync_realtime/);
+  assert.match(api, /mail\.contacts-sync\.status-changed\.v1/);
+  assert.match(commandClient, /MailContactsSyncCommandService/);
+  assert.match(queryClient, /MailContactsSyncQueryService/);
+  assert.match(generated, /MailContactsSyncCommandService/);
+  assert.match(generated, /MailContactsSyncQueryService/);
+});

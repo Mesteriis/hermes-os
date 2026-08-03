@@ -94,6 +94,10 @@ enum Command {
     Admit,
     StartEnsemble,
     Status,
+    RetireRegistration {
+        #[arg(long)]
+        registration_id: String,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -192,20 +196,6 @@ const MODULE_PLAN: [ModulePlanV1; 16] = [
         request_host_bridge: false,
     },
     ModulePlanV1 {
-        runtime_artifact_id: CONTACTS_RUNTIME_ARTIFACT,
-        storage_artifact_id: CONTACTS_STORAGE_ARTIFACT,
-        storage_capability_id: CONTACTS_STORAGE_CAPABILITY,
-        runtime_kind: ModuleRuntimeKindV1::Domain,
-        request_host_bridge: false,
-    },
-    ModulePlanV1 {
-        runtime_artifact_id: MAIL_CONTACTS_SYNC_RUNTIME_ARTIFACT,
-        storage_artifact_id: MAIL_CONTACTS_SYNC_STORAGE_ARTIFACT,
-        storage_capability_id: MAIL_CONTACTS_SYNC_STORAGE_CAPABILITY,
-        runtime_kind: ModuleRuntimeKindV1::Workflow,
-        request_host_bridge: false,
-    },
-    ModulePlanV1 {
         runtime_artifact_id: TELEGRAM_RUNTIME_ARTIFACT,
         storage_artifact_id: TELEGRAM_STORAGE_ARTIFACT,
         storage_capability_id: TELEGRAM_STORAGE_CAPABILITY,
@@ -224,6 +214,20 @@ const MODULE_PLAN: [ModulePlanV1; 16] = [
         storage_artifact_id: ZULIP_STORAGE_ARTIFACT,
         storage_capability_id: ZULIP_STORAGE_CAPABILITY,
         runtime_kind: ModuleRuntimeKindV1::Integration,
+        request_host_bridge: false,
+    },
+    ModulePlanV1 {
+        runtime_artifact_id: CONTACTS_RUNTIME_ARTIFACT,
+        storage_artifact_id: CONTACTS_STORAGE_ARTIFACT,
+        storage_capability_id: CONTACTS_STORAGE_CAPABILITY,
+        runtime_kind: ModuleRuntimeKindV1::Domain,
+        request_host_bridge: false,
+    },
+    ModulePlanV1 {
+        runtime_artifact_id: MAIL_CONTACTS_SYNC_RUNTIME_ARTIFACT,
+        storage_artifact_id: MAIL_CONTACTS_SYNC_STORAGE_ARTIFACT,
+        storage_capability_id: MAIL_CONTACTS_SYNC_STORAGE_CAPABILITY,
+        runtime_kind: ModuleRuntimeKindV1::Workflow,
         request_host_bridge: false,
     },
 ];
@@ -403,6 +407,24 @@ fn run(cli: Cli) -> Result<(), String> {
             let signer = FileOwnerSigner::open(&data_dir)?;
             let owner_session_id = client.open_owner_session(&signer)?;
             start_ensemble(&client, &owner_session_id, &state)?;
+            Ok(())
+        }
+        Command::RetireRegistration { registration_id } => {
+            if registration_id.is_empty()
+                || registration_id.len() > 128
+                || !registration_id.is_ascii()
+            {
+                return Err("development registration id is invalid".to_owned());
+            }
+            let client = client(&data_dir)?;
+            let signer = FileOwnerSigner::open(&data_dir)?;
+            let owner_session_id = client.open_owner_session(&signer)?;
+            let retired = client.transition_module_registration(
+                &owner_session_id,
+                &registration_id,
+                "revoked",
+            )?;
+            println!("development_registration={}", retired.registration_state);
             Ok(())
         }
     }
@@ -843,21 +865,12 @@ fn refresh_plan(
             )?);
             continue;
         };
-        let current_binding = client
-            .managed_storage_binding_status(
-                owner_session_id,
-                &previous.registration_id,
-                &previous.storage_capability_id,
-            )
-            .map_err(|error| {
-                admission_error(plan.runtime_artifact_id, "read_storage_binding", error)
-            })?;
         client
             .begin_managed_storage_binding_revocation(
                 owner_session_id,
                 &previous.registration_id,
                 &previous.storage_capability_id,
-                current_binding.binding_revision,
+                previous.storage_binding_revision,
             )
             .map_err(|error| {
                 admission_error(plan.runtime_artifact_id, "revoke_storage_binding", error)
@@ -891,10 +904,8 @@ fn refresh_plan(
         let reservation = client
             .reserve_bundled_managed_runtime(owner_session_id, &previous.registration_id)
             .map_err(|error| admission_error(plan.runtime_artifact_id, "reserve_runtime", error))?;
-        let (role_epoch, credential_lease_revision) = successor_fences(
-            current_binding.role_epoch,
-            current_binding.credential_lease_revision,
-        )?;
+        let (role_epoch, credential_lease_revision) =
+            successor_fences(previous.role_epoch, previous.credential_lease_revision)?;
         modules.push(ModuleReservationV1 {
             runtime_artifact_id: previous.runtime_artifact_id.clone(),
             registration_id: previous.registration_id.clone(),
@@ -1069,7 +1080,7 @@ fn exact_requested_capability<'a>(
 
 fn operation_id(artifact_id: &str) -> [u8; 16] {
     let mut digest = Sha256::new();
-    digest.update(b"hermes.local-development-assembly.proposal.v1");
+    digest.update(b"hermes.local-development-assembly.proposal.v2");
     digest.update([0]);
     digest.update(artifact_id.as_bytes());
     digest.finalize()[..16]
@@ -1607,11 +1618,11 @@ mod tests {
                 ATTACHMENT_PREVIEW_EVIDENCE_REPLAY_RUNTIME_ARTIFACT,
                 ATTACHMENT_TRANSLATION_RUNTIME_ARTIFACT,
                 MAIL_RUNTIME_ARTIFACT,
-                CONTACTS_RUNTIME_ARTIFACT,
-                MAIL_CONTACTS_SYNC_RUNTIME_ARTIFACT,
                 TELEGRAM_RUNTIME_ARTIFACT,
                 WHATSAPP_RUNTIME_ARTIFACT,
                 ZULIP_RUNTIME_ARTIFACT,
+                CONTACTS_RUNTIME_ARTIFACT,
+                MAIL_CONTACTS_SYNC_RUNTIME_ARTIFACT,
             ],
         );
         assert!(matches!(
@@ -1675,16 +1686,16 @@ mod tests {
             "attachment_translation.runtime.v1",
         );
         assert!(matches!(
-            MODULE_PLAN[11].runtime_kind,
+            MODULE_PLAN[14].runtime_kind,
             ModuleRuntimeKindV1::Domain
         ));
-        assert_eq!(MODULE_PLAN[11].runtime_artifact_id, "contacts.runtime.v1");
+        assert_eq!(MODULE_PLAN[14].runtime_artifact_id, "contacts.runtime.v1");
         assert!(matches!(
-            MODULE_PLAN[12].runtime_kind,
+            MODULE_PLAN[15].runtime_kind,
             ModuleRuntimeKindV1::Workflow
         ));
         assert_eq!(
-            MODULE_PLAN[12].runtime_artifact_id,
+            MODULE_PLAN[15].runtime_artifact_id,
             "mail_contacts_sync.runtime.v1",
         );
     }

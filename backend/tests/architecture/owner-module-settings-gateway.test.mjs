@@ -70,6 +70,18 @@ const paths = {
     'tests/support/kernel-recovery/src/tests/owner_module_settings.rs',
     BACKEND_ROOT,
   ),
+  bootstrapContract: new URL(
+    'src/api/gateway/contracts/proto/hermes/gateway/v1/client_bootstrap.proto',
+    BACKEND_ROOT,
+  ),
+  bootstrapProjection: new URL(
+    'src/kernel/src/identity/browser_gateway.rs',
+    BACKEND_ROOT,
+  ),
+  bootstrapConformance: new URL(
+    'tests/support/kernel-recovery/src/tests/browser_gateway_session/connect_status.rs',
+    BACKEND_ROOT,
+  ),
 };
 
 test('owner module Settings is one provider-neutral fresh-proof Gateway authority', async () => {
@@ -90,6 +102,9 @@ test('owner module Settings is one provider-neutral fresh-proof Gateway authorit
     workflowAdr,
     gatewayComposition,
     conformance,
+    bootstrapContract,
+    bootstrapProjection,
+    bootstrapConformance,
   ] = await Promise.all(Object.values(paths).map((path) => readFile(path, 'utf8')));
   const inventory = JSON.parse(inventorySource);
   const slice = inventory.slices.find(
@@ -145,6 +160,11 @@ test('owner module Settings is one provider-neutral fresh-proof Gateway authorit
   assert.match(conformance, /fresh_proof_and_preserves_schema_cas/);
   assert.match(conformance, /denies_lan_mode/);
   assert.match(conformance, /challenge must be single-use/);
+  assert.match(bootstrapContract, /repeated ClientModuleSettingsTargetBootstrapV1 settings_targets = 7/);
+  assert.match(bootstrapProjection, /settings_configuration_targets/);
+  assert.match(bootstrapProjection, /visible_settings_for_target/);
+  assert.match(bootstrapConformance, /settings_targets\.len\(\), 2/);
+  assert.match(bootstrapConformance, /configuration-current/);
   assert.doesNotMatch(
     `${contract}\n${router}\n${proof}\n${authority}\n${authorization}\n${values}\n${operation}\n${state}\n${launch}\n${workflowLaunch}`,
     /hermes_(?:mail|telegram|whatsapp|zulip|communications)|Mail|Telegram|WhatsApp|Zulip/,

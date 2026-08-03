@@ -140,12 +140,8 @@ pub fn propose_verified_artifact(
     let descriptor_sha256 = artifact
         .descriptor_sha256()
         .ok_or_else(|| "managed launch artifact is not a module runtime".to_owned())?;
-    let request_digest = proposal_request_digest(
-        expected_distribution_id,
-        expected_distribution_generation,
-        artifact_id,
-        descriptor_sha256,
-    );
+    let request_digest =
+        proposal_request_digest(expected_distribution_id, artifact_id, descriptor_sha256);
     registry::propose_bundled_artifact(
         store,
         descriptor_bytes,
@@ -188,14 +184,12 @@ pub fn bind_installed_release(
 
 fn proposal_request_digest(
     distribution_id: &str,
-    distribution_generation: u64,
     artifact_id: &str,
     descriptor_sha256: &[u8; 32],
 ) -> [u8; 32] {
     let mut digest = Sha256::new();
-    digest.update(b"hermes.bundled-managed-artifact-proposal.v1");
+    digest.update(b"hermes.bundled-managed-artifact-proposal.v2");
     update_length_prefixed(&mut digest, distribution_id.as_bytes());
-    digest.update(distribution_generation.to_be_bytes());
     update_length_prefixed(&mut digest, artifact_id.as_bytes());
     digest.update(descriptor_sha256);
     digest.finalize().into()
@@ -204,4 +198,18 @@ fn proposal_request_digest(
 fn update_length_prefixed(digest: &mut Sha256, value: &[u8]) {
     digest.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
     digest.update(value);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::proposal_request_digest;
+
+    #[test]
+    fn proposal_identity_is_descriptor_bound() {
+        let descriptor = [7_u8; 32];
+        assert_ne!(
+            proposal_request_digest("distribution", "artifact", &descriptor),
+            proposal_request_digest("distribution", "artifact", &[8_u8; 32]),
+        );
+    }
 }
