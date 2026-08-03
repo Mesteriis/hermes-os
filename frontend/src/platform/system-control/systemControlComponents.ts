@@ -33,6 +33,7 @@ export const schedulerComponents: readonly SystemComponentDefinition[] = [
 export const eventComponents: readonly SystemComponentDefinition[] = [
 	{ id: ClientSystemComponentIdV1.EVENT_HUB, label: 'Event Hub', icon: 'tabler:route' },
 	{ id: ClientSystemComponentIdV1.NATS, label: 'NATS', icon: 'tabler:arrows-exchange' },
+	{ id: ClientSystemComponentIdV1.TELEMETRY, label: 'Telemetry', icon: 'tabler:chart-dots' },
 	{ id: ClientSystemComponentIdV1.SSE, label: 'Client SSE', icon: 'tabler:activity-heartbeat' },
 ]
 

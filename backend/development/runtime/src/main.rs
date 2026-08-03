@@ -5,32 +5,16 @@
 // lints remain enabled for this executable and the included source.
 
 mod cli;
+mod control_store;
+mod distribution;
 mod identity;
+mod infrastructure;
 mod kernel_operator;
 mod modules;
 mod pairing;
 mod platform;
+mod recovery;
 mod runtime;
-
-mod control_store {
-    #[path = "../../../../src/kernel/src/control_store/lifecycle.rs"]
-    pub(crate) mod lifecycle;
-}
-
-mod distribution {
-    #[path = "../../../../src/kernel/src/distribution/staged_artifact.rs"]
-    pub(crate) mod staged_artifact;
-}
-
-mod infrastructure {
-    #[path = "../../../../src/kernel/src/infrastructure/filesystem.rs"]
-    pub(crate) mod filesystem;
-}
-
-mod recovery {
-    #[path = "../../../../src/kernel/src/recovery/fence.rs"]
-    pub(crate) mod fence;
-}
 
 use clap::Parser;
 

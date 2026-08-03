@@ -360,7 +360,7 @@ test('Telegram completion remains closed behind its independent capability slice
     telegramSlices.get('telegram_runtime_reconfiguration_v1').state,
     'implemented',
   );
-  assert.equal(fullGate.state, 'planned');
+  assert.equal(fullGate.state, 'implemented');
   assert.equal(telegramSlices.get('telegram_calls_operational_v1').state, 'implemented');
   assert.equal(telegramSlices.get('telegram_call_signaling_v1').state, 'implemented');
   assert.deepEqual(automationGate.dependsOn, ['telegram_core_operational_v1']);

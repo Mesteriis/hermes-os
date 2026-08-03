@@ -9,7 +9,7 @@
       "gate": "telegram_full_operational_v1",
       "role": "integration",
       "owner": "telegram",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "telegram_core_operational_v1",
         "telegram_tdlib_user_qr_identity_v1",
@@ -843,7 +843,7 @@
       "gate": "application_preferences_v1",
       "role": "app",
       "owner": "first_party_client",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1"
       ]
@@ -852,7 +852,7 @@
       "gate": "scheduler_settings_surface_v1",
       "role": "platform",
       "owner": "scheduler",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "scheduler_v1",
         "client_gateway_v1"
@@ -862,7 +862,7 @@
       "gate": "telemetry_diagnostics_surface_v1",
       "role": "platform",
       "owner": "telemetry",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "telemetry_v1",
         "client_gateway_v1"
@@ -872,7 +872,7 @@
       "gate": "platform_maintenance_surface_v1",
       "role": "app",
       "owner": "platform_maintenance_composition",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "whole_instance_backup_v1",
         "client_gateway_v1"
@@ -882,7 +882,7 @@
       "gate": "system_architecture_status_surface_v1",
       "role": "app",
       "owner": "system_architecture_status_composition",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "telemetry_diagnostics_surface_v1",
         "client_gateway_v1"
@@ -892,7 +892,7 @@
       "gate": "calendar_account_settings_composition_v1",
       "role": "app",
       "owner": "calendar_account_settings_composition",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1"
       ]
@@ -901,7 +901,7 @@
       "gate": "ai_settings_surface_v1",
       "role": "domain",
       "owner": "ai",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1"
       ]
@@ -910,7 +910,7 @@
       "gate": "signal_hub_composition_v1",
       "role": "app",
       "owner": "signal_hub_composition",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "telemetry_diagnostics_surface_v1",
         "review_communications_attention_v1"

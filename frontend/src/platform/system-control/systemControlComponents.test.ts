@@ -39,6 +39,7 @@ describe('system control component rows', () => {
 		expect(eventComponents.map(({ id }) => id)).toEqual([
 			ClientSystemComponentIdV1.EVENT_HUB,
 			ClientSystemComponentIdV1.NATS,
+			ClientSystemComponentIdV1.TELEMETRY,
 			ClientSystemComponentIdV1.SSE,
 		])
 	})
