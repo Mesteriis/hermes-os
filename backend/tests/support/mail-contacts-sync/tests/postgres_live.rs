@@ -22,7 +22,8 @@ use hermes_mail_contacts_sync_persistence::{
     AcceptContactChangedForMailSyncOutcomeV1, AcceptContactChangedForMailSyncV1,
     AcceptScheduledMailContactsSyncDueOutcomeV1, AcceptScheduledMailContactsSyncDueV1,
     AdvanceMailContactsSyncPageV1, CompleteContactMailSyncSourceOutcomeV1,
-    CompleteContactMailSyncSourceV1, CompleteMailAddressBookUpsertOutcomeV1,
+    CompleteContactMailSyncSourceV1, CompleteContactsProviderLinkOutcomeV1,
+    CompleteContactsProviderLinkV1, CompleteMailAddressBookUpsertOutcomeV1,
     CompleteMailAddressBookUpsertV1, CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1,
     MailContactsSyncAdvanceOutcomeV1, MailContactsSyncContactOutcomeV1,
     MailContactsSyncEntryInputV1, MailContactsSyncEntryOutcomeInputV1,
@@ -768,6 +769,7 @@ async fn reverse_provider_result_is_atomic_restart_safe_and_replayable() {
         operation_id,
         mail_command_message_id: mail_command.message_id,
         outcome: MailContactsSyncProviderWriteOutcomeV1::Succeeded,
+        contacts_link_command: Some(envelope(108, b"contacts-provider-link-command")),
         occurred_at_unix_millis: 1_800_000_010_700,
     };
     assert_eq!(
@@ -784,16 +786,36 @@ async fn reverse_provider_result_is_atomic_restart_safe_and_replayable() {
             .expect("replay provider result"),
         CompleteMailAddressBookUpsertOutcomeV1::Duplicate
     );
+    let awaiting_link = restarted
+        .load_reverse_operation("owner-1", operation_id)
+        .await
+        .expect("load reverse operation awaiting Contacts link");
+    assert_eq!(awaiting_link.state, 2);
+    assert_eq!(awaiting_link.origin_run_id, Some(run_id));
+    assert_eq!(
+        awaiting_link.mail_command_message_id,
+        Some(mail_command.message_id)
+    );
+    assert_eq!(
+        restarted
+            .complete_contacts_provider_link(&CompleteContactsProviderLinkV1 {
+                logical_owner_id: "owner-1".to_owned(),
+                result_message_id: [109; 16],
+                result_envelope_sha256: [110; 32],
+                operation_id,
+                contacts_command_message_id: [108; 16],
+                reject_code: None,
+                occurred_at_unix_millis: 1_800_000_010_750,
+            })
+            .await
+            .expect("complete Contacts provider link"),
+        CompleteContactsProviderLinkOutcomeV1::Applied
+    );
     let operation = restarted
         .load_reverse_operation("owner-1", operation_id)
         .await
         .expect("load completed reverse operation");
     assert_eq!(operation.state, 3);
-    assert_eq!(operation.origin_run_id, Some(run_id));
-    assert_eq!(
-        operation.mail_command_message_id,
-        Some(mail_command.message_id)
-    );
     let completed = restarted
         .load_run("owner-1", &run_id)
         .await
@@ -850,10 +872,23 @@ async fn reverse_provider_result_is_atomic_restart_safe_and_replayable() {
             operation_id: late_operation_id,
             mail_command_message_id: [105; 16],
             outcome: MailContactsSyncProviderWriteOutcomeV1::Succeeded,
+            contacts_link_command: Some(envelope(111, b"late-contacts-provider-link-command")),
             occurred_at_unix_millis: 1_800_000_011_000,
         })
         .await
-        .expect("terminalize late provider result without rewriting completed run");
+        .expect("queue late Contacts provider-link reconciliation");
+    restarted
+        .complete_contacts_provider_link(&CompleteContactsProviderLinkV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            result_message_id: [112; 16],
+            result_envelope_sha256: [113; 32],
+            operation_id: late_operation_id,
+            contacts_command_message_id: [111; 16],
+            reject_code: None,
+            occurred_at_unix_millis: 1_800_000_011_050,
+        })
+        .await
+        .expect("terminalize late provider link without rewriting completed run");
     assert_eq!(
         restarted
             .load_reverse_operation("owner-1", late_operation_id)

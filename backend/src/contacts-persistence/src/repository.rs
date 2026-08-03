@@ -25,7 +25,7 @@ use crate::{
 
 #[derive(Clone)]
 pub struct ContactsPersistenceV1 {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl ContactsPersistenceV1 {

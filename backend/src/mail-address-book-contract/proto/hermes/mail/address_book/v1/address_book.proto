@@ -68,6 +68,7 @@ message MailAddressBookEntryUpsertedV1 {
   string provider_entry_id = 3;
   string provider_etag = 4;
   uint64 applied_contact_revision = 5;
+  MailAddressBookProviderKindV1 provider_kind = 6;
 }
 
 message MailAddressBookEntryUpsertRejectedV1 {

@@ -1,5 +1,13 @@
 //! Workflow-owned reconciliation of terminal Mail address-book write results.
 
+use hermes_contacts_command_api::{
+    ContactsCommandEnvelopeContextV1,
+    build_bind_mail_address_book_provider_link_command_outbox_record_v1,
+    wire::{
+        BindMailAddressBookProviderLinkCommandV1,
+        MailAddressBookProviderKindV1 as ContactsMailAddressBookProviderKindV1,
+    },
+};
 use hermes_events_jetstream::{
     RuntimeJetStreamConnection, RuntimePullDeliveryErrorV1, RuntimeSubscribePermitV1,
     receive_runtime_pull_delivery,
@@ -15,7 +23,7 @@ use hermes_mail_address_book_contract::{
     validate_mail_address_book_entry_upserted_v1,
     wire::{
         MailAddressBookEntryUpsertRejectedV1, MailAddressBookEntryUpsertedV1,
-        MailAddressBookRejectCodeV1,
+        MailAddressBookProviderKindV1, MailAddressBookRejectCodeV1,
     },
 };
 use hermes_mail_contacts_sync_core::MailContactsSyncRejectCodeV1;
@@ -24,6 +32,7 @@ use hermes_mail_contacts_sync_persistence::{
     MailContactsSyncPersistenceV1, MailContactsSyncProviderWriteOutcomeV1,
 };
 use prost::Message;
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum MailContactsSyncProviderWriteResultErrorV1 {
@@ -35,6 +44,8 @@ pub(crate) enum MailContactsSyncProviderWriteResultErrorV1 {
 
 pub(crate) struct MailContactsSyncProviderWriteResultContextV1<'a> {
     pub logical_owner_id: &'a str,
+    pub runtime_instance_id: &'a str,
+    pub runtime_generation: u64,
     pub now_unix_millis: i64,
 }
 
@@ -70,6 +81,9 @@ pub(crate) async fn consume_mail_entry_upserted_once_v1(
         &record,
         identity,
         MailContactsSyncProviderWriteOutcomeV1::Succeeded,
+        Some(build_contacts_link_command(
+            &record, &operation, &payload, context,
+        )?),
         context,
     )
     .await?;
@@ -120,7 +134,7 @@ pub(crate) async fn consume_mail_entry_upsert_rejected_once_v1(
     } else {
         MailContactsSyncProviderWriteOutcomeV1::Rejected(map_reject_code(payload.code)?)
     };
-    complete(persistence, &record, identity, outcome, context).await?;
+    complete(persistence, &record, identity, outcome, None, context).await?;
     delivery.acknowledge().await.map_err(event_error)?;
     Ok(true)
 }
@@ -136,6 +150,7 @@ async fn complete(
     record: &OutboxRecordV1,
     identity: ProviderWriteResultIdentityV1,
     outcome: MailContactsSyncProviderWriteOutcomeV1,
+    contacts_link_command: Option<hermes_mail_contacts_sync_persistence::OutboxEnvelopeV1>,
     context: &MailContactsSyncProviderWriteResultContextV1<'_>,
 ) -> Result<(), MailContactsSyncProviderWriteResultErrorV1> {
     persistence
@@ -146,11 +161,69 @@ async fn complete(
             operation_id: identity.operation_id,
             mail_command_message_id: identity.command_message_id,
             outcome,
+            contacts_link_command,
             occurred_at_unix_millis: context.now_unix_millis,
         })
         .await
         .map(|_| ())
         .map_err(MailContactsSyncProviderWriteResultErrorV1::Persistence)
+}
+
+fn build_contacts_link_command(
+    record: &OutboxRecordV1,
+    operation: &hermes_mail_contacts_sync_persistence::MailContactsSyncReverseOperationV1,
+    payload: &MailAddressBookEntryUpsertedV1,
+    context: &MailContactsSyncProviderWriteResultContextV1<'_>,
+) -> Result<
+    hermes_mail_contacts_sync_persistence::OutboxEnvelopeV1,
+    MailContactsSyncProviderWriteResultErrorV1,
+> {
+    let provider_kind = match MailAddressBookProviderKindV1::try_from(payload.provider_kind) {
+        Ok(MailAddressBookProviderKindV1::MailAddressBookProviderKindGooglePeople) => {
+            ContactsMailAddressBookProviderKindV1::MailAddressBookProviderKindGmail
+        }
+        Ok(MailAddressBookProviderKindV1::MailAddressBookProviderKindIcloudCarddav) => {
+            ContactsMailAddressBookProviderKindV1::MailAddressBookProviderKindIcloud
+        }
+        _ => return Err(MailContactsSyncProviderWriteResultErrorV1::InvalidPayload),
+    };
+    let command_id = link_command_id(operation.operation_id, *record.message_id());
+    let command = build_bind_mail_address_book_provider_link_command_outbox_record_v1(
+        *record.message_id(),
+        BindMailAddressBookProviderLinkCommandV1 {
+            command_id: command_id.to_vec(),
+            logical_owner_id: context.logical_owner_id.to_owned(),
+            contact_id: operation.contact_id.to_vec(),
+            expected_contact_revision: operation.contact_revision,
+            source_account_id: operation.account_id.clone(),
+            provider_kind: provider_kind as i32,
+            provider_entry_id: payload.provider_entry_id.clone(),
+            provider_etag: Some(payload.provider_etag.clone()),
+        },
+        context.now_unix_millis / 1_000 + 300,
+        &ContactsCommandEnvelopeContextV1 {
+            module_id: "hermes-mail-contacts-sync-runtime".to_owned(),
+            runtime_instance_id: context.runtime_instance_id.to_owned(),
+            runtime_generation: context.runtime_generation,
+            recorded_at_unix_seconds: context.now_unix_millis / 1_000,
+            recorded_at_nanos: i32::try_from((context.now_unix_millis % 1_000) * 1_000_000)
+                .unwrap_or_default(),
+        },
+    )
+    .map_err(|_| MailContactsSyncProviderWriteResultErrorV1::InvalidPayload)?;
+    Ok(hermes_mail_contacts_sync_persistence::OutboxEnvelopeV1 {
+        message_id: *command.message_id(),
+        envelope_sha256: *command.envelope_sha256(),
+        envelope_bytes: command.exact_bytes().to_vec(),
+    })
+}
+
+fn link_command_id(operation_id: [u8; 16], result_message_id: [u8; 16]) -> [u8; 16] {
+    let mut hash = Sha256::new();
+    hash.update(b"mail-contacts-sync-provider-link-command-v1");
+    hash.update(operation_id);
+    hash.update(result_message_id);
+    hash.finalize()[..16].try_into().expect("fixed digest")
 }
 
 fn map_reject_code(

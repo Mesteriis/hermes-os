@@ -120,11 +120,14 @@ include!(concat!(env!("OUT_DIR"), "/mail_address_book_schema.rs"));
 pub fn validate_mail_address_book_entry_upserted_v1(
     payload: &wire::MailAddressBookEntryUpsertedV1,
 ) -> Result<(), MailAddressBookEnvelopeBuildErrorV1> {
+    let provider = wire::MailAddressBookProviderKindV1::try_from(payload.provider_kind)
+        .map_err(|_| MailAddressBookEnvelopeBuildErrorV1::InvalidPayload)?;
     if valid_id16(&payload.command_id)
         && valid_id16(&payload.run_id)
         && valid_ascii(&payload.provider_entry_id, 512)
         && valid_ascii(&payload.provider_etag, 512)
         && payload.applied_contact_revision > 0
+        && provider != wire::MailAddressBookProviderKindV1::MailAddressBookProviderKindUnspecified
     {
         Ok(())
     } else {

@@ -155,6 +155,8 @@ where
         retry_runtime(executor.block_on(runtime.consume_contact_source_rejected_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_mail_entry_upserted_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_mail_entry_upsert_rejected_once(now)))?;
+        retry_runtime(executor.block_on(runtime.consume_provider_link_bound_once(now)))?;
+        retry_runtime(executor.block_on(runtime.consume_provider_link_rejected_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_contact_upserted_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_contact_rejected_once(now)))?;
         retry_runtime(executor.block_on(runtime.queue_scheduler_terminal_once(now)))?;

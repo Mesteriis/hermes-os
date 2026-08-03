@@ -25,8 +25,11 @@ terminal commit после нового connection, replay и hash conflict fenc
 Explicit iCloud read-only и missing-scope negatives закрыты signed managed Mail
 flows с typed terminal results через NATS и нулевым Blob/provider IO. CardDAV
 credential binding и lifecycle state хранятся в отдельных additive Mail-owned
-tables, а не в IMAP binding. Google create, revoke/outage recovery и browser
-conformance ещё не закрыты, поэтому наличие этого среза не открывает
+tables, а не в IMAP binding. Google create теперь доказан signed managed
+ensemble: returned provider ID/ETag event-only закрепляются Contacts-owned
+command, а следующее изменение выполняет ETag-fenced PATCH вместо повторного
+create. Revoke/outage recovery и browser conformance ещё не закрыты, поэтому
+наличие этого среза не открывает
 `mail_contacts_sync_v1`.
 
 Уточняет:
@@ -35,7 +38,8 @@ conformance ещё не закрыты, поэтому наличие этого
 - [ADR-0222](ADR-0222-kernel-settings-registry-and-supervised-reconfiguration.md);
 - [ADR-0223](ADR-0223-encrypted-sqlite-vault-and-scoped-credential-leases.md);
 - [ADR-0379](ADR-0379-mail-address-book-sync-and-contacts-command-boundary.md);
-- [ADR-0381](ADR-0381-contacts-target-bound-mail-sync-source-port.md).
+- [ADR-0381](ADR-0381-contacts-target-bound-mail-sync-source-port.md);
+- [ADR-0383](ADR-0383-contacts-provider-link-reconciliation-after-mail-write.md).
 
 ## Контекст
 

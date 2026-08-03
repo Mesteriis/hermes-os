@@ -245,6 +245,7 @@ pub async fn process_next_mail_address_book_upsert_v1(
                     provider_entry_id: upserted.resource_name,
                     provider_etag: upserted.etag,
                     applied_contact_revision: job.admission.expected_contact_revision,
+                    provider_kind: hermes_mail_address_book_contract::wire::MailAddressBookProviderKindV1::MailAddressBookProviderKindGooglePeople as i32,
                 },
                 &result_context(runtime, &job, now_unix_seconds),
             )

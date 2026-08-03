@@ -1,19 +1,50 @@
 use hermes_mail_contacts_sync_core::{
-    MailContactsSyncStateV1, MailContactsSyncTransitionV1, transition_mail_contacts_sync_v1,
+    MailContactsSyncRejectCodeV1, MailContactsSyncStateV1, MailContactsSyncTransitionV1,
+    transition_mail_contacts_sync_v1,
 };
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::{
     AcceptContactChangedForMailSyncOutcomeV1, AcceptContactChangedForMailSyncV1,
     CompleteContactMailSyncSourceOutcomeV1, CompleteContactMailSyncSourceV1,
+    CompleteContactsProviderLinkOutcomeV1, CompleteContactsProviderLinkV1,
     CompleteMailAddressBookUpsertOutcomeV1, CompleteMailAddressBookUpsertV1,
     MailContactsSyncPersistenceErrorV1, MailContactsSyncPersistenceV1,
     MailContactsSyncProviderWriteOutcomeV1, MailContactsSyncReverseOperationV1,
     repository::{insert_realtime, load_for_update},
-    reverse_model::{validate_changed_input, validate_mail_completion, validate_source_completion},
+    reverse_model::{
+        validate_changed_input, validate_contacts_link_completion, validate_mail_completion,
+        validate_source_completion,
+    },
 };
 
 impl MailContactsSyncPersistenceV1 {
+    pub async fn provider_link_operation_for_command(
+        &self,
+        logical_owner_id: &str,
+        contacts_command_message_id: [u8; 16],
+    ) -> Result<[u8; 16], MailContactsSyncPersistenceErrorV1> {
+        if !crate::model::valid_identity(logical_owner_id)
+            || contacts_command_message_id.iter().all(|byte| *byte == 0)
+        {
+            return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+        }
+        let operation_id = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT operation_id FROM \
+             hermes_data.mail_contacts_sync_provider_link_reconciliation WHERE \
+             logical_owner_id=$1 AND contacts_command_message_id=$2",
+        )
+        .bind(logical_owner_id)
+        .bind(contacts_command_message_id.as_slice())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(storage)?
+        .ok_or(MailContactsSyncPersistenceErrorV1::NotFound)?;
+        operation_id
+            .try_into()
+            .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidRow)
+    }
+
     pub async fn load_reverse_operation(
         &self,
         logical_owner_id: &str,
@@ -205,30 +236,32 @@ impl MailContactsSyncPersistenceV1 {
         {
             return Err(MailContactsSyncPersistenceErrorV1::InvalidTransition);
         }
-        let updated = sqlx::query(
-            "UPDATE hermes_data.mail_contacts_sync_reverse_operations \
-             SET state=$3, terminal_message_id=$4, updated_at_unix_millis=$5 \
-             WHERE logical_owner_id=$1 AND operation_id=$2 AND state=2",
-        )
-        .bind(&input.logical_owner_id)
-        .bind(input.operation_id.as_slice())
-        .bind(
-            if matches!(
-                input.outcome,
-                MailContactsSyncProviderWriteOutcomeV1::Succeeded
-            ) {
-                3_i16
-            } else {
-                5_i16
-            },
-        )
-        .bind(input.result_message_id.as_slice())
-        .bind(input.occurred_at_unix_millis)
-        .execute(&mut *transaction)
-        .await
-        .map_err(storage)?;
-        if updated.rows_affected() != 1 {
-            return Err(MailContactsSyncPersistenceErrorV1::RevisionConflict);
+        if let Some(command) = &input.contacts_link_command {
+            sqlx::query(
+                "INSERT INTO hermes_data.mail_contacts_sync_provider_link_reconciliation \
+                 (logical_owner_id, operation_id, mail_result_message_id, \
+                  mail_result_envelope_sha256, contacts_command_message_id, state, \
+                  created_at_unix_millis, updated_at_unix_millis) \
+                 VALUES ($1,$2,$3,$4,$5,1,$6,$6)",
+            )
+            .bind(&input.logical_owner_id)
+            .bind(input.operation_id.as_slice())
+            .bind(input.result_message_id.as_slice())
+            .bind(input.result_envelope_sha256.as_slice())
+            .bind(command.message_id.as_slice())
+            .bind(input.occurred_at_unix_millis)
+            .execute(&mut *transaction)
+            .await
+            .map_err(storage)?;
+            super::repository::insert_outbox(
+                &mut transaction,
+                &input.logical_owner_id,
+                command,
+                input.occurred_at_unix_millis,
+            )
+            .await?;
+        } else {
+            update_reverse_terminal(&mut transaction, input, 5, input.result_message_id).await?;
         }
         let origin_run_id = sqlx::query_scalar::<_, Option<Vec<u8>>>(
             "SELECT origin_run_id FROM hermes_data.mail_contacts_sync_reverse_operations \
@@ -245,12 +278,166 @@ impl MailContactsSyncPersistenceV1 {
                 .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidRow)
         })
         .transpose()?;
-        if let Some(run_id) = origin_run_id {
-            apply_provider_result_to_run(&mut transaction, input, run_id).await?;
+        if input.contacts_link_command.is_none()
+            && let Some(run_id) = origin_run_id
+        {
+            apply_provider_outcome_to_run(
+                &mut transaction,
+                &input.logical_owner_id,
+                run_id,
+                input.outcome,
+                input.occurred_at_unix_millis,
+            )
+            .await?;
         }
         transaction.commit().await.map_err(storage)?;
         Ok(CompleteMailAddressBookUpsertOutcomeV1::Applied)
     }
+
+    pub async fn complete_contacts_provider_link(
+        &self,
+        input: &CompleteContactsProviderLinkV1,
+    ) -> Result<CompleteContactsProviderLinkOutcomeV1, MailContactsSyncPersistenceErrorV1> {
+        validate_contacts_link_completion(input)?;
+        let mut transaction = self.pool.begin().await.map_err(storage)?;
+        if !reserve_event_inbox(
+            &mut transaction,
+            &input.logical_owner_id,
+            input.result_message_id,
+            input.result_envelope_sha256,
+            input.occurred_at_unix_millis,
+        )
+        .await?
+        {
+            validate_event_replay(
+                &mut transaction,
+                &input.logical_owner_id,
+                input.result_message_id,
+                input.result_envelope_sha256,
+            )
+            .await?;
+            transaction.commit().await.map_err(storage)?;
+            return Ok(CompleteContactsProviderLinkOutcomeV1::Duplicate);
+        }
+        let row = sqlx::query(
+            "SELECT contacts_command_message_id, state FROM \
+             hermes_data.mail_contacts_sync_provider_link_reconciliation WHERE \
+             logical_owner_id=$1 AND operation_id=$2 FOR UPDATE",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.operation_id.as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(storage)?
+        .ok_or(MailContactsSyncPersistenceErrorV1::NotFound)?;
+        if row.get::<i16, _>("state") != 1
+            || row
+                .get::<Vec<u8>, _>("contacts_command_message_id")
+                .as_slice()
+                != input.contacts_command_message_id
+        {
+            return Err(MailContactsSyncPersistenceErrorV1::InvalidTransition);
+        }
+        let reconciliation_state = if input.reject_code.is_none() {
+            2_i16
+        } else {
+            3_i16
+        };
+        let updated = sqlx::query(
+            "UPDATE hermes_data.mail_contacts_sync_provider_link_reconciliation SET state=$3, \
+             terminal_message_id=$4, reject_code=$5, updated_at_unix_millis=$6 WHERE \
+             logical_owner_id=$1 AND operation_id=$2 AND state=1",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.operation_id.as_slice())
+        .bind(reconciliation_state)
+        .bind(input.result_message_id.as_slice())
+        .bind(input.reject_code.map(reject_code))
+        .bind(input.occurred_at_unix_millis)
+        .execute(&mut *transaction)
+        .await
+        .map_err(storage)?;
+        if updated.rows_affected() != 1 {
+            return Err(MailContactsSyncPersistenceErrorV1::RevisionConflict);
+        }
+        let reverse_state = if input.reject_code.is_none() {
+            3_i16
+        } else {
+            5_i16
+        };
+        let updated = sqlx::query(
+            "UPDATE hermes_data.mail_contacts_sync_reverse_operations SET state=$3, \
+             terminal_message_id=$4, updated_at_unix_millis=$5 WHERE logical_owner_id=$1 AND \
+             operation_id=$2 AND state=2",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.operation_id.as_slice())
+        .bind(reverse_state)
+        .bind(input.result_message_id.as_slice())
+        .bind(input.occurred_at_unix_millis)
+        .execute(&mut *transaction)
+        .await
+        .map_err(storage)?;
+        if updated.rows_affected() != 1 {
+            return Err(MailContactsSyncPersistenceErrorV1::RevisionConflict);
+        }
+        let origin_run_id = sqlx::query_scalar::<_, Option<Vec<u8>>>(
+            "SELECT origin_run_id FROM hermes_data.mail_contacts_sync_reverse_operations WHERE \
+             logical_owner_id=$1 AND operation_id=$2",
+        )
+        .bind(&input.logical_owner_id)
+        .bind(input.operation_id.as_slice())
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(storage)?
+        .map(|value| {
+            value
+                .try_into()
+                .map_err(|_| MailContactsSyncPersistenceErrorV1::InvalidRow)
+        })
+        .transpose()?;
+        if let Some(run_id) = origin_run_id {
+            let outcome = input.reject_code.map_or(
+                MailContactsSyncProviderWriteOutcomeV1::Succeeded,
+                MailContactsSyncProviderWriteOutcomeV1::Rejected,
+            );
+            apply_provider_outcome_to_run(
+                &mut transaction,
+                &input.logical_owner_id,
+                run_id,
+                outcome,
+                input.occurred_at_unix_millis,
+            )
+            .await?;
+        }
+        transaction.commit().await.map_err(storage)?;
+        Ok(CompleteContactsProviderLinkOutcomeV1::Applied)
+    }
+}
+
+async fn update_reverse_terminal(
+    transaction: &mut Transaction<'_, Postgres>,
+    input: &CompleteMailAddressBookUpsertV1,
+    state: i16,
+    terminal_message_id: [u8; 16],
+) -> Result<(), MailContactsSyncPersistenceErrorV1> {
+    let updated = sqlx::query(
+        "UPDATE hermes_data.mail_contacts_sync_reverse_operations SET state=$3, \
+         terminal_message_id=$4, updated_at_unix_millis=$5 WHERE logical_owner_id=$1 AND \
+         operation_id=$2 AND state=2",
+    )
+    .bind(&input.logical_owner_id)
+    .bind(input.operation_id.as_slice())
+    .bind(state)
+    .bind(terminal_message_id.as_slice())
+    .bind(input.occurred_at_unix_millis)
+    .execute(&mut **transaction)
+    .await
+    .map_err(storage)?;
+    if updated.rows_affected() != 1 {
+        return Err(MailContactsSyncPersistenceErrorV1::RevisionConflict);
+    }
+    Ok(())
 }
 
 async fn reserve_result_inbox(
@@ -381,12 +568,14 @@ fn decode_operation(
     })
 }
 
-async fn apply_provider_result_to_run(
+async fn apply_provider_outcome_to_run(
     transaction: &mut Transaction<'_, Postgres>,
-    input: &CompleteMailAddressBookUpsertV1,
+    logical_owner_id: &str,
     run_id: [u8; 16],
+    outcome: MailContactsSyncProviderWriteOutcomeV1,
+    occurred_at_unix_millis: i64,
 ) -> Result<(), MailContactsSyncPersistenceErrorV1> {
-    let current = load_for_update(transaction, &input.logical_owner_id, &run_id).await?;
+    let current = load_for_update(transaction, logical_owner_id, &run_id).await?;
     if current.status.state != MailContactsSyncStateV1::WritingProvider {
         return if matches!(
             current.status.state,
@@ -399,7 +588,7 @@ async fn apply_provider_result_to_run(
             Err(MailContactsSyncPersistenceErrorV1::InvalidTransition)
         };
     }
-    let next = match input.outcome {
+    let next = match outcome {
         MailContactsSyncProviderWriteOutcomeV1::Succeeded => {
             let written = transition_mail_contacts_sync_v1(
                 &current.status,
@@ -438,20 +627,33 @@ async fn apply_provider_result_to_run(
     };
     super::orchestration::update_run(
         transaction,
-        &input.logical_owner_id,
+        logical_owner_id,
         &run_id,
         &current,
         &next,
-        input.occurred_at_unix_millis,
+        occurred_at_unix_millis,
     )
     .await?;
     insert_realtime(
         transaction,
-        &input.logical_owner_id,
+        logical_owner_id,
         &run_id,
-        input.occurred_at_unix_millis,
+        occurred_at_unix_millis,
     )
     .await
+}
+
+fn reject_code(value: MailContactsSyncRejectCodeV1) -> i16 {
+    match value {
+        MailContactsSyncRejectCodeV1::InvalidRequest => 1,
+        MailContactsSyncRejectCodeV1::AccountUnavailable => 2,
+        MailContactsSyncRejectCodeV1::RemoteWriteBlocked => 3,
+        MailContactsSyncRejectCodeV1::EtagConflict => 4,
+        MailContactsSyncRejectCodeV1::ProviderUnavailable
+        | MailContactsSyncRejectCodeV1::ContactsRejected
+        | MailContactsSyncRejectCodeV1::Policy
+        | MailContactsSyncRejectCodeV1::OutcomeUnknown => 5,
+    }
 }
 
 async fn validate_replay(

@@ -631,6 +631,7 @@ mod tests {
                 provider_entry_id: "people/abc".to_owned(),
                 provider_etag: "etag-1".to_owned(),
                 applied_contact_revision: 7,
+                provider_kind: crate::wire::MailAddressBookProviderKindV1::MailAddressBookProviderKindGooglePeople as i32,
             },
             &MailAddressBookResultEnvelopeContextV1 {
                 runtime_instance_id: "mail-runtime-1".to_owned(),

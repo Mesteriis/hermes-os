@@ -51,7 +51,10 @@ missing-write-scope negatives теперь доказаны отдельными
 flows: оба возвращают exact terminal rejection через NATS до Blob custody или
 provider mutation. Для iCloud добавлены отдельные additive Mail-owned CardDAV
 credential binding и lifecycle tables; IMAP credential state не переиспользуется.
-Google create, revoke/outage recovery и browser conformance ещё не доказаны,
+Google create теперь доказан вместе с обязательной event-only обратной
+привязкой returned provider ID/ETag в Contacts и последующим ETag-fenced PATCH;
+Mail и workflow не пишут Contacts storage. Revoke/outage recovery и browser
+conformance ещё не доказаны,
 поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
 Contacts command открыт только после exact six-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
@@ -70,7 +73,8 @@ legacy address-book service, Mail account UI или статических contr
 - [ADR-0222](ADR-0222-kernel-settings-registry-and-supervised-reconfiguration.md);
 - [ADR-0236](ADR-0236-integration-owners-protocol-adapters-and-configuration-instances.md);
 - [ADR-0282](ADR-0282-full-communications-and-settings-capability-reconstruction.md);
-- [ADR-0294](ADR-0294-mail-account-credential-lifecycle-and-portability.md).
+- [ADR-0294](ADR-0294-mail-account-credential-lifecycle-and-portability.md);
+- [ADR-0383](ADR-0383-contacts-provider-link-reconciliation-after-mail-write.md).
 
 ## Контекст
 

@@ -3,7 +3,8 @@ use hermes_contacts_core::{
     ContactUpsertOutcomeV1,
 };
 use hermes_contacts_persistence::{
-    ApplyMailEntryCommandV1, ContactMailEntryRejectCodeV1, ContactMutationOutboxV1,
+    ApplyMailEntryCommandV1, BindMailProviderLinkCommandV1, ContactMailEntryRejectCodeV1,
+    ContactMutationOutboxV1, ContactProviderLinkBindOutcomeV1, ContactProviderLinkBindRejectCodeV1,
     ContactsOutboxRecordV1, ContactsPersistenceConformanceV1, ContactsPersistenceErrorV1,
     PersistContactMailSyncSourceResultV1, RejectMailEntryCommandV1, ReserveContactMailSyncSourceV1,
 };
@@ -131,6 +132,58 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
     assert_eq!(unchanged.outcome, ContactUpsertOutcomeV1::Unchanged);
     assert_eq!(unchanged.contact_revision, 2);
 
+    let link = BindMailProviderLinkCommandV1 {
+        command_message_id: [80; 16],
+        command_envelope_sha256: [81; 32],
+        command_id: [82; 16],
+        logical_owner_id: "owner-1".to_owned(),
+        contact_id: created.contact_id,
+        expected_contact_revision: 2,
+        source_account_id: "mail-1".to_owned(),
+        provider_kind: ContactProviderKindV1::Gmail,
+        provider_entry_id: "people/ada".to_owned(),
+        provider_etag: Some("etag-reconciled".to_owned()),
+        received_at_unix_millis: 1_800_000_000_080,
+        completed_at_unix_millis: 1_800_000_000_081,
+    };
+    let linked = persistence
+        .bind_mail_provider_link(&link, |_| {
+            terminal(83, created.contact_id, ContactUpsertOutcomeV1::Unchanged)
+        })
+        .await
+        .expect("reconcile provider link");
+    assert_eq!(
+        linked.outcome,
+        ContactProviderLinkBindOutcomeV1::Bound {
+            contact_revision: 2
+        }
+    );
+    assert!(!linked.replayed);
+    assert!(
+        persistence
+            .bind_mail_provider_link(&link, |_| panic!("link replay must use exact result"))
+            .await
+            .expect("replay provider link")
+            .replayed
+    );
+    let mut conflicting_link = link.clone();
+    conflicting_link.command_message_id = [84; 16];
+    conflicting_link.command_envelope_sha256 = [85; 32];
+    conflicting_link.command_id = [86; 16];
+    conflicting_link.provider_entry_id = "people/different".to_owned();
+    let conflict = persistence
+        .bind_mail_provider_link(&conflicting_link, |_| {
+            terminal(87, created.contact_id, ContactUpsertOutcomeV1::Unchanged)
+        })
+        .await
+        .expect("persist provider-link conflict");
+    assert_eq!(
+        conflict.outcome,
+        ContactProviderLinkBindOutcomeV1::Rejected(
+            ContactProviderLinkBindRejectCodeV1::ProviderLinkConflict
+        )
+    );
+
     let mut reused_command_id = command(4, 3, "ada@example.test", "+34910000001");
     reused_command_id.command_id = first.command_id;
     assert_eq!(
@@ -194,7 +247,7 @@ async fn postgres_replays_exact_result_and_fences_conflicts() {
         .load_pending_outbox("owner-1")
         .await
         .expect("pending outbox");
-    assert_eq!(pending.len(), 9);
+    assert_eq!(pending.len(), 11);
 }
 
 fn mutation(

@@ -106,6 +106,7 @@ where
             .map_err(|_| "Contacts clock is invalid".to_owned())?;
         retry_runtime(runtime.pump_control_once())?;
         retry_runtime(executor.block_on(runtime.consume_command_once(now)))?;
+        retry_runtime(executor.block_on(runtime.consume_provider_link_once(now)))?;
         retry_runtime(executor.block_on(runtime.consume_source_once(now)))?;
         retry_runtime(executor.block_on(runtime.relay_outbox_once(now)))?;
         std::thread::sleep(Duration::from_millis(25));

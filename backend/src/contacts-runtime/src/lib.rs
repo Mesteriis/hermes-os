@@ -4,6 +4,7 @@ mod admission;
 mod command;
 mod event_outbox;
 mod managed_runtime;
+mod provider_link;
 mod source;
 
 pub use admission::{

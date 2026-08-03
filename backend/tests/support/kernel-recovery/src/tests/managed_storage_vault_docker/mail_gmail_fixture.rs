@@ -241,7 +241,13 @@ fn serve_connection(
     }
     match method {
         "GET" => {
-            serve_get(stream, &path, &headers, accepted_people_reads);
+            serve_get(
+                stream,
+                &path,
+                &headers,
+                accepted_people_reads,
+                accepted_people_writes,
+            );
             accepted_reads.fetch_add(1, Ordering::SeqCst);
         }
         "POST" if path == "/gmail/v1/users/me/messages/send" => {
@@ -264,6 +270,7 @@ fn serve_get(
     path: &str,
     headers: &BTreeMap<String, String>,
     accepted_people_reads: &AtomicUsize,
+    accepted_people_writes: &AtomicUsize,
 ) {
     let body = if path.starts_with("/gmail/v1/users/me/messages?") {
         serde_json::to_vec(&serde_json::json!({
@@ -296,6 +303,11 @@ fn serve_get(
         }))
         .expect("encode Gmail history response")
     } else if path.starts_with("/v1/people/me/connections?") {
+        let managed_etag = if accepted_people_writes.load(Ordering::SeqCst) == 0 {
+            "managed-etag-1"
+        } else {
+            "managed-etag-2"
+        };
         assert_eq!(
             headers.get("authorization").map(String::as_str),
             Some("Bearer managed-mail-gmail-access-token")
@@ -309,7 +321,7 @@ fn serve_get(
                     "sources": [{
                         "type": "CONTACT",
                         "id": "managed-contact-1",
-                        "etag": "managed-etag-1"
+                        "etag": managed_etag
                     }]
                 },
                 "names": [{"displayName": "Private Managed Contact"}],
@@ -374,7 +386,9 @@ fn serve_people_write(
     );
     assert!(
         method == "POST" && path.starts_with("/v1/people:createContact?")
-            || method == "PATCH" && path.starts_with("/v1/people/managed-contact-1:updateContact?"),
+            || method == "PATCH"
+                && (path.starts_with("/v1/people/managed-contact-1:updateContact?")
+                    || path.starts_with("/v1/people/created-contact-1:updateContact?")),
         "unsupported Google People write route"
     );
     let body = read_json_body(stream, headers);
@@ -389,13 +403,32 @@ fn serve_people_write(
             body,
         });
     accepted_people_writes.fetch_add(1, Ordering::SeqCst);
+    let (resource_name, id, etag) = if method == "POST" {
+        (
+            "people/created-contact-1",
+            "created-contact-1",
+            "created-etag-1",
+        )
+    } else if path.starts_with("/v1/people/created-contact-1:updateContact?") {
+        (
+            "people/created-contact-1",
+            "created-contact-1",
+            "created-etag-2",
+        )
+    } else {
+        (
+            "people/managed-contact-1",
+            "managed-contact-1",
+            "managed-etag-2",
+        )
+    };
     let response = serde_json::to_vec(&serde_json::json!({
-        "resourceName": "people/managed-contact-1",
+        "resourceName": resource_name,
         "metadata": {
             "sources": [{
                 "type": "CONTACT",
-                "id": "managed-contact-1",
-                "etag": "managed-etag-2"
+                "id": id,
+                "etag": etag
             }]
         },
         "names": [{"displayName": "Private Managed Contact"}],

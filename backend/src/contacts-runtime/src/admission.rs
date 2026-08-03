@@ -1,7 +1,14 @@
 use hermes_contacts_command_api::{
-    CONTACTS_MAIL_IDENTITY_COMMAND_CAPABILITY_ID_V1, CONTACTS_MODULE_ID_V1, CONTACTS_OWNER_ID_V1,
+    CONTACTS_MAIL_IDENTITY_COMMAND_CAPABILITY_ID_V1,
+    CONTACTS_MAIL_PROVIDER_LINK_COMMAND_CAPABILITY_ID_V1, CONTACTS_MODULE_ID_V1,
+    CONTACTS_OWNER_ID_V1, bind_mail_address_book_provider_link_consume_request_v1,
+    bind_mail_address_book_provider_link_contract_reference_v1,
+    bind_mail_address_book_provider_link_rejected_contract_reference_v1,
+    bind_mail_address_book_provider_link_rejected_publish_request_v1,
     contact_upsert_rejected_contract_reference_v1, contact_upsert_rejected_publish_request_v1,
     contact_upserted_contract_reference_v1, contact_upserted_publish_request_v1,
+    mail_address_book_provider_link_bound_contract_reference_v1,
+    mail_address_book_provider_link_bound_publish_request_v1,
     upsert_contact_command_consume_request_v1, upsert_contact_command_contract_reference_v1,
 };
 use hermes_contacts_mail_sync_source_api::{
@@ -32,6 +39,10 @@ const CONTACTS_UPSERTED_PUBLISH_CAPABILITY_ID_V1: &str =
     "contacts.mail-identity.upserted.publisher.v1";
 const CONTACTS_REJECTED_PUBLISH_CAPABILITY_ID_V1: &str =
     "contacts.mail-identity.rejected.publisher.v1";
+const CONTACTS_PROVIDER_LINK_BOUND_PUBLISH_CAPABILITY_ID_V1: &str =
+    "contacts.mail-provider-link.bound.publisher.v1";
+const CONTACTS_PROVIDER_LINK_REJECTED_PUBLISH_CAPABILITY_ID_V1: &str =
+    "contacts.mail-provider-link.rejected.publisher.v1";
 const STORAGE_CONNECTION_BUDGET_V1: u32 = 4;
 
 #[must_use]
@@ -82,6 +93,24 @@ pub fn contacts_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
                 ProvidedSurfaceKindV1::DurablePublisher,
                 contact_upserted_contract_reference_v1(),
                 contact_upserted_publish_request_v1(),
+            ),
+            event_capability(
+                CONTACTS_PROVIDER_LINK_BOUND_PUBLISH_CAPABILITY_ID_V1,
+                ProvidedSurfaceKindV1::DurablePublisher,
+                mail_address_book_provider_link_bound_contract_reference_v1(),
+                mail_address_book_provider_link_bound_publish_request_v1(),
+            ),
+            event_capability(
+                CONTACTS_MAIL_PROVIDER_LINK_COMMAND_CAPABILITY_ID_V1,
+                ProvidedSurfaceKindV1::DurableConsumer,
+                bind_mail_address_book_provider_link_contract_reference_v1(),
+                bind_mail_address_book_provider_link_consume_request_v1(),
+            ),
+            event_capability(
+                CONTACTS_PROVIDER_LINK_REJECTED_PUBLISH_CAPABILITY_ID_V1,
+                ProvidedSurfaceKindV1::DurablePublisher,
+                bind_mail_address_book_provider_link_rejected_contract_reference_v1(),
+                bind_mail_address_book_provider_link_rejected_publish_request_v1(),
             ),
             source_blob_capability(),
             event_capability(
@@ -205,7 +234,7 @@ mod tests {
         validate_settings_schema_v1(&contacts_settings_schema_v1()).expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Domain as i32);
         assert_eq!(descriptor.owner_id, CONTACTS_OWNER_ID_V1);
-        assert_eq!(descriptor.capabilities.len(), 7);
+        assert_eq!(descriptor.capabilities.len(), 10);
         assert!(
             descriptor
                 .capabilities

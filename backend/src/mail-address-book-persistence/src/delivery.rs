@@ -602,6 +602,7 @@ mod tests {
                 provider_entry_id: "people/c1".to_owned(),
                 provider_etag: "etag-1".to_owned(),
                 applied_contact_revision: admission.expected_contact_revision,
+                provider_kind: hermes_mail_address_book_contract::wire::MailAddressBookProviderKindV1::MailAddressBookProviderKindGooglePeople as i32,
             },
             &MailAddressBookResultEnvelopeContextV1 {
                 runtime_instance_id: "mail-runtime-instance".to_owned(),

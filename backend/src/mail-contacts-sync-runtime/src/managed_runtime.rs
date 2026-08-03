@@ -1,7 +1,9 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_contacts_command_api::{
+    bind_mail_address_book_provider_link_rejected_contract_reference_v1,
     contact_upsert_rejected_contract_reference_v1, contact_upserted_contract_reference_v1,
+    mail_address_book_provider_link_bound_contract_reference_v1,
 };
 use hermes_contacts_mail_sync_source_api::{
     contact_changed_for_mail_sync_contract_reference_v1,
@@ -61,6 +63,10 @@ use crate::{
     consume_mail_address_book_entry_once_v1, consume_mail_address_book_page_completed_once_v1,
     consume_mail_address_book_page_rejected_once_v1,
     event_outbox::{MailContactsSyncRelayErrorV1, relay_mail_contacts_sync_outbox_once_v1},
+    provider_link_results::{
+        MailContactsSyncProviderLinkResultContextV1, MailContactsSyncProviderLinkResultErrorV1,
+        consume_provider_link_bound_once_v1, consume_provider_link_rejected_once_v1,
+    },
     provider_write_results::{
         MailContactsSyncProviderWriteResultContextV1, MailContactsSyncProviderWriteResultErrorV1,
         consume_mail_entry_upsert_rejected_once_v1, consume_mail_entry_upserted_once_v1,
@@ -102,6 +108,8 @@ struct MailContactsSyncSubscriptionsV1 {
     contact_source_prepared: RuntimeSubscribePermitV1,
     contact_source_rejected: RuntimeSubscribePermitV1,
     contact_upserted: RuntimeSubscribePermitV1,
+    provider_link_bound: RuntimeSubscribePermitV1,
+    provider_link_rejected: RuntimeSubscribePermitV1,
     mail_entry_observed: RuntimeSubscribePermitV1,
     mail_entry_upsert_rejected: RuntimeSubscribePermitV1,
     mail_entry_upserted: RuntimeSubscribePermitV1,
@@ -356,6 +364,40 @@ impl MailContactsSyncManagedRuntimeV1 {
         .map_err(source_result_error)
     }
 
+    pub async fn consume_provider_link_bound_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_provider_link_bound_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.provider_link_bound,
+            &MailContactsSyncProviderLinkResultContextV1 {
+                logical_owner_id: &self.admission.logical_owner_id,
+                now_unix_millis: now,
+            },
+        )
+        .await
+        .map_err(provider_link_result_error)
+    }
+
+    pub async fn consume_provider_link_rejected_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_provider_link_rejected_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.provider_link_rejected,
+            &MailContactsSyncProviderLinkResultContextV1 {
+                logical_owner_id: &self.admission.logical_owner_id,
+                now_unix_millis: now,
+            },
+        )
+        .await
+        .map_err(provider_link_result_error)
+    }
+
     pub async fn consume_contact_source_rejected_once(
         &self,
         now: i64,
@@ -553,6 +595,8 @@ impl MailContactsSyncManagedRuntimeV1 {
     ) -> MailContactsSyncProviderWriteResultContextV1<'_> {
         MailContactsSyncProviderWriteResultContextV1 {
             logical_owner_id: &self.admission.logical_owner_id,
+            runtime_instance_id: &self.admission.runtime_instance_id,
+            runtime_generation: self.admission.runtime_generation,
             now_unix_millis: now,
         }
     }
@@ -653,7 +697,7 @@ async fn dispatch_client(
 fn bind_subscriptions(
     permits: Vec<RuntimeSubscribePermitV1>,
 ) -> Result<MailContactsSyncSubscriptionsV1, MailContactsSyncManagedRuntimeErrorV1> {
-    if permits.len() != 11 {
+    if permits.len() != 13 {
         return Err(MailContactsSyncManagedRuntimeErrorV1::Admission);
     }
     Ok(MailContactsSyncSubscriptionsV1 {
@@ -671,6 +715,14 @@ fn bind_subscriptions(
             &contact_mail_sync_source_rejected_contract_reference_v1(),
         )?,
         contact_upserted: exact_permit(&permits, &contact_upserted_contract_reference_v1())?,
+        provider_link_bound: exact_permit(
+            &permits,
+            &mail_address_book_provider_link_bound_contract_reference_v1(),
+        )?,
+        provider_link_rejected: exact_permit(
+            &permits,
+            &bind_mail_address_book_provider_link_rejected_contract_reference_v1(),
+        )?,
         mail_entry_observed: exact_permit(
             &permits,
             &MailAddressBookContractV1::EntryObserved.reference(),
@@ -964,6 +1016,23 @@ fn provider_write_result_error(
             MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
         }
         MailContactsSyncProviderWriteResultErrorV1::EventUnavailable => {
+            MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn provider_link_result_error(
+    error: MailContactsSyncProviderLinkResultErrorV1,
+) -> MailContactsSyncManagedRuntimeErrorV1 {
+    match error {
+        MailContactsSyncProviderLinkResultErrorV1::InvalidEnvelope
+        | MailContactsSyncProviderLinkResultErrorV1::InvalidPayload => {
+            MailContactsSyncManagedRuntimeErrorV1::EventContract
+        }
+        MailContactsSyncProviderLinkResultErrorV1::Persistence(error) => {
+            MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
+        }
+        MailContactsSyncProviderLinkResultErrorV1::EventUnavailable => {
             MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
         }
     }

@@ -4,7 +4,10 @@ mod envelope;
 
 pub use envelope::{
     ContactsCommandEnvelopeBuildErrorV1, ContactsCommandEnvelopeContextV1,
+    build_bind_mail_address_book_provider_link_command_outbox_record_v1,
+    build_bind_mail_address_book_provider_link_rejected_outbox_record_v1,
     build_contact_upsert_rejected_outbox_record_v1, build_contact_upserted_outbox_record_v1,
+    build_mail_address_book_provider_link_bound_outbox_record_v1,
     build_upsert_contact_command_outbox_record_v1,
 };
 
@@ -18,12 +21,20 @@ pub const CONTACTS_OWNER_ID_V1: &str = "contacts";
 pub const CONTACTS_MODULE_ID_V1: &str = "hermes-contacts-runtime";
 pub const CONTACTS_MAIL_IDENTITY_COMMAND_CAPABILITY_ID_V1: &str =
     "contacts.mail-identity.command.v1";
+pub const CONTACTS_MAIL_PROVIDER_LINK_COMMAND_CAPABILITY_ID_V1: &str =
+    "contacts.mail-provider-link.command.v1";
 pub const UPSERT_CONTACT_FROM_MAIL_ENTRY_CONTRACT_NAME_V1: &str =
     "contacts_upsert_from_mail_address_book_entry";
 pub const CONTACT_UPSERTED_FROM_MAIL_ENTRY_CONTRACT_NAME_V1: &str =
     "contacts_upserted_from_mail_address_book_entry";
 pub const CONTACT_UPSERT_FROM_MAIL_ENTRY_REJECTED_CONTRACT_NAME_V1: &str =
     "contacts_upsert_from_mail_address_book_entry_rejected";
+pub const BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_CONTRACT_NAME_V1: &str =
+    "contacts_bind_mail_address_book_provider_link";
+pub const MAIL_ADDRESS_BOOK_PROVIDER_LINK_BOUND_CONTRACT_NAME_V1: &str =
+    "contacts_mail_address_book_provider_link_bound";
+pub const BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_REJECTED_CONTRACT_NAME_V1: &str =
+    "contacts_bind_mail_address_book_provider_link_rejected";
 pub const CONTACTS_COMMAND_CONTRACT_MAJOR_V1: u32 = 1;
 pub const CONTACTS_COMMAND_CONTRACT_REVISION_V1: u32 = 1;
 pub const CONTACTS_MAIL_IDENTITY_MAX_IN_FLIGHT_V1: u32 = 32;
@@ -50,6 +61,22 @@ pub fn contact_upserted_contract_reference_v1() -> ContractReferenceV1 {
 #[must_use]
 pub fn contact_upsert_rejected_contract_reference_v1() -> ContractReferenceV1 {
     contract_reference(CONTACT_UPSERT_FROM_MAIL_ENTRY_REJECTED_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn bind_mail_address_book_provider_link_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn mail_address_book_provider_link_bound_contract_reference_v1() -> ContractReferenceV1 {
+    contract_reference(MAIL_ADDRESS_BOOK_PROVIDER_LINK_BOUND_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn bind_mail_address_book_provider_link_rejected_contract_reference_v1() -> ContractReferenceV1
+{
+    contract_reference(BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_REJECTED_CONTRACT_NAME_V1)
 }
 
 #[must_use]
@@ -89,6 +116,66 @@ pub fn contact_upsert_rejected_publish_request_v1() -> CapabilityRequestV1 {
         contact_upsert_rejected_contract_reference_v1(),
         EventRouteDirectionV1::Publish,
         EventSubscriptionRequirementV1::Unspecified,
+    )
+}
+
+#[must_use]
+pub fn bind_mail_address_book_provider_link_consume_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Command,
+        bind_mail_address_book_provider_link_contract_reference_v1(),
+        EventRouteDirectionV1::Consume,
+        EventSubscriptionRequirementV1::Required,
+    )
+}
+
+#[must_use]
+pub fn bind_mail_address_book_provider_link_publish_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Command,
+        bind_mail_address_book_provider_link_contract_reference_v1(),
+        EventRouteDirectionV1::Publish,
+        EventSubscriptionRequirementV1::Unspecified,
+    )
+}
+
+#[must_use]
+pub fn mail_address_book_provider_link_bound_publish_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Result,
+        mail_address_book_provider_link_bound_contract_reference_v1(),
+        EventRouteDirectionV1::Publish,
+        EventSubscriptionRequirementV1::Unspecified,
+    )
+}
+
+#[must_use]
+pub fn mail_address_book_provider_link_bound_consume_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Result,
+        mail_address_book_provider_link_bound_contract_reference_v1(),
+        EventRouteDirectionV1::Consume,
+        EventSubscriptionRequirementV1::Required,
+    )
+}
+
+#[must_use]
+pub fn bind_mail_address_book_provider_link_rejected_publish_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Result,
+        bind_mail_address_book_provider_link_rejected_contract_reference_v1(),
+        EventRouteDirectionV1::Publish,
+        EventSubscriptionRequirementV1::Unspecified,
+    )
+}
+
+#[must_use]
+pub fn bind_mail_address_book_provider_link_rejected_consume_request_v1() -> CapabilityRequestV1 {
+    event_route(
+        DurableEnvelopeKindV1::Result,
+        bind_mail_address_book_provider_link_rejected_contract_reference_v1(),
+        EventRouteDirectionV1::Consume,
+        EventSubscriptionRequirementV1::Required,
     )
 }
 

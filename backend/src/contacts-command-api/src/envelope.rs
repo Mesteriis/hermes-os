@@ -12,14 +12,19 @@ use prost_types::Timestamp;
 use sha2::{Digest, Sha256};
 
 use crate::{
+    BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_CONTRACT_NAME_V1,
+    BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_REJECTED_CONTRACT_NAME_V1,
     CONTACT_UPSERT_FROM_MAIL_ENTRY_REJECTED_CONTRACT_NAME_V1,
     CONTACT_UPSERTED_FROM_MAIL_ENTRY_CONTRACT_NAME_V1, CONTACTS_COMMAND_CONTRACT_MAJOR_V1,
     CONTACTS_COMMAND_CONTRACT_REVISION_V1, CONTACTS_COMMAND_SCHEMA_SHA256_V1,
-    CONTACTS_MAIL_IDENTITY_COMMAND_CAPABILITY_ID_V1, CONTACTS_OWNER_ID_V1,
+    CONTACTS_MAIL_IDENTITY_COMMAND_CAPABILITY_ID_V1,
+    CONTACTS_MAIL_PROVIDER_LINK_COMMAND_CAPABILITY_ID_V1, CONTACTS_OWNER_ID_V1,
+    MAIL_ADDRESS_BOOK_PROVIDER_LINK_BOUND_CONTRACT_NAME_V1,
     UPSERT_CONTACT_FROM_MAIL_ENTRY_CONTRACT_NAME_V1,
     wire::{
+        BindMailAddressBookProviderLinkCommandV1, BindMailAddressBookProviderLinkRejectedV1,
         ContactUpsertFromMailAddressBookEntryRejectedV1, ContactUpsertedFromMailAddressBookEntryV1,
-        UpsertContactFromMailAddressBookEntryCommandV1,
+        MailAddressBookProviderLinkBoundV1, UpsertContactFromMailAddressBookEntryCommandV1,
     },
 };
 
@@ -155,6 +160,99 @@ pub fn build_contact_upsert_rejected_outbox_record_v1(
     )
 }
 
+pub fn build_bind_mail_address_book_provider_link_command_outbox_record_v1(
+    causation_message_id: [u8; 16],
+    payload: BindMailAddressBookProviderLinkCommandV1,
+    deadline_unix_seconds: i64,
+    context: &ContactsCommandEnvelopeContextV1,
+) -> Result<OutboxRecordV1, ContactsCommandEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    let command_id = validate_bind_provider_link_command(&payload)?;
+    id16(&causation_message_id)?;
+    if deadline_unix_seconds <= context.recorded_at_unix_seconds {
+        return Err(ContactsCommandEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    let contact_id = id16(&payload.contact_id)?;
+    build(
+        EnvelopeBuildV1 {
+            message_id: command_id,
+            partition_key: contact_id,
+            causation_message_id: causation_message_id.to_vec(),
+            contract_name: BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_CONTRACT_NAME_V1,
+            semantics: Semantics::Command(CommandMetadataV1 {
+                command_id: command_id.to_vec(),
+                target_capability: CONTACTS_MAIL_PROVIDER_LINK_COMMAND_CAPABILITY_ID_V1.to_owned(),
+                idempotency_key: digest16(
+                    b"contacts-mail-provider-link-idempotency-v1",
+                    &contact_id,
+                    payload.source_account_id.as_bytes(),
+                )
+                .to_vec(),
+                deadline: Some(Timestamp {
+                    seconds: deadline_unix_seconds,
+                    nanos: 0,
+                }),
+                logical_attempt: 1,
+            }),
+            payload: payload.encode_to_vec(),
+        },
+        context,
+    )
+}
+
+pub fn build_mail_address_book_provider_link_bound_outbox_record_v1(
+    command_message_id: [u8; 16],
+    payload: MailAddressBookProviderLinkBoundV1,
+    context: &ContactsCommandEnvelopeContextV1,
+) -> Result<OutboxRecordV1, ContactsCommandEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    let command_id = id16(&payload.command_id)?;
+    let contact_id = id16(&payload.contact_id)?;
+    if !nonzero(&command_message_id)
+        || payload.contact_revision == 0
+        || !valid_owner(&payload.logical_owner_id)
+    {
+        return Err(ContactsCommandEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    result(
+        ResultBuildV1 {
+            label: b"contacts-mail-provider-link-bound-v1",
+            command_message_id,
+            command_id,
+            partition_key: contact_id,
+            contract_name: MAIL_ADDRESS_BOOK_PROVIDER_LINK_BOUND_CONTRACT_NAME_V1,
+            outcome: ResultOutcomeV1::Succeeded,
+            payload: payload.encode_to_vec(),
+        },
+        context,
+    )
+}
+
+pub fn build_bind_mail_address_book_provider_link_rejected_outbox_record_v1(
+    command_message_id: [u8; 16],
+    payload: BindMailAddressBookProviderLinkRejectedV1,
+    context: &ContactsCommandEnvelopeContextV1,
+) -> Result<OutboxRecordV1, ContactsCommandEnvelopeBuildErrorV1> {
+    validate_context(context)?;
+    let command_id = id16(&payload.command_id)?;
+    if !nonzero(&command_message_id) || payload.code == 0 || !valid_owner(&payload.logical_owner_id)
+    {
+        return Err(ContactsCommandEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    result(
+        ResultBuildV1 {
+            label: b"contacts-mail-provider-link-rejected-v1",
+            command_message_id,
+            command_id,
+            partition_key: command_id,
+            contract_name: BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_REJECTED_CONTRACT_NAME_V1,
+            outcome: ResultOutcomeV1::Rejected,
+            payload: payload.encode_to_vec(),
+        },
+        context,
+    )
+}
+
 fn result(
     input: ResultBuildV1<'_>,
     context: &ContactsCommandEnvelopeContextV1,
@@ -265,6 +363,26 @@ fn validate_command(
     Ok(command_id)
 }
 
+fn validate_bind_provider_link_command(
+    payload: &BindMailAddressBookProviderLinkCommandV1,
+) -> Result<[u8; 16], ContactsCommandEnvelopeBuildErrorV1> {
+    let command_id = id16(&payload.command_id)?;
+    id16(&payload.contact_id)?;
+    if !valid_owner(&payload.logical_owner_id)
+        || payload.expected_contact_revision == 0
+        || !valid_bounded(&payload.source_account_id, 256, false)
+        || !matches!(payload.provider_kind, 1 | 2)
+        || !valid_bounded(&payload.provider_entry_id, 512, false)
+        || payload
+            .provider_etag
+            .as_deref()
+            .is_some_and(|value| !valid_bounded(value, 512, false))
+    {
+        return Err(ContactsCommandEnvelopeBuildErrorV1::InvalidPayload);
+    }
+    Ok(command_id)
+}
+
 fn validate_context(
     context: &ContactsCommandEnvelopeContextV1,
 ) -> Result<(), ContactsCommandEnvelopeBuildErrorV1> {
@@ -342,7 +460,8 @@ fn outbox_error(_: OutboxRecordError) -> ContactsCommandEnvelopeBuildErrorV1 {
 mod tests {
     use super::*;
     use crate::wire::{
-        MailAddressBookProviderKindV1, UpsertContactFromMailAddressBookEntryCommandV1,
+        BindMailAddressBookProviderLinkCommandV1, MailAddressBookProviderKindV1,
+        UpsertContactFromMailAddressBookEntryCommandV1,
     };
 
     fn context() -> ContactsCommandEnvelopeContextV1 {
@@ -395,6 +514,59 @@ mod tests {
         invalid.phone_numbers.clear();
         assert_eq!(
             build_upsert_contact_command_outbox_record_v1(invalid, 1_800_000_030, &context()),
+            Err(ContactsCommandEnvelopeBuildErrorV1::InvalidPayload)
+        );
+    }
+
+    #[test]
+    fn provider_link_command_is_contacts_owned_and_contact_partitioned() {
+        let payload = BindMailAddressBookProviderLinkCommandV1 {
+            command_id: vec![3; 16],
+            logical_owner_id: "owner-1".to_owned(),
+            contact_id: vec![4; 16],
+            expected_contact_revision: 8,
+            source_account_id: "mail-account-1".to_owned(),
+            provider_kind: MailAddressBookProviderKindV1::MailAddressBookProviderKindGmail as i32,
+            provider_entry_id: "people/created-contact-1".to_owned(),
+            provider_etag: Some("created-etag-1".to_owned()),
+        };
+        let record = build_bind_mail_address_book_provider_link_command_outbox_record_v1(
+            [2; 16],
+            payload,
+            1_800_000_030,
+            &context(),
+        )
+        .expect("provider link command");
+        let envelope = DurableEnvelopeV1::decode(record.exact_bytes()).expect("decode");
+        let contract = envelope.contract.expect("contract");
+        assert_eq!(contract.owner, CONTACTS_OWNER_ID_V1);
+        assert_eq!(
+            contract.name,
+            BIND_MAIL_ADDRESS_BOOK_PROVIDER_LINK_CONTRACT_NAME_V1
+        );
+        assert_eq!(envelope.partition_key, vec![4; 16]);
+    }
+
+    #[test]
+    fn provider_link_command_rejects_unspecified_provider() {
+        let payload = BindMailAddressBookProviderLinkCommandV1 {
+            command_id: vec![3; 16],
+            logical_owner_id: "owner-1".to_owned(),
+            contact_id: vec![4; 16],
+            expected_contact_revision: 8,
+            source_account_id: "mail-account-1".to_owned(),
+            provider_kind: MailAddressBookProviderKindV1::MailAddressBookProviderKindUnspecified
+                as i32,
+            provider_entry_id: "people/created-contact-1".to_owned(),
+            provider_etag: None,
+        };
+        assert_eq!(
+            build_bind_mail_address_book_provider_link_command_outbox_record_v1(
+                [2; 16],
+                payload,
+                1_800_000_030,
+                &context(),
+            ),
             Err(ContactsCommandEnvelopeBuildErrorV1::InvalidPayload)
         );
     }

@@ -1,7 +1,8 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_contacts_command_api::{
-    CONTACTS_OWNER_ID_V1, upsert_contact_command_contract_reference_v1,
+    CONTACTS_OWNER_ID_V1, bind_mail_address_book_provider_link_contract_reference_v1,
+    upsert_contact_command_contract_reference_v1,
 };
 use hermes_contacts_mail_sync_source_api::contact_mail_sync_source_prepare_contract_reference_v1;
 use hermes_contacts_persistence::{ContactsPersistenceErrorV1, ContactsPersistenceV1};
@@ -29,6 +30,10 @@ use crate::{
         ContactsCommandErrorV1, ContactsCommandRuntimeContextV1, consume_contacts_command_once_v1,
     },
     event_outbox::{ContactsEventRelayErrorV1, relay_contacts_outbox_once_v1},
+    provider_link::{
+        ContactsProviderLinkErrorV1, ContactsProviderLinkRuntimeContextV1,
+        consume_bind_mail_provider_link_once_v1,
+    },
     source::{
         ContactsSourceErrorV1, ContactsSourceRuntimeContextV1,
         consume_contact_mail_sync_source_once_v1,
@@ -61,6 +66,7 @@ pub struct ContactsManagedRuntimeV1 {
     event_connection: RuntimeJetStreamConnection,
     event_publish_permit: RuntimePublishPermitV1,
     command_subscription: RuntimeSubscribePermitV1,
+    provider_link_subscription: RuntimeSubscribePermitV1,
     source_subscription: RuntimeSubscribePermitV1,
 }
 
@@ -156,6 +162,10 @@ impl ContactsManagedRuntimeV1 {
             &mut subscriptions,
             &upsert_contact_command_contract_reference_v1(),
         )?;
+        let provider_link_subscription = take_exact_subscription(
+            &mut subscriptions,
+            &bind_mail_address_book_provider_link_contract_reference_v1(),
+        )?;
         let source_subscription = take_exact_subscription(
             &mut subscriptions,
             &contact_mail_sync_source_prepare_contract_reference_v1(),
@@ -182,6 +192,7 @@ impl ContactsManagedRuntimeV1 {
             event_connection,
             event_publish_permit,
             command_subscription,
+            provider_link_subscription,
             source_subscription,
         })
     }
@@ -238,6 +249,25 @@ impl ContactsManagedRuntimeV1 {
         )
         .await
         .map_err(event_relay_error)
+    }
+
+    pub async fn consume_provider_link_once(
+        &self,
+        now_unix_millis: i64,
+    ) -> Result<bool, ContactsManagedRuntimeErrorV1> {
+        consume_bind_mail_provider_link_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.provider_link_subscription,
+            &ContactsProviderLinkRuntimeContextV1 {
+                logical_owner_id: &self.admission.logical_human_owner_id,
+                runtime_instance_id: &self.admission.runtime_instance_id,
+                runtime_generation: self.admission.runtime_generation,
+                now_unix_millis,
+            },
+        )
+        .await
+        .map_err(provider_link_error)
     }
 
     pub async fn consume_source_once(
@@ -440,6 +470,21 @@ fn source_error(error: ContactsSourceErrorV1) -> ContactsManagedRuntimeErrorV1 {
             ContactsManagedRuntimeErrorV1::Persistence(error)
         }
         ContactsSourceErrorV1::EventUnavailable | ContactsSourceErrorV1::BlobUnavailable => {
+            ContactsManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn provider_link_error(error: ContactsProviderLinkErrorV1) -> ContactsManagedRuntimeErrorV1 {
+    match error {
+        ContactsProviderLinkErrorV1::InvalidEnvelope
+        | ContactsProviderLinkErrorV1::InvalidPayload => {
+            ContactsManagedRuntimeErrorV1::EventContract
+        }
+        ContactsProviderLinkErrorV1::Persistence(error) => {
+            ContactsManagedRuntimeErrorV1::Persistence(error)
+        }
+        ContactsProviderLinkErrorV1::EventUnavailable => {
             ContactsManagedRuntimeErrorV1::EventUnavailable
         }
     }

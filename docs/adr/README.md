@@ -738,3 +738,7 @@ ADR-0382 фиксирует Mail-owned address-book execution: Google People и 
 являются отдельными provider units, provider выбирается только typed Mail
 Settings, OAuth/CardDAV credentials имеют разные exact purposes, а durable
 inbox/result outbox остаются в отдельной Mail persistence unit.
+ADR-0383 закрывает обязательную обратную reconciliation после Mail provider
+write: returned provider entry ID/ETag закрепляются только Contacts-owned exact
+command через NATS, workflow ждёт Contacts terminal result, а Mail, Kernel и
+Gateway не получают права писать canonical Contacts link.

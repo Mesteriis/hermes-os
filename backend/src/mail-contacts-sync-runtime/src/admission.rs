@@ -1,5 +1,11 @@
 use hermes_contacts_command_api::{
+    bind_mail_address_book_provider_link_contract_reference_v1,
+    bind_mail_address_book_provider_link_publish_request_v1,
+    bind_mail_address_book_provider_link_rejected_consume_request_v1,
+    bind_mail_address_book_provider_link_rejected_contract_reference_v1,
     contact_upsert_rejected_contract_reference_v1, contact_upserted_contract_reference_v1,
+    mail_address_book_provider_link_bound_consume_request_v1,
+    mail_address_book_provider_link_bound_contract_reference_v1,
     upsert_contact_command_contract_reference_v1, upsert_contact_command_publish_request_v1,
 };
 use hermes_contacts_mail_sync_source_api::{
@@ -82,6 +88,24 @@ fn capabilities() -> Vec<CapabilityDescriptorV1> {
             ProvidedSurfaceKindV1::DurablePublisher,
             upsert_contact_command_contract_reference_v1(),
             upsert_contact_command_publish_request_v1(),
+        ),
+        event_capability(
+            "mail_contacts_sync.contacts.provider-link-bound.v1",
+            ProvidedSurfaceKindV1::DurableConsumer,
+            mail_address_book_provider_link_bound_contract_reference_v1(),
+            mail_address_book_provider_link_bound_consume_request_v1(),
+        ),
+        event_capability(
+            "mail_contacts_sync.contacts.provider-link-command.v1",
+            ProvidedSurfaceKindV1::DurablePublisher,
+            bind_mail_address_book_provider_link_contract_reference_v1(),
+            bind_mail_address_book_provider_link_publish_request_v1(),
+        ),
+        event_capability(
+            "mail_contacts_sync.contacts.provider-link-rejected.v1",
+            ProvidedSurfaceKindV1::DurableConsumer,
+            bind_mail_address_book_provider_link_rejected_contract_reference_v1(),
+            bind_mail_address_book_provider_link_rejected_consume_request_v1(),
         ),
         event_capability(
             "mail_contacts_sync.contacts.rejected.v1",
@@ -366,7 +390,20 @@ mod tests {
         validate_settings_schema_v1(&mail_contacts_sync_settings_schema_v1()).expect("settings");
         assert_eq!(descriptor.module_kind, ModuleKindV1::Workflow as i32);
         assert_eq!(descriptor.owner_id, MAIL_CONTACTS_SYNC_OWNER_ID_V1);
-        assert_eq!(descriptor.capabilities.len(), 18);
+        assert_eq!(descriptor.capabilities.len(), 21);
+        for capability_id in [
+            "mail_contacts_sync.contacts.provider-link-bound.v1",
+            "mail_contacts_sync.contacts.provider-link-command.v1",
+            "mail_contacts_sync.contacts.provider-link-rejected.v1",
+        ] {
+            assert!(
+                descriptor
+                    .capabilities
+                    .iter()
+                    .any(|capability| capability.capability_id == capability_id),
+                "missing capability {capability_id}"
+            );
+        }
         assert!(descriptor.capabilities.iter().all(|capability| {
             capability.capability_id.starts_with("mail_contacts_sync.")
                 || capability.capability_id == MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1

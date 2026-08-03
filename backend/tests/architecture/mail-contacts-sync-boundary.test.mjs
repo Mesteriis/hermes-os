@@ -18,6 +18,10 @@ const files = {
     'docs/adr/ADR-0382-mail-address-book-provider-execution-and-authority.md',
     PROJECT_ROOT,
   ),
+  providerLinkAdr: new URL(
+    'docs/adr/ADR-0383-contacts-provider-link-reconciliation-after-mail-write.md',
+    PROJECT_ROOT,
+  ),
   inventory: new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
   policy: new URL('architecture/policy.json', BACKEND_ROOT),
   apiManifest: new URL('src/contacts-command-api/Cargo.toml', BACKEND_ROOT),
@@ -51,10 +55,19 @@ const files = {
     'src/contacts-persistence/migrations/0002_mail_sync_source.sql',
     BACKEND_ROOT,
   ),
+  providerLinkMigration: new URL(
+    'src/contacts-persistence/migrations/0003_mail_provider_link_command.sql',
+    BACKEND_ROOT,
+  ),
+  providerLinkPersistence: new URL(
+    'src/contacts-persistence/src/provider_link.rs',
+    BACKEND_ROOT,
+  ),
   runtimeManifest: new URL('src/contacts-runtime/Cargo.toml', BACKEND_ROOT),
   runtimeAdmission: new URL('src/contacts-runtime/src/admission.rs', BACKEND_ROOT),
   runtimeCommand: new URL('src/contacts-runtime/src/command.rs', BACKEND_ROOT),
   runtimeSource: new URL('src/contacts-runtime/src/source.rs', BACKEND_ROOT),
+  runtimeProviderLink: new URL('src/contacts-runtime/src/provider_link.rs', BACKEND_ROOT),
   managedRuntime: new URL('src/contacts-runtime/src/managed_runtime.rs', BACKEND_ROOT),
   assemblyManifest: new URL('src/contacts-assembly/Cargo.toml', BACKEND_ROOT),
   assembly: new URL('src/contacts-assembly/src/lib.rs', BACKEND_ROOT),
@@ -215,6 +228,10 @@ const files = {
     'src/mail-contacts-sync-persistence/migrations/0005_reverse_origin_run.sql',
     BACKEND_ROOT,
   ),
+  workflowProviderLinkMigration: new URL(
+    'src/mail-contacts-sync-persistence/migrations/0006_provider_link_reconciliation.sql',
+    BACKEND_ROOT,
+  ),
   workflowScheduledCompletionPersistence: new URL(
     'src/mail-contacts-sync-persistence/src/scheduled_completion.rs',
     BACKEND_ROOT,
@@ -254,6 +271,10 @@ const files = {
   ),
   workflowProviderWriteResults: new URL(
     'src/mail-contacts-sync-runtime/src/provider_write_results.rs',
+    BACKEND_ROOT,
+  ),
+  workflowProviderLinkResults: new URL(
+    'src/mail-contacts-sync-runtime/src/provider_link_results.rs',
     BACKEND_ROOT,
   ),
   postgresLive: new URL(
@@ -321,6 +342,7 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
     reverseChange,
     sourceResults,
     providerWriteResults,
+    providerLinkResults,
   ] = await Promise.all([
     readFile(files.workflowRuntimeManifest, 'utf8'),
     readFile(files.workflowRuntimeAdmission, 'utf8'),
@@ -330,6 +352,7 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
     readFile(files.workflowReverseChange, 'utf8'),
     readFile(files.workflowSourceResults, 'utf8'),
     readFile(files.workflowProviderWriteResults, 'utf8'),
+    readFile(files.workflowProviderLinkResults, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -355,8 +378,12 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
   assert.match(providerWriteResults, /consume_mail_entry_upserted_once_v1/);
   assert.match(providerWriteResults, /complete_mail_address_book_upsert/);
   assert.match(providerWriteResults, /MailContactsSyncProviderWriteOutcomeV1::OutcomeUnknown/);
+  assert.match(providerWriteResults, /build_bind_mail_address_book_provider_link_command_outbox_record_v1/);
+  assert.match(providerLinkResults, /consume_provider_link_bound_once_v1/);
+  assert.match(providerLinkResults, /consume_provider_link_rejected_once_v1/);
+  assert.match(providerLinkResults, /complete_contacts_provider_link/);
   assert.doesNotMatch(
-    `${reverseChange}\n${sourceResults}\n${providerWriteResults}`,
+    `${reverseChange}\n${sourceResults}\n${providerWriteResults}\n${providerLinkResults}`,
     /BlobDataClient|provider_kind\s*==|reqwest/,
   );
 });
@@ -718,7 +745,7 @@ test('managed bidirectional and scheduled sync cross owners only through durable
   assert.match(flow, /managed-etag-1/);
   assert.match(flow, /provider_entries_written, 1/);
   assert.match(flow, /wait_for_reverse_terminal/);
-  assert.match(flow, /provider\.accepted_people_writes\(\), 1/);
+  assert.match(flow, /provider\.accepted_people_writes\(\), 4/);
   assert.match(flow, /scheduler_launch::start_from_reservation/);
   assert.match(flow, /ScheduleTriggerV1::FixedInterval/);
   assert.match(flow, /wait_for_scheduled_run_id/);
@@ -807,6 +834,7 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
     reverseMigration,
     schedulerCompletionMigration,
     reverseOriginMigration,
+    providerLinkMigration,
     postgresLive,
   ] = await Promise.all([
     readFile(files.workflowPersistenceManifest, 'utf8'),
@@ -820,6 +848,7 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
     readFile(files.workflowReverseMigration, 'utf8'),
     readFile(files.workflowSchedulerCompletionMigration, 'utf8'),
     readFile(files.workflowReverseOriginMigration, 'utf8'),
+    readFile(files.workflowProviderLinkMigration, 'utf8'),
     readFile(files.postgresLive, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
@@ -841,7 +870,8 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
   assert.match(reversePersistence, /accept_contact_changed_for_mail_sync/);
   assert.match(reversePersistence, /complete_contact_mail_sync_source/);
   assert.match(reversePersistence, /complete_mail_address_book_upsert/);
-  assert.match(reversePersistence, /apply_provider_result_to_run/);
+  assert.match(reversePersistence, /complete_contacts_provider_link/);
+  assert.match(reversePersistence, /apply_provider_outcome_to_run/);
   assert.match(reversePersistence, /MailContactsSyncTransitionV1::ProviderWriteApplied/);
   for (const table of [
     'mail_contacts_sync_runs',
@@ -858,14 +888,16 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
   assert.match(reverseMigration, /mail_contacts_sync_reverse_operations/);
   assert.match(reverseOriginMigration, /origin_run_id/);
   assert.match(reverseOriginMigration, /mail_contacts_sync_reverse_origin_run_idx/);
+  assert.match(providerLinkMigration, /mail_contacts_sync_provider_link_reconciliation/);
+  assert.match(providerLinkMigration, /contacts_command_message_id/);
   assert.match(schedulerCompletionMigration, /mail_contacts_sync_scheduler_runs/);
   assert.match(postgresLive, /reverse_provider_result_is_atomic_restart_safe_and_replayable/);
   assert.match(postgresLive, /commit provider result after restart/);
-  assert.match(postgresLive, /terminalize late provider result without rewriting completed run/);
+  assert.match(postgresLive, /terminalize late provider link without rewriting completed run/);
   assert.match(postgresLive, /MailContactsSyncStateV1::WritingProvider/);
   assert.match(postgresLive, /MailContactsSyncStateV1::Completed/);
   assert.doesNotMatch(
-    `${migration}\n${orchestrationMigration}\n${reverseMigration}\n${schedulerCompletionMigration}\n${reverseOriginMigration}`,
+    `${migration}\n${orchestrationMigration}\n${reverseMigration}\n${schedulerCompletionMigration}\n${reverseOriginMigration}\n${providerLinkMigration}`,
     /hermes_data\.(?:contacts_state|contacts_provider_links|mail_accounts|communications_)/,
   );
   assert.doesNotMatch(
@@ -876,6 +908,7 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
 
 test('staged Contacts slice keeps six functional build units isolated', async () => {
   const [
+    providerLinkAdr,
     sourceAdr,
     apiManifest,
     sourceApiManifest,
@@ -893,16 +926,20 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
     persistence,
     migration,
     sourceMigration,
+    providerLinkMigration,
+    providerLinkPersistence,
     runtimeManifest,
     runtimeAdmission,
     runtimeCommand,
     runtimeSource,
+    runtimeProviderLink,
     managedRuntime,
     assemblyManifest,
     assembly,
     developmentRelease,
   ] =
     await Promise.all([
+      readFile(files.providerLinkAdr, 'utf8'),
       readFile(files.sourceAdr, 'utf8'),
       readFile(files.apiManifest, 'utf8'),
       readFile(files.sourceApiManifest, 'utf8'),
@@ -920,10 +957,13 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
       readFile(files.persistence, 'utf8'),
       readFile(files.migration, 'utf8'),
       readFile(files.sourceMigration, 'utf8'),
+      readFile(files.providerLinkMigration, 'utf8'),
+      readFile(files.providerLinkPersistence, 'utf8'),
       readFile(files.runtimeManifest, 'utf8'),
       readFile(files.runtimeAdmission, 'utf8'),
       readFile(files.runtimeCommand, 'utf8'),
       readFile(files.runtimeSource, 'utf8'),
+      readFile(files.runtimeProviderLink, 'utf8'),
       readFile(files.managedRuntime, 'utf8'),
       readFile(files.assemblyManifest, 'utf8'),
       readFile(files.assembly, 'utf8'),
@@ -938,6 +978,9 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
   assert.match(proto, /message UpsertContactFromMailAddressBookEntryCommandV1/);
   assert.match(proto, /message ContactUpsertedFromMailAddressBookEntryV1/);
   assert.match(proto, /message ContactUpsertFromMailAddressBookEntryRejectedV1/);
+  assert.match(proto, /message BindMailAddressBookProviderLinkCommandV1/);
+  assert.match(proto, /message MailAddressBookProviderLinkBoundV1/);
+  assert.match(proto, /message BindMailAddressBookProviderLinkRejectedV1/);
   assert.doesNotMatch(proto, /map<|bytes payload|token|password|cookie/);
   assert.match(api, /contacts\.mail-identity\.command\.v1/);
   assert.match(envelope, /validate_envelope_v1/);
@@ -976,6 +1019,9 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
   assert.match(migration, /contacts_provider_links/);
   assert.match(migration, /contacts_outbox/);
   assert.match(sourceMigration, /contacts_mail_sync_source_inbox/);
+  assert.match(providerLinkMigration, /contacts_mail_provider_link_inbox/);
+  assert.match(providerLinkPersistence, /bind_mail_provider_link/);
+  assert.match(providerLinkPersistence, /ON CONFLICT[\s\S]*DO UPDATE SET provider_etag/);
   assert.doesNotMatch(migration, /mail_credential|communications_|tasks_|review_/);
   for (const manifest of [runtimeManifest, assemblyManifest]) {
     assert.match(manifest, /role = "domain"/);
@@ -1000,6 +1046,10 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
   assert.match(runtimeSource, /request_managed_blob_session_v2/);
   assert.match(runtimeSource, /BlobDataOperationV1::BlobDataOperationWriteV1/);
   assert.match(runtimeSource, /CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1/);
+  assert.match(runtimeProviderLink, /consume_bind_mail_provider_link_once_v1/);
+  assert.match(runtimeProviderLink, /bind_mail_provider_link/);
+  assert.match(runtimeProviderLink, /delivery\.acknowledge\(\)\.await/);
+  assert.match(providerLinkAdr, /event-only/i);
   assert.match(managedRuntime, /StorageVaultLeaseAdapterV1/);
   assert.match(managedRuntime, /connect_runtime_with_jwt/);
   assert.match(managedRuntime, /signal_ready/);

@@ -65,11 +65,29 @@ pub struct CompleteMailAddressBookUpsertV1 {
     pub operation_id: [u8; 16],
     pub mail_command_message_id: [u8; 16],
     pub outcome: MailContactsSyncProviderWriteOutcomeV1,
+    pub contacts_link_command: Option<OutboxEnvelopeV1>,
     pub occurred_at_unix_millis: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CompleteMailAddressBookUpsertOutcomeV1 {
+    Applied,
+    Duplicate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompleteContactsProviderLinkV1 {
+    pub logical_owner_id: String,
+    pub result_message_id: [u8; 16],
+    pub result_envelope_sha256: [u8; 32],
+    pub operation_id: [u8; 16],
+    pub contacts_command_message_id: [u8; 16],
+    pub reject_code: Option<MailContactsSyncRejectCodeV1>,
+    pub occurred_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompleteContactsProviderLinkOutcomeV1 {
     Applied,
     Duplicate,
 }
@@ -116,6 +134,28 @@ pub(crate) fn validate_changed_input(
     Ok(())
 }
 
+pub(crate) fn validate_contacts_link_completion(
+    input: &CompleteContactsProviderLinkV1,
+) -> Result<(), MailContactsSyncPersistenceErrorV1> {
+    if !crate::model::valid_identity(&input.logical_owner_id)
+        || input.result_message_id.iter().all(|byte| *byte == 0)
+        || input.result_envelope_sha256.iter().all(|byte| *byte == 0)
+        || input.operation_id.iter().all(|byte| *byte == 0)
+        || input
+            .contacts_command_message_id
+            .iter()
+            .all(|byte| *byte == 0)
+        || input.occurred_at_unix_millis <= 0
+        || matches!(
+            input.reject_code,
+            Some(MailContactsSyncRejectCodeV1::OutcomeUnknown)
+        )
+    {
+        return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_source_completion(
     input: &CompleteContactMailSyncSourceV1,
 ) -> Result<(), MailContactsSyncPersistenceErrorV1> {
@@ -145,6 +185,13 @@ pub(crate) fn validate_mail_completion(
         || input.occurred_at_unix_millis <= 0
         || matches!(
             input.outcome,
+            MailContactsSyncProviderWriteOutcomeV1::Succeeded
+        ) != input.contacts_link_command.is_some()
+        || input.contacts_link_command.as_ref().is_some_and(|command| {
+            !crate::model::valid_envelope(command) || command.message_id == input.result_message_id
+        })
+        || matches!(
+            input.outcome,
             MailContactsSyncProviderWriteOutcomeV1::Rejected(
                 MailContactsSyncRejectCodeV1::OutcomeUnknown
             )
@@ -168,6 +215,7 @@ mod tests {
             operation_id: [3; 16],
             mail_command_message_id: [4; 16],
             outcome: MailContactsSyncProviderWriteOutcomeV1::OutcomeUnknown,
+            contacts_link_command: None,
             occurred_at_unix_millis: 1_800_000_000_000,
         };
         assert_eq!(validate_mail_completion(&completion), Ok(()));

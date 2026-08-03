@@ -36,6 +36,32 @@ message ContactUpsertFromMailAddressBookEntryRejectedV1 {
   string logical_owner_id = 3;
 }
 
+// Exact Contacts-owned reconciliation after a successful Mail provider write.
+// Presentation fields and provider authentication material are deliberately absent.
+message BindMailAddressBookProviderLinkCommandV1 {
+  bytes command_id = 1;
+  string logical_owner_id = 2;
+  bytes contact_id = 3;
+  uint64 expected_contact_revision = 4;
+  string source_account_id = 5;
+  MailAddressBookProviderKindV1 provider_kind = 6;
+  string provider_entry_id = 7;
+  optional string provider_etag = 8;
+}
+
+message MailAddressBookProviderLinkBoundV1 {
+  bytes command_id = 1;
+  bytes contact_id = 2;
+  uint64 contact_revision = 3;
+  string logical_owner_id = 4;
+}
+
+message BindMailAddressBookProviderLinkRejectedV1 {
+  bytes command_id = 1;
+  BindProviderLinkRejectCodeV1 code = 2;
+  string logical_owner_id = 3;
+}
+
 enum MailAddressBookProviderKindV1 {
   MAIL_ADDRESS_BOOK_PROVIDER_KIND_UNSPECIFIED = 0;
   MAIL_ADDRESS_BOOK_PROVIDER_KIND_GMAIL = 1;
@@ -56,4 +82,13 @@ enum ContactUpsertRejectCodeV1 {
   CONTACT_UPSERT_REJECT_CODE_PROVIDER_LINK_CONFLICT = 3;
   CONTACT_UPSERT_REJECT_CODE_STALE_SOURCE = 4;
   CONTACT_UPSERT_REJECT_CODE_POLICY = 5;
+}
+
+enum BindProviderLinkRejectCodeV1 {
+  BIND_PROVIDER_LINK_REJECT_CODE_UNSPECIFIED = 0;
+  BIND_PROVIDER_LINK_REJECT_CODE_INVALID_REQUEST = 1;
+  BIND_PROVIDER_LINK_REJECT_CODE_CONTACT_MISSING = 2;
+  BIND_PROVIDER_LINK_REJECT_CODE_STALE_CONTACT_REVISION = 3;
+  BIND_PROVIDER_LINK_REJECT_CODE_PROVIDER_LINK_CONFLICT = 4;
+  BIND_PROVIDER_LINK_REJECT_CODE_POLICY = 5;
 }

@@ -1,7 +1,11 @@
 //! Live signed Mail -> workflow -> Contacts event-only conformance.
 
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use hermes_contacts_mail_sync_source_api::{
+    ContactsMailSyncSourceEnvelopeContextV1, build_contact_changed_for_mail_sync_outbox_record_v1,
+    wire::ContactChangedForMailSyncV1,
+};
 use hermes_mail_contacts_sync_api::{
     MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1, MAIL_CONTACTS_SYNC_MODULE_ID_V1,
     MAIL_CONTACTS_SYNC_OWNER_ID_V1, mail_contacts_sync_query_contract_v1,
@@ -212,6 +216,53 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     assert_eq!(completed.rejected_entries, 0);
     assert_eq!(provider.accepted_people_reads(), 1);
 
+    let local_contact_id = [0xa1; 16];
+    runtime.block_on(queue_local_contact_change(
+        local_contact_id,
+        1,
+        "Local Create Contact",
+        contacts.runtime_generation,
+    ));
+    assert!(wait_for_people_write(&provider, 2));
+    let create = provider.last_people_write();
+    assert_eq!(create.method, "POST");
+    assert!(create.path.starts_with("/v1/people:createContact?"));
+    assert_eq!(
+        create.body["names"][0]["displayName"],
+        "Local Create Contact"
+    );
+    runtime.block_on(wait_for_reverse_contact_terminal(local_contact_id, 1, 3));
+    runtime.block_on(assert_provider_link(
+        local_contact_id,
+        "people/created-contact-1",
+        "created-etag-1",
+    ));
+
+    runtime.block_on(queue_local_contact_change(
+        local_contact_id,
+        2,
+        "Local Updated Contact",
+        contacts.runtime_generation,
+    ));
+    assert!(wait_for_people_write(&provider, 3));
+    let update = provider.last_people_write();
+    assert_eq!(update.method, "PATCH");
+    assert!(
+        update
+            .path
+            .starts_with("/v1/people/created-contact-1:updateContact?")
+    );
+    assert_eq!(
+        update.body["metadata"]["sources"][0]["etag"],
+        "created-etag-1"
+    );
+    runtime.block_on(wait_for_reverse_contact_terminal(local_contact_id, 2, 3));
+    runtime.block_on(assert_provider_link(
+        local_contact_id,
+        "people/created-contact-1",
+        "created-etag-2",
+    ));
+
     upsert_mail_contacts_sync_schedule(&supervisor);
     let scheduled_run_id = runtime.block_on(wait_for_scheduled_run_id());
     let scheduled = wait_for_completed(
@@ -222,9 +273,10 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     );
     assert_eq!(scheduled.account_id, MAIL_ACCOUNT_ID);
     assert_eq!(scheduled.provider_entries_seen, 1);
-    assert_eq!(scheduled.contacts_unchanged, 1);
+    assert_eq!(scheduled.contacts_updated, 1);
+    assert_eq!(scheduled.contacts_unchanged, 0);
     assert_eq!(provider.accepted_people_reads(), 2);
-    assert_eq!(provider.accepted_people_writes(), 1);
+    assert_eq!(provider.accepted_people_writes(), 4);
     runtime.block_on(wait_for_scheduler_terminal(&scheduled_run_id));
 
     runtime.block_on(async {
@@ -244,7 +296,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         .fetch_one(&pool)
         .await
         .expect("count synced Contacts inbox");
-        assert_eq!(contacts_count, 1);
+        assert_eq!(contacts_count, 2);
         assert_eq!(completed_inbox, 2);
         pool.close().await;
     });
@@ -255,7 +307,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         wait_for_completed(&store, &supervisor, &sync.registration_id, &accepted.run_id);
     assert_eq!(duplicate_completed.state_revision, completed.state_revision);
     assert_eq!(provider.accepted_people_reads(), 2);
-    assert_eq!(provider.accepted_people_writes(), 1);
+    assert_eq!(provider.accepted_people_writes(), 4);
 
     supervisor.shutdown().expect("stop managed processes");
     shutdown.store(true, Ordering::SeqCst);
@@ -275,6 +327,15 @@ fn wait_for_people_write(provider: &MailGmailFixture, expected: usize) -> bool {
         std::thread::sleep(Duration::from_millis(25));
     }
     true
+}
+
+fn wall_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("wall clock")
+        .as_secs()
+        .try_into()
+        .expect("wall seconds")
 }
 
 async fn reverse_diagnostic() -> Vec<(i16, bool, bool, Option<i16>, Option<i16>)> {
@@ -329,6 +390,142 @@ async fn wait_for_reverse_terminal(
         );
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
+}
+
+async fn queue_local_contact_change(
+    contact_id: [u8; 16],
+    revision: u64,
+    display_name: &str,
+    runtime_generation: u64,
+) {
+    let pool = contacts_admin_pool_v1().await;
+    let now_seconds = wall_seconds();
+    let now_millis = now_seconds * 1_000 + i64::try_from(revision).expect("bounded revision");
+    if revision == 1 {
+        sqlx::query(
+            "INSERT INTO hermes_data.contacts_state (logical_owner_id, contact_id, display_name, \
+             contact_revision, created_at_unix_seconds, created_at_nanos, updated_at_unix_seconds, \
+             updated_at_nanos) VALUES ($1,$2,$3,$4,$5,0,$5,0)",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .bind(contact_id.as_slice())
+        .bind(display_name)
+        .bind(i64::try_from(revision).expect("bounded revision"))
+        .bind(now_seconds)
+        .execute(&pool)
+        .await
+        .expect("seed local Contact state");
+        sqlx::query(
+            "INSERT INTO hermes_data.contacts_email_identities \
+             (logical_owner_id, normalized_email, contact_id) VALUES ($1,$2,$3)",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .bind("local-create@example.test")
+        .bind(contact_id.as_slice())
+        .execute(&pool)
+        .await
+        .expect("seed local Contact email");
+        sqlx::query(
+            "INSERT INTO hermes_data.contacts_phone_identities \
+             (logical_owner_id, normalized_phone, contact_id) VALUES ($1,$2,$3)",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .bind("+12025550199")
+        .bind(contact_id.as_slice())
+        .execute(&pool)
+        .await
+        .expect("seed local Contact phone");
+    } else {
+        let updated = sqlx::query(
+            "UPDATE hermes_data.contacts_state SET display_name=$3, contact_revision=$4, \
+             updated_at_unix_seconds=$5 WHERE logical_owner_id=$1 AND contact_id=$2 AND \
+             contact_revision=$4-1",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .bind(contact_id.as_slice())
+        .bind(display_name)
+        .bind(i64::try_from(revision).expect("bounded revision"))
+        .bind(now_seconds)
+        .execute(&pool)
+        .await
+        .expect("update local Contact state");
+        assert_eq!(updated.rows_affected(), 1);
+    }
+    let event = build_contact_changed_for_mail_sync_outbox_record_v1(
+        ContactChangedForMailSyncV1 {
+            contact_id: contact_id.to_vec(),
+            contact_revision: revision,
+            logical_owner_id: MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1.to_owned(),
+        },
+        &ContactsMailSyncSourceEnvelopeContextV1 {
+            module_id: "hermes-contacts-runtime".to_owned(),
+            runtime_instance_id: "managed-contacts-create-source".to_owned(),
+            runtime_generation,
+            recorded_at_unix_seconds: now_seconds,
+            recorded_at_nanos: i32::try_from(revision).expect("bounded revision"),
+        },
+    )
+    .expect("build local Contact changed event");
+    sqlx::query(
+        "INSERT INTO hermes_data.contacts_outbox (logical_owner_id, message_id, envelope_sha256, \
+         envelope_bytes, created_at_unix_millis) VALUES ($1,$2,$3,$4,$5)",
+    )
+    .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+    .bind(event.message_id().as_slice())
+    .bind(event.envelope_sha256().as_slice())
+    .bind(event.exact_bytes())
+    .bind(now_millis)
+    .execute(&pool)
+    .await
+    .expect("queue local Contact changed event");
+    pool.close().await;
+}
+
+async fn wait_for_reverse_contact_terminal(
+    contact_id: [u8; 16],
+    revision: u64,
+    expected_state: i16,
+) {
+    let pool = contacts_admin_pool_v1().await;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let state = sqlx::query_scalar::<_, i16>(
+            "SELECT state FROM hermes_data.mail_contacts_sync_reverse_operations WHERE \
+             logical_owner_id=$1 AND contact_id=$2 AND contact_revision=$3",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .bind(contact_id.as_slice())
+        .bind(i64::try_from(revision).expect("bounded revision"))
+        .fetch_optional(&pool)
+        .await
+        .expect("read local reverse operation");
+        if state == Some(expected_state) {
+            pool.close().await;
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "local reverse operation state: {state:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+async fn assert_provider_link(contact_id: [u8; 16], entry_id: &str, etag: &str) {
+    let pool = contacts_admin_pool_v1().await;
+    let actual = sqlx::query_as::<_, (String, Option<String>)>(
+        "SELECT provider_entry_id, provider_etag FROM hermes_data.contacts_provider_links WHERE \
+         logical_owner_id=$1 AND contact_id=$2 AND source_account_id=$3",
+    )
+    .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+    .bind(contact_id.as_slice())
+    .bind(MAIL_ACCOUNT_ID)
+    .fetch_one(&pool)
+    .await
+    .expect("read reconciled Contacts provider link");
+    assert_eq!(actual.0, entry_id);
+    assert_eq!(actual.1.as_deref(), Some(etag));
+    pool.close().await;
 }
 
 fn upsert_mail_contacts_sync_schedule(supervisor: &ManagedRuntimeSupervisor) {

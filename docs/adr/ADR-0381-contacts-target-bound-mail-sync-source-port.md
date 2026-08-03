@@ -11,7 +11,9 @@ Mail runtime теперь принимает target-bound custody, читает 
 terminal result из owner-local outbox. Mail-owned target receipt persistence и
 disposable PostgreSQL restart replay реализованы. Managed Blob/Google update,
 missing-write-scope и iCloud read-only provider evidence также реализованы;
-Google create, revoke/outage recovery и browser conformance ещё не реализованы,
+Google create и последующая Contacts-owned provider-link reconciliation теперь
+доказаны signed managed `POST -> bind link -> PATCH` flow. Revoke/outage
+recovery и browser conformance ещё не реализованы,
 поэтому `mail_contacts_sync_v1` остаётся `planned`.
 
 Уточняет:
@@ -20,7 +22,8 @@ Google create, revoke/outage recovery и browser conformance ещё не реа�
 - [ADR-0204](ADR-0204-bundled-integration-plugins-and-provider-neutral-context-boundary.md);
 - [ADR-0220](ADR-0220-canonical-durable-envelope-and-contract-evolution.md);
 - [ADR-0257](ADR-0257-event-backed-blob-custody-transfer-for-canonical-evidence.md);
-- [ADR-0379](ADR-0379-mail-address-book-sync-and-contacts-command-boundary.md).
+- [ADR-0379](ADR-0379-mail-address-book-sync-and-contacts-command-boundary.md);
+- [ADR-0383](ADR-0383-contacts-provider-link-reconciliation-after-mail-write.md).
 
 ## Контекст
 
