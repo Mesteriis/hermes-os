@@ -38,8 +38,17 @@ acceptance и owner-local scheduler ledger, запускает тот же event
 публикует terminal receipt только после фактического `Completed/Rejected`, а не
 после постановки первого provider command. Повторный provider snapshot без
 изменения provider material остаётся canonical `unchanged`, несмотря на новое
-время наблюдения. Reverse Blob/provider write, revoke/outage и browser
-conformance ещё не доказаны,
+время наблюдения. Managed reverse Google update теперь также доказан тем же
+signed ensemble: Contacts публикует caused-by change event, workflow связывает
+его с исходным bidirectional run и запрашивает target-bound private snapshot,
+Mail получает Blob custody только по своей exact capability, выполняет Google
+People `PATCH` с provider ETag и возвращает terminal result через NATS. Workflow
+атомарно завершает owner-local reverse operation и исходный run; duplicate
+provider result не увеличивает counters и не создаёт повторный realtime
+transition. Disposable PostgreSQL отдельно доказывает completion после нового
+connection, exact replay и конфликт hash. Google create, explicit iCloud и
+missing-write-scope negatives, revoke/outage recovery и browser conformance ещё
+не доказаны,
 поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
 Contacts command открыт только после exact six-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
@@ -278,8 +287,12 @@ disposable contour поднимает exact signed Mail, Contacts и
 Start/Get route и fixed-interval scheduled dispatch, проверяет provider
 observation → Contacts command/result через NATS, owner-local Contacts state,
 idempotent manual replay без повторного provider request и Scheduler terminal
-receipt только после terminal workflow state. Этот evidence не считается
-доказательством reverse, outage/revoke или browser частей gate.
+receipt только после terminal workflow state. Тот же contour доказывает
+authorized Google bidirectional update: target-bound Blob transfer, private
+snapshot read, ETag-fenced provider `PATCH`, terminal Mail result и completion
+исходного workflow run без direct owner calls или cross-owner SQL. Этот evidence
+не считается доказательством Google create, explicit negative, outage/revoke или
+browser частей gate.
 
 ## Последствия
 

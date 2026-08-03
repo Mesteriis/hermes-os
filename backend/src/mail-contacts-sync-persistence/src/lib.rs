@@ -30,12 +30,15 @@ pub use repository::MailContactsSyncPersistenceV1;
 pub use reverse_model::{
     AcceptContactChangedForMailSyncOutcomeV1, AcceptContactChangedForMailSyncV1,
     CompleteContactMailSyncSourceOutcomeV1, CompleteContactMailSyncSourceV1,
-    MailContactsSyncReverseOperationSeedV1, MailContactsSyncReverseOperationV1,
+    CompleteMailAddressBookUpsertOutcomeV1, CompleteMailAddressBookUpsertV1,
+    MailContactsSyncProviderWriteOutcomeV1, MailContactsSyncReverseOperationSeedV1,
+    MailContactsSyncReverseOperationV1,
 };
 pub use schema::{
-    MAIL_CONTACTS_SYNC_ORCHESTRATION_SCHEMA_V1, MAIL_CONTACTS_SYNC_REVERSE_SCHEMA_V1,
-    MAIL_CONTACTS_SYNC_SCHEDULER_COMPLETION_SCHEMA_V1, MAIL_CONTACTS_SYNC_SCHEMA_V1,
-    MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1, mail_contacts_sync_storage_bundle_v1,
+    MAIL_CONTACTS_SYNC_ORCHESTRATION_SCHEMA_V1, MAIL_CONTACTS_SYNC_REVERSE_ORIGIN_RUN_SCHEMA_V1,
+    MAIL_CONTACTS_SYNC_REVERSE_SCHEMA_V1, MAIL_CONTACTS_SYNC_SCHEDULER_COMPLETION_SCHEMA_V1,
+    MAIL_CONTACTS_SYNC_SCHEMA_V1, MAIL_CONTACTS_SYNC_STORAGE_BUNDLE_REVISION_V1,
+    mail_contacts_sync_storage_bundle_v1,
 };
 
 pub const PACKAGE: &str = "hermes-mail-contacts-sync-persistence";

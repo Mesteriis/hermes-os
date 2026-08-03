@@ -15,7 +15,8 @@ use hermes_contacts_core::{
     ContactUpsertOutcomeV1,
 };
 use hermes_contacts_mail_sync_source_api::{
-    ContactsMailSyncSourceEnvelopeContextV1, build_contact_changed_for_mail_sync_outbox_record_v1,
+    ContactsMailSyncSourceEnvelopeContextV1,
+    build_contact_changed_for_mail_sync_outbox_record_caused_by_v1,
     wire::ContactChangedForMailSyncV1,
 };
 use hermes_contacts_persistence::{
@@ -113,15 +114,17 @@ pub(crate) async fn consume_contacts_command_once_v1(
                     let changed_event = if outcome == ContactUpsertOutcomeV1::Unchanged {
                         None
                     } else {
-                        let changed = build_contact_changed_for_mail_sync_outbox_record_v1(
-                            ContactChangedForMailSyncV1 {
-                                contact_id: contact.contact_id.to_vec(),
-                                contact_revision: contact.contact_revision,
-                                logical_owner_id: identity.logical_owner_id.clone(),
-                            },
-                            &source_envelope_context(runtime),
-                        )
-                        .map_err(|_| ContactsPersistenceErrorV1::InvalidInput)?;
+                        let changed =
+                            build_contact_changed_for_mail_sync_outbox_record_caused_by_v1(
+                                identity.command_message_id,
+                                ContactChangedForMailSyncV1 {
+                                    contact_id: contact.contact_id.to_vec(),
+                                    contact_revision: contact.contact_revision,
+                                    logical_owner_id: identity.logical_owner_id.clone(),
+                                },
+                                &source_envelope_context(runtime),
+                            )
+                            .map_err(|_| ContactsPersistenceErrorV1::InvalidInput)?;
                         Some(outbox_record(&changed))
                     };
                     Ok(ContactMutationOutboxV1 {

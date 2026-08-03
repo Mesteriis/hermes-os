@@ -194,7 +194,7 @@ test('communication explanation agreement separates workflow domain engine and p
   assert.match(adr, /Состояние реализации: implemented/);
   assert.doesNotMatch(adr, /generic `execute\(any\)` разрешён|Communications owns explanation/i);
 
-  assert.equal(policy.implementation.currentSlice, 'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1');
+  assert.equal(policy.implementation.currentSlice, 'mail_contacts_sync_managed_reverse_google_update_v1');
   assert.match(workspace, /"src\/communication-explanation-api"/);
   assert.match(workspace, /"src\/communication-explanation-core"/);
   assert.match(workspace, /"src\/communication-explanation-persistence"/);

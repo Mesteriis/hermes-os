@@ -45,6 +45,23 @@ pub fn build_contact_changed_for_mail_sync_outbox_record_v1(
     payload: ContactChangedForMailSyncV1,
     context: &ContactsMailSyncSourceEnvelopeContextV1,
 ) -> Result<OutboxRecordV1, ContactsMailSyncSourceEnvelopeBuildErrorV1> {
+    build_contact_changed(payload, None, context)
+}
+
+pub fn build_contact_changed_for_mail_sync_outbox_record_caused_by_v1(
+    command_message_id: [u8; 16],
+    payload: ContactChangedForMailSyncV1,
+    context: &ContactsMailSyncSourceEnvelopeContextV1,
+) -> Result<OutboxRecordV1, ContactsMailSyncSourceEnvelopeBuildErrorV1> {
+    id16(&command_message_id)?;
+    build_contact_changed(payload, Some(command_message_id), context)
+}
+
+fn build_contact_changed(
+    payload: ContactChangedForMailSyncV1,
+    causation_message_id: Option<[u8; 16]>,
+    context: &ContactsMailSyncSourceEnvelopeContextV1,
+) -> Result<OutboxRecordV1, ContactsMailSyncSourceEnvelopeBuildErrorV1> {
     validate_context(context)?;
     let contact_id = id16(&payload.contact_id)?;
     if payload.contact_revision == 0 || !valid_owner(&payload.logical_owner_id) {
@@ -58,7 +75,7 @@ pub fn build_contact_changed_for_mail_sync_outbox_record_v1(
     build(
         message_id,
         contact_id,
-        Vec::new(),
+        causation_message_id.map_or_else(Vec::new, |value| value.to_vec()),
         CONTACT_CHANGED_FOR_MAIL_SYNC_CONTRACT_NAME_V1,
         Semantics::Event(EventMetadataV1 {
             occurred_at: Some(timestamp(context)),

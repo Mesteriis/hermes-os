@@ -4045,6 +4045,7 @@ dependencies = [
  "hermes-communications-sender-insights-api",
  "hermes-communications-task-source-api",
  "hermes-contacts-command-api",
+ "hermes-contacts-mail-sync-source-api",
  "hermes-contacts-persistence",
  "hermes-contacts-runtime",
  "hermes-events-jetstream",

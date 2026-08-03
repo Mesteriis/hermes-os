@@ -273,7 +273,7 @@ fn mail_contacts_sync_settings_snapshot_v1() -> SettingsSnapshotV1 {
             ),
             settings_entry(
                 "mail_contacts_sync.direction",
-                Value::EnumValue("provider_to_contacts".to_owned()),
+                Value::EnumValue("bidirectional".to_owned()),
             ),
             settings_entry("mail_contacts_sync.enabled", Value::BooleanValue(true)),
             settings_entry(
@@ -282,7 +282,7 @@ fn mail_contacts_sync_settings_snapshot_v1() -> SettingsSnapshotV1 {
             ),
             settings_entry(
                 "mail_contacts_sync.remote_write_enabled",
-                Value::BooleanValue(false),
+                Value::BooleanValue(true),
             ),
         ],
     }

@@ -14,11 +14,10 @@ use hermes_mail_address_book_persistence::{
     MailAddressBookPersistenceV1, PendingMailAddressBookUpsertV1,
 };
 use hermes_mail_api::{MailAddressBookProviderV1, MailInboundTransportV1};
-use hermes_mail_google_people::{
-    GooglePeopleAdapterErrorV1, GooglePeopleClientV1, GooglePeopleUpsertV1,
-};
+use hermes_mail_google_people::{GooglePeopleAdapterErrorV1, GooglePeopleUpsertV1};
 
 use crate::{
+    address_book_provider::google_people_client_v1,
     address_book_snapshot::{
         MailAddressBookSnapshotErrorV1, read_contact_snapshot_v1,
         transfer_contact_snapshot_custody_v1,
@@ -117,6 +116,15 @@ pub async fn process_next_mail_address_book_upsert_v1(
         )
         .await;
     }
+    let Some(endpoint) = runtime.address_book.google_people_endpoint.clone() else {
+        return reject(
+            runtime,
+            &job,
+            MailAddressBookRejectCodeV1::MailAddressBookRejectCodeAccountUnavailable,
+            now_unix_seconds,
+        )
+        .await;
+    };
     let binding = runtime
         .durable
         .gmail_oauth_credential_binding(&job.admission.account_id)
@@ -223,7 +231,7 @@ pub async fn process_next_mail_address_book_upsert_v1(
         email_addresses: source.email_addresses,
         phone_numbers: source.phone_numbers,
     };
-    let result = match GooglePeopleClientV1::new() {
+    let result = match google_people_client_v1(&endpoint) {
         Ok(client) => client.upsert_contact(access_token, &request).await,
         Err(error) => Err(error),
     };

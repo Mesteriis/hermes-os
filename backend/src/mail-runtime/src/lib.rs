@@ -4,6 +4,7 @@ pub mod account_lifecycle;
 pub mod address_book_consumer;
 pub mod address_book_fetch_worker;
 pub mod address_book_outbox;
+mod address_book_provider;
 pub mod address_book_snapshot;
 pub mod address_book_worker;
 pub mod admission;

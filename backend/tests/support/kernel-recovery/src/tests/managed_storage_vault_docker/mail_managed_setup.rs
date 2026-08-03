@@ -2,6 +2,7 @@
 
 use super::*;
 
+use hermes_contacts_mail_sync_source_api::CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1;
 use hermes_mail_address_book_contract::MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1;
 use hermes_mail_api::{
     MailCredentialPurpose,
@@ -489,6 +490,7 @@ fn admit_mail_runtime_profile(
                 .to_owned(),
         ],
         MailAdmissionProfileV1::GooglePeopleAddressBook => vec![
+            CONTACT_MAIL_SYNC_SOURCE_BLOB_TARGET_CAPABILITY_ID_V1.to_owned(),
             MAIL_ADDRESS_BOOK_CAPABILITY_ID_V1.to_owned(),
             MAIL_GMAIL_CREDENTIALS_CAPABILITY_ID.to_owned(),
             MAIL_STORAGE_CAPABILITY_ID.to_owned(),

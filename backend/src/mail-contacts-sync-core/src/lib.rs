@@ -212,8 +212,11 @@ pub fn transition_mail_contacts_sync_v1(
             next.state = MailContactsSyncStateV1::ReconcilingOutcome;
         }
         (MailContactsSyncStateV1::ApplyingContacts, MailContactsSyncTransitionV1::Complete)
-            if direction == MailContactsSyncDirectionV1::ProviderToContacts
-                && current.continuation_cursor.is_none() =>
+            if current.continuation_cursor.is_none()
+                && (direction == MailContactsSyncDirectionV1::ProviderToContacts
+                    || direction == MailContactsSyncDirectionV1::Bidirectional
+                        && current.counters.contacts_created == 0
+                        && current.counters.contacts_updated == 0) =>
         {
             next.state = MailContactsSyncStateV1::Completed;
         }
@@ -289,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    fn bidirectional_requires_explicit_write_phase() {
+    fn bidirectional_requires_write_phase_only_when_contacts_changed() {
         let accepted = accepted_mail_contacts_sync_status_v1();
         let fetching = transition_mail_contacts_sync_v1(
             &accepted,
@@ -307,16 +310,34 @@ mod tests {
             },
         )
         .expect("page");
+        let completed = transition_mail_contacts_sync_v1(
+            &applying,
+            MailContactsSyncDirectionV1::Bidirectional,
+            MailContactsSyncTransitionV1::Complete,
+        )
+        .expect("empty bidirectional page completes without a fake write");
+        assert_eq!(completed.state, MailContactsSyncStateV1::Completed);
+        let changed = transition_mail_contacts_sync_v1(
+            &applying,
+            MailContactsSyncDirectionV1::Bidirectional,
+            MailContactsSyncTransitionV1::ContactsApplied {
+                created: 1,
+                updated: 0,
+                unchanged: 0,
+                rejected: 0,
+            },
+        )
+        .expect("changed contact");
         assert!(
             transition_mail_contacts_sync_v1(
-                &applying,
+                &changed,
                 MailContactsSyncDirectionV1::Bidirectional,
                 MailContactsSyncTransitionV1::Complete
             )
             .is_err()
         );
         let writing = transition_mail_contacts_sync_v1(
-            &applying,
+            &changed,
             MailContactsSyncDirectionV1::Bidirectional,
             MailContactsSyncTransitionV1::BeginProviderWrite,
         )

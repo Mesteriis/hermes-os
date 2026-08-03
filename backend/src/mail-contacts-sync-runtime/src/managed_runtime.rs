@@ -61,6 +61,10 @@ use crate::{
     consume_mail_address_book_entry_once_v1, consume_mail_address_book_page_completed_once_v1,
     consume_mail_address_book_page_rejected_once_v1,
     event_outbox::{MailContactsSyncRelayErrorV1, relay_mail_contacts_sync_outbox_once_v1},
+    provider_write_results::{
+        MailContactsSyncProviderWriteResultContextV1, MailContactsSyncProviderWriteResultErrorV1,
+        consume_mail_entry_upsert_rejected_once_v1, consume_mail_entry_upserted_once_v1,
+    },
     reverse_change::{
         MailContactsSyncReverseChangeContextV1, MailContactsSyncReverseChangeErrorV1,
         consume_contact_changed_once_v1,
@@ -99,8 +103,8 @@ struct MailContactsSyncSubscriptionsV1 {
     contact_source_rejected: RuntimeSubscribePermitV1,
     contact_upserted: RuntimeSubscribePermitV1,
     mail_entry_observed: RuntimeSubscribePermitV1,
-    _mail_entry_upsert_rejected: RuntimeSubscribePermitV1,
-    _mail_entry_upserted: RuntimeSubscribePermitV1,
+    mail_entry_upsert_rejected: RuntimeSubscribePermitV1,
+    mail_entry_upserted: RuntimeSubscribePermitV1,
     mail_page_completed: RuntimeSubscribePermitV1,
     mail_page_rejected: RuntimeSubscribePermitV1,
     scheduler_due: RuntimeSubscribePermitV1,
@@ -366,6 +370,34 @@ impl MailContactsSyncManagedRuntimeV1 {
         .map_err(source_result_error)
     }
 
+    pub async fn consume_mail_entry_upserted_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_mail_entry_upserted_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.mail_entry_upserted,
+            &self.provider_write_result_context(now),
+        )
+        .await
+        .map_err(provider_write_result_error)
+    }
+
+    pub async fn consume_mail_entry_upsert_rejected_once(
+        &self,
+        now: i64,
+    ) -> Result<bool, MailContactsSyncManagedRuntimeErrorV1> {
+        consume_mail_entry_upsert_rejected_once_v1(
+            &self.persistence,
+            &self.event_connection,
+            &self.subscriptions.mail_entry_upsert_rejected,
+            &self.provider_write_result_context(now),
+        )
+        .await
+        .map_err(provider_write_result_error)
+    }
+
     pub async fn consume_mail_entry_once(
         &self,
         now: i64,
@@ -515,6 +547,16 @@ impl MailContactsSyncManagedRuntimeV1 {
         }
     }
 
+    fn provider_write_result_context(
+        &self,
+        now: i64,
+    ) -> MailContactsSyncProviderWriteResultContextV1<'_> {
+        MailContactsSyncProviderWriteResultContextV1 {
+            logical_owner_id: &self.admission.logical_owner_id,
+            now_unix_millis: now,
+        }
+    }
+
     fn write_client_error(
         &mut self,
         correlation_id: [u8; 16],
@@ -633,11 +675,11 @@ fn bind_subscriptions(
             &permits,
             &MailAddressBookContractV1::EntryObserved.reference(),
         )?,
-        _mail_entry_upsert_rejected: exact_permit(
+        mail_entry_upsert_rejected: exact_permit(
             &permits,
             &MailAddressBookContractV1::EntryUpsertRejected.reference(),
         )?,
-        _mail_entry_upserted: exact_permit(
+        mail_entry_upserted: exact_permit(
             &permits,
             &MailAddressBookContractV1::EntryUpserted.reference(),
         )?,
@@ -905,6 +947,23 @@ fn scheduled_error(
             )
         }
         MailContactsSyncScheduledExecutionErrorV1::EventUnavailable => {
+            MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
+        }
+    }
+}
+
+fn provider_write_result_error(
+    error: MailContactsSyncProviderWriteResultErrorV1,
+) -> MailContactsSyncManagedRuntimeErrorV1 {
+    match error {
+        MailContactsSyncProviderWriteResultErrorV1::InvalidEnvelope
+        | MailContactsSyncProviderWriteResultErrorV1::InvalidPayload => {
+            MailContactsSyncManagedRuntimeErrorV1::EventContract
+        }
+        MailContactsSyncProviderWriteResultErrorV1::Persistence(error) => {
+            MailContactsSyncManagedRuntimeErrorV1::Persistence(error)
+        }
+        MailContactsSyncProviderWriteResultErrorV1::EventUnavailable => {
             MailContactsSyncManagedRuntimeErrorV1::EventUnavailable
         }
     }

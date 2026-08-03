@@ -120,6 +120,10 @@ const files = {
     'src/mail-runtime/src/address_book_fetch_worker.rs',
     BACKEND_ROOT,
   ),
+  mailRuntimeAddressBookProvider: new URL(
+    'src/mail-runtime/src/address_book_provider.rs',
+    BACKEND_ROOT,
+  ),
   mailRuntimeAddressBookOutbox: new URL(
     'src/mail-runtime/src/address_book_outbox.rs',
     BACKEND_ROOT,
@@ -201,6 +205,10 @@ const files = {
     'src/mail-contacts-sync-persistence/migrations/0004_scheduler_completion.sql',
     BACKEND_ROOT,
   ),
+  workflowReverseOriginMigration: new URL(
+    'src/mail-contacts-sync-persistence/migrations/0005_reverse_origin_run.sql',
+    BACKEND_ROOT,
+  ),
   workflowScheduledCompletionPersistence: new URL(
     'src/mail-contacts-sync-persistence/src/scheduled_completion.rs',
     BACKEND_ROOT,
@@ -238,6 +246,14 @@ const files = {
     'src/mail-contacts-sync-runtime/src/source_results.rs',
     BACKEND_ROOT,
   ),
+  workflowProviderWriteResults: new URL(
+    'src/mail-contacts-sync-runtime/src/provider_write_results.rs',
+    BACKEND_ROOT,
+  ),
+  postgresLive: new URL(
+    'tests/support/mail-contacts-sync/tests/postgres_live.rs',
+    BACKEND_ROOT,
+  ),
 };
 
 test('mail contacts sync agreement keeps integration workflow and domain separate', async () => {
@@ -273,7 +289,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_reverse_google_update_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -290,7 +306,16 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
 });
 
 test('managed sync runtime uses staged settings and exact event-only owner contracts', async () => {
-  const [manifest, admission, runtime, main, scheduler, reverseChange, sourceResults] = await Promise.all([
+  const [
+    manifest,
+    admission,
+    runtime,
+    main,
+    scheduler,
+    reverseChange,
+    sourceResults,
+    providerWriteResults,
+  ] = await Promise.all([
     readFile(files.workflowRuntimeManifest, 'utf8'),
     readFile(files.workflowRuntimeAdmission, 'utf8'),
     readFile(files.workflowManagedRuntime, 'utf8'),
@@ -298,6 +323,7 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
     readFile(files.workflowScheduler, 'utf8'),
     readFile(files.workflowReverseChange, 'utf8'),
     readFile(files.workflowSourceResults, 'utf8'),
+    readFile(files.workflowProviderWriteResults, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -320,7 +346,13 @@ test('managed sync runtime uses staged settings and exact event-only owner contr
   assert.match(reverseChange, /remote_write_enabled/);
   assert.match(sourceResults, /consume_source_prepared_once_v1/);
   assert.match(sourceResults, /build_upsert_mail_address_book_entry_command_v1/);
-  assert.doesNotMatch(`${reverseChange}\n${sourceResults}`, /BlobDataClient|provider_kind\s*==|reqwest/);
+  assert.match(providerWriteResults, /consume_mail_entry_upserted_once_v1/);
+  assert.match(providerWriteResults, /complete_mail_address_book_upsert/);
+  assert.match(providerWriteResults, /MailContactsSyncProviderWriteOutcomeV1::OutcomeUnknown/);
+  assert.doesNotMatch(
+    `${reverseChange}\n${sourceResults}\n${providerWriteResults}`,
+    /BlobDataClient|provider_kind\s*==|reqwest/,
+  );
 });
 
 test('mail contacts sync assembly is a distinct unsigned workflow build unit', async () => {
@@ -498,6 +530,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
     consumer,
     snapshot,
     worker,
+    provider,
     outbox,
     managed,
     main,
@@ -508,6 +541,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
     readFile(files.mailRuntimeAddressBookConsumer, 'utf8'),
     readFile(files.mailRuntimeAddressBookSnapshot, 'utf8'),
     readFile(files.mailRuntimeAddressBookWorker, 'utf8'),
+    readFile(files.mailRuntimeAddressBookProvider, 'utf8'),
     readFile(files.mailRuntimeAddressBookOutbox, 'utf8'),
     readFile(files.mailRuntimeManaged, 'utf8'),
     readFile(files.mailRuntimeMain, 'utf8'),
@@ -534,13 +568,15 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(snapshot, /read_contact_snapshot_v1/);
   assert.match(snapshot, /ContactMailSyncSourceContentV1::decode/);
   assert.match(snapshot, /Sha256::digest/);
-  assert.match(worker, /MailAddressBookProviderV1::GooglePeople|GooglePeopleClientV1/);
+  assert.match(worker, /MailAddressBookProviderV1::GooglePeople|google_people_client_v1/);
   assert.match(worker, /MailAddressBookProviderV1::IcloudCardDav/);
   assert.match(worker, /MailAddressBookRejectCodeReadOnlyProvider/);
   assert.match(worker, /contacts_write_authorized/);
   assert.match(worker, /mark_dispatch_started/);
   assert.match(worker, /record_target_snapshot_receipt/);
   assert.match(worker, /MailAddressBookRejectCodeOutcomeUnknown/);
+  assert.match(provider, /GooglePeopleClientV1::for_conformance_endpoint/);
+  assert.match(provider, /GooglePeopleClientV1::new/);
   assert.doesNotMatch(`${consumer}\n${snapshot}\n${worker}`, /SELECT\s|INSERT\s|UPDATE\s|DELETE\s/i);
   assert.match(outbox, /publish_exact/);
   assert.match(outbox, /mark_result_published/);
@@ -548,7 +584,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_reverse_google_update_v1',
   );
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(
@@ -558,9 +594,10 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
 });
 
 test('Mail runtime paginates provider address books behind typed event-only commands', async () => {
-  const [consumer, worker, outbox, managed, main, admission] = await Promise.all([
+  const [consumer, worker, provider, outbox, managed, main, admission] = await Promise.all([
     readFile(files.mailRuntimeAddressBookConsumer, 'utf8'),
     readFile(files.mailRuntimeAddressBookFetchWorker, 'utf8'),
+    readFile(files.mailRuntimeAddressBookProvider, 'utf8'),
     readFile(files.mailRuntimeAddressBookOutbox, 'utf8'),
     readFile(files.mailRuntimeManaged, 'utf8'),
     readFile(files.mailRuntimeMain, 'utf8'),
@@ -568,8 +605,10 @@ test('Mail runtime paginates provider address books behind typed event-only comm
   ]);
   assert.match(consumer, /consume_next_mail_address_book_fetch_v1/);
   assert.match(consumer, /accept_fetch_command/);
-  assert.match(worker, /GooglePeopleClientV1/);
-  assert.match(worker, /CardDavClientV1/);
+  assert.match(worker, /google_people_client_v1/);
+  assert.match(worker, /carddav_client_v1/);
+  assert.match(provider, /GooglePeopleClientV1/);
+  assert.match(provider, /CardDavClientV1/);
   assert.match(worker, /complete_fetch_command/);
   assert.match(worker, /GOOGLE_CURSOR_PREFIX/);
   assert.match(worker, /CARDDAV_CURSOR_PREFIX/);
@@ -601,8 +640,8 @@ test('managed Mail provider conformance keeps endpoints credentials and evidence
   assert.match(api, /valid_carddav_endpoint_v1/);
   assert.match(settings, /mail\.address_book\.google_people_host/);
   assert.match(settings, /mail\.address_book\.carddav_host/);
-  assert.match(worker, /google_people_client\(endpoint\)/);
-  assert.match(worker, /carddav_client\(endpoint\)/);
+  assert.match(worker, /google_people_client_v1\(endpoint\)/);
+  assert.match(worker, /carddav_client_v1\(endpoint\)/);
   assert.match(admission, /provider_credential_request_v1\("mail_icloud_carddav_password"\)/);
   assert.match(setup, /GooglePeopleAddressBook/);
   assert.match(setup, /CardDavAddressBook/);
@@ -616,7 +655,7 @@ test('managed Mail provider conformance keeps endpoints credentials and evidence
   assert.doesNotMatch(`${worker}\n${setup}`, /hermes_contacts_(?:runtime|persistence)/);
 });
 
-test('managed manual and scheduled provider-to-Contacts sync cross owners only through durable events', async () => {
+test('managed bidirectional and scheduled sync cross owners only through durable events', async () => {
   const [
     setup,
     flow,
@@ -650,6 +689,14 @@ test('managed manual and scheduled provider-to-Contacts sync cross owners only t
   assert.match(flow, /wait_for_completed/);
   assert.match(flow, /contacts_created, 1/);
   assert.match(flow, /provider\.accepted_people_reads\(\), 1/);
+  assert.match(flow, /blob_launch::start_from_kernel/);
+  assert.match(flow, /wait_for_people_write/);
+  assert.match(flow, /write\.method, "PATCH"/);
+  assert.match(flow, /managed-contact-1:updateContact/);
+  assert.match(flow, /managed-etag-1/);
+  assert.match(flow, /provider_entries_written, 1/);
+  assert.match(flow, /wait_for_reverse_terminal/);
+  assert.match(flow, /provider\.accepted_people_writes\(\), 1/);
   assert.match(flow, /scheduler_launch::start_from_reservation/);
   assert.match(flow, /ScheduleTriggerV1::FixedInterval/);
   assert.match(flow, /wait_for_scheduled_run_id/);
@@ -737,6 +784,8 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
     orchestrationMigration,
     reverseMigration,
     schedulerCompletionMigration,
+    reverseOriginMigration,
+    postgresLive,
   ] = await Promise.all([
     readFile(files.workflowPersistenceManifest, 'utf8'),
     readFile(files.workflowPersistence, 'utf8'),
@@ -748,6 +797,8 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
     readFile(files.workflowOrchestrationMigration, 'utf8'),
     readFile(files.workflowReverseMigration, 'utf8'),
     readFile(files.workflowSchedulerCompletionMigration, 'utf8'),
+    readFile(files.workflowReverseOriginMigration, 'utf8'),
+    readFile(files.postgresLive, 'utf8'),
   ]);
   assert.match(manifest, /role = "workflow"/);
   assert.match(manifest, /owner = "mail_contacts_sync"/);
@@ -767,6 +818,9 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
   assert.match(orchestration, /account_pending_outcomes/);
   assert.match(reversePersistence, /accept_contact_changed_for_mail_sync/);
   assert.match(reversePersistence, /complete_contact_mail_sync_source/);
+  assert.match(reversePersistence, /complete_mail_address_book_upsert/);
+  assert.match(reversePersistence, /apply_provider_result_to_run/);
+  assert.match(reversePersistence, /MailContactsSyncTransitionV1::ProviderWriteApplied/);
   for (const table of [
     'mail_contacts_sync_runs',
     'mail_contacts_sync_inbox',
@@ -780,9 +834,16 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
   assert.match(orchestrationMigration, /outcome_accounted/);
   assert.match(reverseMigration, /mail_contacts_sync_reverse_inbox/);
   assert.match(reverseMigration, /mail_contacts_sync_reverse_operations/);
+  assert.match(reverseOriginMigration, /origin_run_id/);
+  assert.match(reverseOriginMigration, /mail_contacts_sync_reverse_origin_run_idx/);
   assert.match(schedulerCompletionMigration, /mail_contacts_sync_scheduler_runs/);
+  assert.match(postgresLive, /reverse_provider_result_is_atomic_restart_safe_and_replayable/);
+  assert.match(postgresLive, /commit provider result after restart/);
+  assert.match(postgresLive, /terminalize late provider result without rewriting completed run/);
+  assert.match(postgresLive, /MailContactsSyncStateV1::WritingProvider/);
+  assert.match(postgresLive, /MailContactsSyncStateV1::Completed/);
   assert.doesNotMatch(
-    `${migration}\n${orchestrationMigration}\n${reverseMigration}\n${schedulerCompletionMigration}`,
+    `${migration}\n${orchestrationMigration}\n${reverseMigration}\n${schedulerCompletionMigration}\n${reverseOriginMigration}`,
     /hermes_data\.(?:contacts_state|contacts_provider_links|mail_accounts|communications_)/,
   );
   assert.doesNotMatch(

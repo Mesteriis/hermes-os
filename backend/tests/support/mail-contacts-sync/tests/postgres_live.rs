@@ -19,12 +19,16 @@ use hermes_mail_contacts_sync_core::{
     MailContactsSyncTriggerV1,
 };
 use hermes_mail_contacts_sync_persistence::{
+    AcceptContactChangedForMailSyncOutcomeV1, AcceptContactChangedForMailSyncV1,
     AcceptScheduledMailContactsSyncDueOutcomeV1, AcceptScheduledMailContactsSyncDueV1,
-    AdvanceMailContactsSyncPageV1, CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1,
+    AdvanceMailContactsSyncPageV1, CompleteContactMailSyncSourceOutcomeV1,
+    CompleteContactMailSyncSourceV1, CompleteMailAddressBookUpsertOutcomeV1,
+    CompleteMailAddressBookUpsertV1, CreateMailContactsSyncOutcomeV1, CreateMailContactsSyncRunV1,
     MailContactsSyncAdvanceOutcomeV1, MailContactsSyncContactOutcomeV1,
     MailContactsSyncEntryInputV1, MailContactsSyncEntryOutcomeInputV1,
     MailContactsSyncPageResultInputV1, MailContactsSyncPersistenceConformanceV1,
     MailContactsSyncPersistenceErrorV1, MailContactsSyncPersistenceOutcomeV1,
+    MailContactsSyncProviderWriteOutcomeV1, MailContactsSyncReverseOperationSeedV1,
     MailContactsSyncScheduledTerminalOutcomeV1, OutboxEnvelopeV1,
     QueueMailContactsSyncScheduledTerminalV1,
 };
@@ -625,14 +629,283 @@ async fn address_book_target_custody_is_restart_safe_and_conflict_checked() {
     );
 }
 
+#[tokio::test]
+#[ignore = "requires the disposable authenticated PostgreSQL contour"]
+async fn reverse_provider_result_is_atomic_restart_safe_and_replayable() {
+    let database_url = std::env::var("HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL")
+        .expect("HERMES_MAIL_CONTACTS_SYNC_POSTGRES_URL");
+    let persistence = MailContactsSyncPersistenceConformanceV1::connect_url(&database_url)
+        .await
+        .expect("connect workflow persistence");
+    MailContactsSyncPersistenceConformanceV1::install_schema(&persistence)
+        .await
+        .expect("install workflow schema");
+
+    let run_id = [80; 16];
+    persistence
+        .create_run(create_run_with_direction(
+            80,
+            MailContactsSyncDirectionV1::Bidirectional,
+        ))
+        .await
+        .expect("create bidirectional run");
+    persistence
+        .accept_provider_entry(&MailContactsSyncEntryInputV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            run_id,
+            page_sequence: 1,
+            observation_message_id: [81; 16],
+            observation_envelope_sha256: [82; 32],
+            contact_command_id: [83; 16],
+            entry_digest: [84; 32],
+            contact_command: envelope(83, b"reverse-contacts-upsert"),
+            occurred_at_unix_millis: 1_800_000_010_100,
+        })
+        .await
+        .expect("accept provider entry");
+    persistence
+        .accept_contact_outcome(&MailContactsSyncEntryOutcomeInputV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            contact_command_id: [83; 16],
+            message_id: [85; 16],
+            envelope_sha256: [86; 32],
+            outcome: MailContactsSyncContactOutcomeV1::Created,
+            occurred_at_unix_millis: 1_800_000_010_200,
+        })
+        .await
+        .expect("accept Contacts result");
+    persistence
+        .accept_provider_page(&MailContactsSyncPageResultInputV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            run_id,
+            page_sequence: 1,
+            message_id: [87; 16],
+            envelope_sha256: [88; 32],
+            observed_entries: 1,
+            next_continuation_cursor: None,
+            occurred_at_unix_millis: 1_800_000_010_300,
+        })
+        .await
+        .expect("complete provider page");
+    assert_eq!(
+        persistence
+            .advance_ready_page(&AdvanceMailContactsSyncPageV1 {
+                logical_owner_id: "owner-1".to_owned(),
+                run_id,
+                next_page_command: None,
+                occurred_at_unix_millis: 1_800_000_010_400,
+            })
+            .await
+            .expect("advance bidirectional run"),
+        MailContactsSyncAdvanceOutcomeV1::Applied
+    );
+    assert_eq!(
+        persistence
+            .load_run("owner-1", &run_id)
+            .await
+            .expect("load provider-write run")
+            .status
+            .state,
+        MailContactsSyncStateV1::WritingProvider
+    );
+
+    let operation_id = [89; 16];
+    let changed = AcceptContactChangedForMailSyncV1 {
+        logical_owner_id: "owner-1".to_owned(),
+        event_message_id: [90; 16],
+        event_envelope_sha256: [91; 32],
+        operations: vec![MailContactsSyncReverseOperationSeedV1 {
+            operation_id,
+            configuration_instance_id: "mail-contacts-sync-1".to_owned(),
+            account_id: "mail-account-1".to_owned(),
+            contact_id: [92; 16],
+            contact_revision: 1,
+            origin_run_id: Some(run_id),
+            source_prepare_command: envelope(89, b"prepare-private-contact-source"),
+        }],
+        occurred_at_unix_millis: 1_800_000_010_500,
+    };
+    assert_eq!(
+        persistence
+            .accept_contact_changed_for_mail_sync(&changed)
+            .await
+            .expect("accept caused Contact change"),
+        AcceptContactChangedForMailSyncOutcomeV1::Applied { operations: 1 }
+    );
+    assert_eq!(
+        persistence
+            .accept_contact_changed_for_mail_sync(&changed)
+            .await
+            .expect("replay caused Contact change"),
+        AcceptContactChangedForMailSyncOutcomeV1::Duplicate
+    );
+    let mail_command = envelope(93, b"mail-provider-upsert-command");
+    let source_completed = CompleteContactMailSyncSourceV1 {
+        logical_owner_id: "owner-1".to_owned(),
+        result_message_id: [94; 16],
+        result_envelope_sha256: [95; 32],
+        operation_id,
+        mail_command: Some(mail_command.clone()),
+        rejected: false,
+        occurred_at_unix_millis: 1_800_000_010_600,
+    };
+    assert_eq!(
+        persistence
+            .complete_contact_mail_sync_source(&source_completed)
+            .await
+            .expect("queue Mail provider command"),
+        CompleteContactMailSyncSourceOutcomeV1::Applied
+    );
+
+    drop(persistence);
+    let restarted = MailContactsSyncPersistenceConformanceV1::connect_url(&database_url)
+        .await
+        .expect("restart workflow persistence");
+    let provider_result = CompleteMailAddressBookUpsertV1 {
+        logical_owner_id: "owner-1".to_owned(),
+        result_message_id: [96; 16],
+        result_envelope_sha256: [97; 32],
+        operation_id,
+        mail_command_message_id: mail_command.message_id,
+        outcome: MailContactsSyncProviderWriteOutcomeV1::Succeeded,
+        occurred_at_unix_millis: 1_800_000_010_700,
+    };
+    assert_eq!(
+        restarted
+            .complete_mail_address_book_upsert(&provider_result)
+            .await
+            .expect("commit provider result after restart"),
+        CompleteMailAddressBookUpsertOutcomeV1::Applied
+    );
+    assert_eq!(
+        restarted
+            .complete_mail_address_book_upsert(&provider_result)
+            .await
+            .expect("replay provider result"),
+        CompleteMailAddressBookUpsertOutcomeV1::Duplicate
+    );
+    let operation = restarted
+        .load_reverse_operation("owner-1", operation_id)
+        .await
+        .expect("load completed reverse operation");
+    assert_eq!(operation.state, 3);
+    assert_eq!(operation.origin_run_id, Some(run_id));
+    assert_eq!(
+        operation.mail_command_message_id,
+        Some(mail_command.message_id)
+    );
+    let completed = restarted
+        .load_run("owner-1", &run_id)
+        .await
+        .expect("load completed bidirectional run");
+    assert_eq!(completed.status.state, MailContactsSyncStateV1::Completed);
+    assert_eq!(completed.status.counters.provider_entries_written, 1);
+    assert_eq!(completed.status.rejection, None);
+
+    let mut conflicting_result = provider_result;
+    conflicting_result.result_envelope_sha256 = [98; 32];
+    assert_eq!(
+        restarted
+            .complete_mail_address_book_upsert(&conflicting_result)
+            .await,
+        Err(MailContactsSyncPersistenceErrorV1::InboxConflict)
+    );
+
+    let late_operation_id = [99; 16];
+    restarted
+        .accept_contact_changed_for_mail_sync(&AcceptContactChangedForMailSyncV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            event_message_id: [100; 16],
+            event_envelope_sha256: [101; 32],
+            operations: vec![MailContactsSyncReverseOperationSeedV1 {
+                operation_id: late_operation_id,
+                configuration_instance_id: "mail-contacts-sync-1".to_owned(),
+                account_id: "mail-account-1".to_owned(),
+                contact_id: [102; 16],
+                contact_revision: 2,
+                origin_run_id: Some(run_id),
+                source_prepare_command: envelope(99, b"late-private-contact-source"),
+            }],
+            occurred_at_unix_millis: 1_800_000_010_800,
+        })
+        .await
+        .expect("accept late caused Contact change");
+    restarted
+        .complete_contact_mail_sync_source(&CompleteContactMailSyncSourceV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            result_message_id: [103; 16],
+            result_envelope_sha256: [104; 32],
+            operation_id: late_operation_id,
+            mail_command: Some(envelope(105, b"late-mail-provider-upsert-command")),
+            rejected: false,
+            occurred_at_unix_millis: 1_800_000_010_900,
+        })
+        .await
+        .expect("queue late Mail provider command");
+    restarted
+        .complete_mail_address_book_upsert(&CompleteMailAddressBookUpsertV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            result_message_id: [106; 16],
+            result_envelope_sha256: [107; 32],
+            operation_id: late_operation_id,
+            mail_command_message_id: [105; 16],
+            outcome: MailContactsSyncProviderWriteOutcomeV1::Succeeded,
+            occurred_at_unix_millis: 1_800_000_011_000,
+        })
+        .await
+        .expect("terminalize late provider result without rewriting completed run");
+    assert_eq!(
+        restarted
+            .load_reverse_operation("owner-1", late_operation_id)
+            .await
+            .expect("load late reverse operation")
+            .state,
+        3
+    );
+    let still_completed = restarted
+        .load_run("owner-1", &run_id)
+        .await
+        .expect("reload completed run after late result");
+    assert_eq!(
+        still_completed.status.state,
+        MailContactsSyncStateV1::Completed
+    );
+    assert_eq!(still_completed.status.counters.provider_entries_written, 1);
+
+    let realtime = restarted
+        .client_realtime_window("owner-1", None, 16)
+        .await
+        .expect("load reverse realtime history");
+    assert_eq!(
+        realtime
+            .iter()
+            .filter(|transition| transition.run_id == run_id)
+            .map(|transition| transition.state)
+            .collect::<Vec<_>>(),
+        [
+            MailContactsSyncStateV1::FetchingProviderPage,
+            MailContactsSyncStateV1::ApplyingContacts,
+            MailContactsSyncStateV1::WritingProvider,
+            MailContactsSyncStateV1::Completed,
+        ]
+    );
+}
+
 fn create_run(seed: u8) -> CreateMailContactsSyncRunV1 {
+    create_run_with_direction(seed, MailContactsSyncDirectionV1::ProviderToContacts)
+}
+
+fn create_run_with_direction(
+    seed: u8,
+    direction: MailContactsSyncDirectionV1,
+) -> CreateMailContactsSyncRunV1 {
     CreateMailContactsSyncRunV1 {
         logical_owner_id: "owner-1".to_owned(),
         draft: MailContactsSyncDraftV1 {
             run_id: [seed; 16],
             operation_id: [seed.wrapping_add(1); 16],
             account_id: "mail-account-1".to_owned(),
-            direction: MailContactsSyncDirectionV1::ProviderToContacts,
+            direction,
             trigger: MailContactsSyncTriggerV1::Manual,
         },
         initial_commands: vec![envelope(seed.wrapping_add(10), b"initial-command")],

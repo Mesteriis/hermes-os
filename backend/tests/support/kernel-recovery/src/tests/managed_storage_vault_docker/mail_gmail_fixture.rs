@@ -49,13 +49,23 @@ pub(super) struct GmailSentRequestV1 {
     pub(super) thread_id: String,
 }
 
+#[derive(Clone)]
+pub(super) struct GooglePeopleWriteRequestV1 {
+    pub(super) method: String,
+    pub(super) path: String,
+    pub(super) authorization: String,
+    pub(super) body: serde_json::Value,
+}
+
 pub(super) struct MailGmailFixture {
     port: u16,
     ca_certificate_pem: String,
     accepted_mutations: Arc<AtomicUsize>,
     accepted_reads: Arc<AtomicUsize>,
     accepted_people_reads: Arc<AtomicUsize>,
+    accepted_people_writes: Arc<AtomicUsize>,
     last_request: Arc<Mutex<Option<GmailSentRequestV1>>>,
+    last_people_write: Arc<Mutex<Option<GooglePeopleWriteRequestV1>>>,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -83,12 +93,16 @@ impl MailGmailFixture {
         let accepted_mutations = Arc::new(AtomicUsize::new(0));
         let accepted_reads = Arc::new(AtomicUsize::new(0));
         let accepted_people_reads = Arc::new(AtomicUsize::new(0));
+        let accepted_people_writes = Arc::new(AtomicUsize::new(0));
         let last_request = Arc::new(Mutex::new(None));
+        let last_people_write = Arc::new(Mutex::new(None));
         let shutdown = Arc::new(AtomicBool::new(false));
         let worker_mutations = Arc::clone(&accepted_mutations);
         let worker_reads = Arc::clone(&accepted_reads);
         let worker_people_reads = Arc::clone(&accepted_people_reads);
+        let worker_people_writes = Arc::clone(&accepted_people_writes);
         let worker_request = Arc::clone(&last_request);
+        let worker_people_write = Arc::clone(&last_people_write);
         let worker_shutdown = Arc::clone(&shutdown);
         let worker = thread::spawn(move || {
             while !worker_shutdown.load(Ordering::SeqCst) {
@@ -111,7 +125,9 @@ impl MailGmailFixture {
                             &worker_mutations,
                             &worker_reads,
                             &worker_people_reads,
+                            &worker_people_writes,
                             &worker_request,
+                            &worker_people_write,
                         );
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -127,7 +143,9 @@ impl MailGmailFixture {
             accepted_mutations,
             accepted_reads,
             accepted_people_reads,
+            accepted_people_writes,
             last_request,
+            last_people_write,
             shutdown,
             worker: Some(worker),
         }
@@ -151,6 +169,18 @@ impl MailGmailFixture {
 
     pub(super) fn accepted_people_reads(&self) -> usize {
         self.accepted_people_reads.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn accepted_people_writes(&self) -> usize {
+        self.accepted_people_writes.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn last_people_write(&self) -> GooglePeopleWriteRequestV1 {
+        self.last_people_write
+            .lock()
+            .expect("lock Google People write")
+            .clone()
+            .expect("Google People write")
     }
 
     pub(super) fn last_request(&self) -> GmailSentRequestV1 {
@@ -179,7 +209,9 @@ fn serve_connection(
     accepted_mutations: &AtomicUsize,
     accepted_reads: &AtomicUsize,
     accepted_people_reads: &AtomicUsize,
+    accepted_people_writes: &AtomicUsize,
     last_request: &Mutex<Option<GmailSentRequestV1>>,
+    last_people_write: &Mutex<Option<GooglePeopleWriteRequestV1>>,
 ) {
     let request_line = read_line(stream);
     let request_line = std::str::from_utf8(&request_line).expect("Gmail request line");
@@ -212,7 +244,17 @@ fn serve_connection(
             serve_get(stream, &path, &headers, accepted_people_reads);
             accepted_reads.fetch_add(1, Ordering::SeqCst);
         }
-        "POST" => serve_send(stream, &path, &headers, accepted_mutations, last_request),
+        "POST" if path == "/gmail/v1/users/me/messages/send" => {
+            serve_send(stream, &path, &headers, accepted_mutations, last_request);
+        }
+        "POST" | "PATCH" => serve_people_write(
+            stream,
+            method,
+            &path,
+            &headers,
+            accepted_people_writes,
+            last_people_write,
+        ),
         _ => panic!("unsupported Gmail fixture method"),
     }
 }
@@ -291,17 +333,7 @@ fn serve_send(
     last_request: &Mutex<Option<GmailSentRequestV1>>,
 ) {
     assert_eq!(path, "/gmail/v1/users/me/messages/send");
-    let content_length = headers
-        .get("content-length")
-        .expect("Gmail request content length")
-        .parse::<usize>()
-        .expect("Gmail request content length value");
-    assert!(content_length <= MAX_REQUEST_BODY_BYTES);
-    let mut body = vec![0_u8; content_length];
-    stream
-        .read_exact(&mut body)
-        .expect("read Gmail request body");
-    let body: serde_json::Value = serde_json::from_slice(&body).expect("decode Gmail request body");
+    let body = read_json_body(stream, headers);
     let raw = body
         .get("raw")
         .and_then(serde_json::Value::as_str)
@@ -326,6 +358,67 @@ fn serve_send(
 
     let body = br#"{"id":"gmail-sent-1","threadId":"gmail-thread-1","labelIds":["SENT"]}"#;
     write_json_response(stream, body);
+}
+
+fn serve_people_write(
+    stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
+    method: &str,
+    path: &str,
+    headers: &BTreeMap<String, String>,
+    accepted_people_writes: &AtomicUsize,
+    last_people_write: &Mutex<Option<GooglePeopleWriteRequestV1>>,
+) {
+    assert_eq!(
+        headers.get("authorization").map(String::as_str),
+        Some("Bearer managed-mail-gmail-access-token")
+    );
+    assert!(
+        method == "POST" && path.starts_with("/v1/people:createContact?")
+            || method == "PATCH" && path.starts_with("/v1/people/managed-contact-1:updateContact?"),
+        "unsupported Google People write route"
+    );
+    let body = read_json_body(stream, headers);
+    *last_people_write.lock().expect("lock Google People write") =
+        Some(GooglePeopleWriteRequestV1 {
+            method: method.to_owned(),
+            path: path.to_owned(),
+            authorization: headers
+                .get("authorization")
+                .expect("Google People authorization")
+                .to_owned(),
+            body,
+        });
+    accepted_people_writes.fetch_add(1, Ordering::SeqCst);
+    let response = serde_json::to_vec(&serde_json::json!({
+        "resourceName": "people/managed-contact-1",
+        "metadata": {
+            "sources": [{
+                "type": "CONTACT",
+                "id": "managed-contact-1",
+                "etag": "managed-etag-2"
+            }]
+        },
+        "names": [{"displayName": "Private Managed Contact"}],
+        "emailAddresses": [{"value": "private-managed-contact@example.test"}],
+        "phoneNumbers": [{"value": "+12025550125"}]
+    }))
+    .expect("encode Google People write response");
+    write_json_response(stream, &response);
+}
+
+fn read_json_body(
+    stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
+    headers: &BTreeMap<String, String>,
+) -> serde_json::Value {
+    let content_length = headers
+        .get("content-length")
+        .expect("request content length")
+        .parse::<usize>()
+        .expect("request content length value");
+    assert!(content_length <= MAX_REQUEST_BODY_BYTES);
+    let mut body = vec![0_u8; content_length];
+    stream.read_exact(&mut body).expect("read request body");
+    serde_json::from_slice(&body).expect("decode request body")
 }
 
 fn write_json_response(

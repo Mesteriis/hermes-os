@@ -82,7 +82,7 @@ test('delivery intent event adapters preserve four exact routes without a provid
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_reverse_google_update_v1',
   );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')

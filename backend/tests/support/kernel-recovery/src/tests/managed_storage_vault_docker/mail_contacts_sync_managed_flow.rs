@@ -77,6 +77,17 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         )))
         .expect("configure Mail Contacts Sync Event credentials");
     start_vault(&supervisor, &store, &data, release.kernel());
+    assert_eq!(
+        blob_launch::start_from_kernel(
+            &supervisor,
+            &store,
+            release.kernel(),
+            &data,
+            &root.join("runtime"),
+        )
+        .expect("start Blob for Mail Contacts Sync"),
+        1
+    );
     start_storage(
         &supervisor,
         &store,
@@ -154,7 +165,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         protocol_major: 1,
         operation_id: vec![0x81; 16],
         account_id: MAIL_ACCOUNT_ID.to_owned(),
-        direction: MailContactsSyncDirectionV1::MailContactsSyncDirectionProviderToContacts as i32,
+        direction: MailContactsSyncDirectionV1::MailContactsSyncDirectionBidirectional as i32,
     };
     let accepted = route_start(&store, &supervisor, &sync.registration_id, 1, &request);
     assert_eq!(
@@ -162,6 +173,34 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         MailContactsSyncErrorCodeV1::MailContactsSyncErrorCodeUnspecified as i32
     );
     assert_eq!(accepted.run_id.len(), 16);
+    if !wait_for_people_write(&provider, 1) {
+        let diagnostic = runtime.block_on(reverse_diagnostic());
+        panic!("Mail did not execute the expected Google People write: {diagnostic:?}");
+    }
+    let write = provider.last_people_write();
+    assert_eq!(write.method, "PATCH");
+    assert!(
+        write
+            .path
+            .starts_with("/v1/people/managed-contact-1:updateContact?")
+    );
+    assert_eq!(
+        write.authorization,
+        "Bearer managed-mail-gmail-access-token"
+    );
+    assert_eq!(
+        write.body["metadata"]["sources"][0]["etag"],
+        "managed-etag-1"
+    );
+    assert_eq!(
+        write.body["names"][0]["displayName"],
+        "Private Managed Contact"
+    );
+    runtime.block_on(wait_for_reverse_terminal(
+        3,
+        &supervisor,
+        &sync.registration_id,
+    ));
     let completed =
         wait_for_completed(&store, &supervisor, &sync.registration_id, &accepted.run_id);
     assert_eq!(completed.account_id, MAIL_ACCOUNT_ID);
@@ -169,6 +208,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     assert_eq!(completed.contacts_created, 1);
     assert_eq!(completed.contacts_updated, 0);
     assert_eq!(completed.contacts_unchanged, 0);
+    assert_eq!(completed.provider_entries_written, 1);
     assert_eq!(completed.rejected_entries, 0);
     assert_eq!(provider.accepted_people_reads(), 1);
 
@@ -184,6 +224,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     assert_eq!(scheduled.provider_entries_seen, 1);
     assert_eq!(scheduled.contacts_unchanged, 1);
     assert_eq!(provider.accepted_people_reads(), 2);
+    assert_eq!(provider.accepted_people_writes(), 1);
     runtime.block_on(wait_for_scheduler_terminal(&scheduled_run_id));
 
     runtime.block_on(async {
@@ -214,6 +255,7 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         wait_for_completed(&store, &supervisor, &sync.registration_id, &accepted.run_id);
     assert_eq!(duplicate_completed.state_revision, completed.state_revision);
     assert_eq!(provider.accepted_people_reads(), 2);
+    assert_eq!(provider.accepted_people_writes(), 1);
 
     supervisor.shutdown().expect("stop managed processes");
     shutdown.store(true, Ordering::SeqCst);
@@ -222,6 +264,71 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     }
     std::fs::remove_dir_all(root).expect("remove Mail Contacts Sync fixture");
     std::fs::remove_dir_all(data).expect("remove Mail Contacts Sync Kernel fixture");
+}
+
+fn wait_for_people_write(provider: &MailGmailFixture, expected: usize) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while provider.accepted_people_writes() != expected {
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    true
+}
+
+async fn reverse_diagnostic() -> Vec<(i16, bool, bool, Option<i16>, Option<i16>)> {
+    let pool = contacts_admin_pool_v1().await;
+    let rows = sqlx::query_as::<_, (i16, bool, bool, Option<i16>, Option<i16>)>(
+        "SELECT operation.state, operation.origin_run_id IS NOT NULL, \
+                operation.mail_command_message_id IS NOT NULL, run.rejection_code, \
+                mail_command.state \
+         FROM hermes_data.mail_contacts_sync_reverse_operations AS operation \
+         LEFT JOIN hermes_data.mail_contacts_sync_runs AS run \
+           ON run.logical_owner_id=operation.logical_owner_id \
+          AND run.run_id=operation.origin_run_id \
+         LEFT JOIN hermes_data.mail_address_book_upsert_inbox AS mail_command \
+           ON mail_command.command_message_id=operation.mail_command_message_id \
+         WHERE operation.logical_owner_id=$1 \
+         ORDER BY operation.created_at_unix_millis, operation.operation_id",
+    )
+    .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+    .fetch_all(&pool)
+    .await
+    .expect("read reverse diagnostic");
+    pool.close().await;
+    rows
+}
+
+async fn wait_for_reverse_terminal(
+    expected_state: i16,
+    supervisor: &ManagedRuntimeSupervisor,
+    registration_id: &str,
+) {
+    let pool = contacts_admin_pool_v1().await;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let state = sqlx::query_scalar::<_, i16>(
+            "SELECT state FROM hermes_data.mail_contacts_sync_reverse_operations \
+             WHERE logical_owner_id=$1 ORDER BY created_at_unix_millis DESC LIMIT 1",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .fetch_optional(&pool)
+        .await
+        .expect("read reverse Mail Contacts Sync operation");
+        if state == Some(expected_state) {
+            pool.close().await;
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "reverse Mail Contacts Sync did not reach state {expected_state}: {state:?}; \
+             active={:?}; last_failure={:?}",
+            supervisor.is_active(registration_id),
+            supervisor.last_failure(registration_id)
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
 }
 
 fn upsert_mail_contacts_sync_schedule(supervisor: &ManagedRuntimeSupervisor) {

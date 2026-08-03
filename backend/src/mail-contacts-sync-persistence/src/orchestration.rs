@@ -87,6 +87,8 @@ impl MailContactsSyncPersistenceV1 {
             MailContactsSyncTransitionV1::BeginProviderPage
         } else if current.draft.direction
             == hermes_mail_contacts_sync_core::MailContactsSyncDirectionV1::Bidirectional
+            && current.status.counters.contacts_created + current.status.counters.contacts_updated
+                > 0
         {
             if input.next_page_command.is_some() {
                 return Err(MailContactsSyncPersistenceErrorV1::InvalidInput);
@@ -501,7 +503,7 @@ async fn account_pending_outcomes(
     Ok(true)
 }
 
-async fn update_run(
+pub(crate) async fn update_run(
     transaction: &mut Transaction<'_, Postgres>,
     logical_owner_id: &str,
     run_id: &[u8; 16],

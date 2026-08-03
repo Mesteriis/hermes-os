@@ -4,6 +4,7 @@ mod envelope;
 
 pub use envelope::{
     ContactsMailSyncSourceEnvelopeBuildErrorV1, ContactsMailSyncSourceEnvelopeContextV1,
+    build_contact_changed_for_mail_sync_outbox_record_caused_by_v1,
     build_contact_changed_for_mail_sync_outbox_record_v1,
     build_contact_mail_sync_source_prepare_outbox_record_v1,
     build_contact_mail_sync_source_prepared_outbox_record_v1,

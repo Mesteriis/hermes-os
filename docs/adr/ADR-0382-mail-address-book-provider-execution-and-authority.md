@@ -17,8 +17,13 @@ provider dispatch; disposable PostgreSQL conformance доказывает restar
 реальными loopback TLS dialects Google People и CardDAV: отдельные typed
 endpoints, отдельный CardDAV Vault purpose, provider read, exact
 observation/result, duplicate suppression и successor Google runtime generation
-доказаны. Managed reverse Blob/write, workflow assembly, revoke/outage и browser
-conformance ещё не закрыты, поэтому наличие этого среза не открывает
+доказаны. Signed managed ensemble теперь выполняет reverse target-bound Blob
+custody и Google People update с
+ETag, а workflow принимает exact terminal Mail result и завершает связанный
+bidirectional run. Отдельный disposable PostgreSQL test доказывает atomic
+terminal commit после нового connection, replay и hash conflict fencing. Google
+create, explicit iCloud/missing-scope negatives, revoke/outage recovery и
+browser conformance ещё не закрыты, поэтому наличие этого среза не открывает
 `mail_contacts_sync_v1`.
 
 Уточняет:

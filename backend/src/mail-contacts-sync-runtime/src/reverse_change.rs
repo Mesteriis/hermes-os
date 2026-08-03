@@ -52,6 +52,7 @@ pub(crate) async fn consume_contact_changed_once_v1(
     let record = OutboxRecordV1::accept(delivery.exact_bytes().to_vec())
         .map_err(|_| MailContactsSyncReverseChangeErrorV1::InvalidEnvelope)?;
     let changed = decode_changed(&record, context)?;
+    let origin_run_id = origin_run_id(persistence, &record, context.logical_owner_id).await?;
     let operations = configurations
         .iter()
         .filter(|(_, settings)| {
@@ -65,6 +66,7 @@ pub(crate) async fn consume_contact_changed_once_v1(
                 configuration_instance_id,
                 settings,
                 context,
+                origin_run_id,
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -88,6 +90,7 @@ fn operation(
     configuration_instance_id: &str,
     settings: &MailContactsSyncRuntimeSettingsV1,
     context: &MailContactsSyncReverseChangeContextV1<'_>,
+    origin_run_id: Option<[u8; 16]>,
 ) -> Result<MailContactsSyncReverseOperationSeedV1, MailContactsSyncReverseChangeErrorV1> {
     let contact_id = id16(&changed.contact_id)?;
     let operation_id = operation_id(*record.message_id(), configuration_instance_id);
@@ -116,8 +119,30 @@ fn operation(
         account_id: settings.account_id.clone(),
         contact_id,
         contact_revision: changed.contact_revision,
+        origin_run_id,
         source_prepare_command: outbox(&command),
     })
+}
+
+async fn origin_run_id(
+    persistence: &MailContactsSyncPersistenceV1,
+    record: &OutboxRecordV1,
+    logical_owner_id: &str,
+) -> Result<Option<[u8; 16]>, MailContactsSyncReverseChangeErrorV1> {
+    let envelope = decode_envelope_v1(record.exact_bytes())
+        .map_err(|_| MailContactsSyncReverseChangeErrorV1::InvalidEnvelope)?;
+    if envelope.causation_message_id.is_empty() {
+        return Ok(None);
+    }
+    let command_message_id = id16(&envelope.causation_message_id)?;
+    match persistence
+        .run_id_for_contact_command(logical_owner_id, &command_message_id)
+        .await
+    {
+        Ok(run_id) => Ok(Some(run_id)),
+        Err(MailContactsSyncPersistenceErrorV1::NotFound) => Ok(None),
+        Err(error) => Err(MailContactsSyncReverseChangeErrorV1::Persistence(error)),
+    }
 }
 
 fn decode_changed(

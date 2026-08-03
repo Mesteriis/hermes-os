@@ -132,7 +132,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_scheduled_provider_to_contacts_v1',
+    'mail_contacts_sync_managed_reverse_google_update_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',

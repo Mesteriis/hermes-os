@@ -8,6 +8,7 @@ mod contacts_results;
 mod event_outbox;
 mod managed_runtime;
 mod provider_events;
+mod provider_write_results;
 mod reverse_change;
 mod run_progress;
 mod scheduler_completion;

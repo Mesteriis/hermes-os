@@ -115,6 +115,7 @@ hermes-tasks-command-api = { path = "../../../src/tasks-command-api" }
 hermes-tasks-persistence = { path = "../../../src/tasks-persistence" }
 hermes-tasks-runtime = { path = "../../../src/tasks-runtime" }
 hermes-contacts-command-api = { path = "../../../src/contacts-command-api" }
+hermes-contacts-mail-sync-source-api = { path = "../../../src/contacts-mail-sync-source-api" }
 hermes-contacts-persistence = { path = "../../../src/contacts-persistence", features = ["conformance-test-support"] }
 hermes-contacts-runtime = { path = "../../../src/contacts-runtime" }
 hermes-review-note-candidate-api = { path = "../../../src/review-note-candidate-api" }
