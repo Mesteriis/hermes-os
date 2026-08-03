@@ -10,6 +10,13 @@ workflow, managed-runtime и client Blob gates из раздела «Прове�
 Компилируемый workflow, который передаёт текст Communications в LLM или
 возвращает summary вместо transcript, не является реализацией этого ADR.
 
+По состоянию на 2026-08-04 реализованы contract/core/persistence и staged
+runtime/assembly units Speech-to-Text engine. Runtime использует exact managed
+request RPC, provider-neutral Blob redelegation и owner-local PostgreSQL, но
+`speech_to_text_engine_v1` остаётся `planned` до отдельного Whisper integration,
+signed managed admission и live recovery evidence. Наличие компилируемого
+runtime/assembly само по себе production gate не открывает.
+
 Уточняет:
 
 - [ADR-0201: Core module communication and NATS](ADR-0201-core-module-communication-and-nats.md);
@@ -194,6 +201,13 @@ fences, exact STT request/result receipts, cleanup authority and outbox bytes.
 Raw audio, transcript text, speaker text, provider debug output, executable
 stdout/stderr and Blob custody secrets are forbidden in PostgreSQL, logs,
 errors, health and SSE.
+
+Поскольку custody proof не сохраняется, replay готового request RPC не строит
+fake proof из PostgreSQL. Engine повторно вызывает idempotent provider с новым
+custody delegation, проверяет, что reference/hash/metadata совпадают с durable
+terminal record, и только затем делегирует новый proof вызывающему workflow.
+Несовпадение является conflict; provider/Blob outage оставляет replay
+retryable.
 
 Inbox ID/hash is committed atomically with transition/outbox. ACK occurs only
 after commit. Restart recovery revalidates current runtime/storage/grant,

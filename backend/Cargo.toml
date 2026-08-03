@@ -117,6 +117,8 @@ members = [
   "src/speech-to-text-api",
   "src/speech-to-text-core",
   "src/speech-to-text-persistence",
+  "src/speech-to-text-runtime",
+  "src/speech-to-text-assembly",
   "src/communication-summary-assembly",
   "src/communication-translation-api",
   "src/communication-translation-core",

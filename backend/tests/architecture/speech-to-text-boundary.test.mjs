@@ -121,6 +121,41 @@ test('Speech-to-Text persistence is an owner-local engine unit without content o
   assert.match(repository, /state_revision/);
 });
 
+test('Speech-to-Text runtime and assembly are isolated provider-neutral engine build units', async () => {
+  const [
+    runtimeManifest,
+    runtimeAdmission,
+    runtimeWorker,
+    managedPorts,
+    assemblyManifest,
+    assembly,
+  ] = await Promise.all([
+    read('backend/src/speech-to-text-runtime/Cargo.toml'),
+    read('backend/src/speech-to-text-runtime/src/admission.rs'),
+    read('backend/src/speech-to-text-runtime/src/worker.rs'),
+    read('backend/src/speech-to-text-runtime/src/managed_ports.rs'),
+    read('backend/src/speech-to-text-assembly/Cargo.toml'),
+    read('backend/src/speech-to-text-assembly/src/lib.rs'),
+  ]);
+
+  for (const manifest of [runtimeManifest, assemblyManifest]) {
+    assert.match(manifest, /role = "engine"/);
+    assert.match(manifest, /owner = "speech_to_text"/);
+    assert.doesNotMatch(manifest, /hermes-communications|call-transcription|whisper/);
+  }
+  assert.match(runtimeAdmission, /ModuleKindV1::Engine/);
+  assert.match(runtimeAdmission, /speech_to_text_provider_contract_reference_v1/);
+  assert.doesNotMatch(runtimeAdmission, /provider_name|whisper/);
+  assert.match(managedPorts, /request_managed_blob_resolved_provider_custody_delegation_v1/);
+  assert.match(managedPorts, /request_managed_blob_custody_delegation_v2/);
+  assert.match(managedPorts, /response_blob_capability_id:\s*SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1/);
+  assert.match(runtimeWorker, /require_persisted_ready_match/);
+  assert.doesNotMatch(runtimeWorker, /transcript_text|audio_bytes|provider_name|filesystem_path/);
+  assert.match(assembly, /Unsigned Speech-to-Text engine release assembly/);
+  assert.match(assembly, /speech_to_text_storage_bundle_v1/);
+  assert.doesNotMatch(assembly.split('#[cfg(test)]')[0], /Command::new|std::process|whisper/);
+});
+
 test('reconstruction keeps recording engine provider and workflow as four independent gates', async () => {
   const [inventorySource, adr] = await Promise.all([
     read('backend/architecture/communications-settings-reconstruction.json'),
