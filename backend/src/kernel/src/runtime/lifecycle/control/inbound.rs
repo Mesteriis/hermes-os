@@ -867,6 +867,7 @@ mod blob_session_error_code_tests {
                     target_owner_id: "attachment_archive_inspection".to_owned(),
                     target_module_id: "hermes-attachment-archive-inspection-runtime".to_owned(),
                     target_capability_id: "attachment_archive_inspection.blob.v1".to_owned(),
+                    target_request_contract: None,
                 },
             )),
         }

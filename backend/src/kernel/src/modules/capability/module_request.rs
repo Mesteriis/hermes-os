@@ -30,6 +30,12 @@ pub(crate) struct ModuleRequestRouteHandlerV1<R> {
     relay: R,
 }
 
+pub(crate) struct ResolvedModuleRequestProviderV1 {
+    pub(crate) route: ModuleRequestContractV1,
+    pub(crate) registration: hermes_kernel_control_store::ModuleRegistration,
+    pub(crate) launch: hermes_kernel_control_store::ManagedLaunchRecord,
+}
+
 impl<R> ModuleRequestRouteHandlerV1<R>
 where
     R: ManagedRuntimeRelay,
@@ -50,53 +56,18 @@ where
     ) -> Result<ManagedRuntimeModuleRequestResponseV1, String> {
         validate_module_request_request_v1(&request)
             .map_err(|_| "managed module request is denied".to_owned())?;
-        ensure_caller_fence(&self.store, expectation)?;
-
-        let caller = self
-            .store
-            .module_registration(expectation.registration_id())
-            .map_err(|_| "managed module request caller is unavailable".to_owned())?
-            .ok_or_else(|| "managed module request caller is unavailable".to_owned())?;
-        if caller.grant_epoch() != expectation.grant_epoch() {
-            return Err("managed module request caller fence is stale".to_owned());
-        }
         let logical_owner = self
             .store
             .initial_owner_identity()
             .map_err(|_| "managed module request logical owner is unavailable".to_owned())?
             .ok_or_else(|| "managed module request logical owner is unavailable".to_owned())?;
-        let grants = self
-            .store
-            .module_grant_snapshot(expectation.registration_id())
-            .map_err(|_| "managed module request caller grants are unavailable".to_owned())?
-            .and_then(|snapshot| snapshot.effective_grants().cloned())
-            .ok_or_else(|| "managed module request caller is not approved".to_owned())?;
         let contract = request
             .contract
             .as_ref()
             .ok_or_else(|| "managed module request contract is missing".to_owned())?;
-        resolve_caller_capability(
-            &self.store,
-            expectation.registration_id(),
-            grants.capability_ids(),
-            contract,
-        )?;
-
-        let provider = resolve_provider(&self.store, contract)?;
-        let provider_grants = self
-            .store
-            .module_grant_snapshot(provider.registration_id())
-            .map_err(|_| "managed module request provider grants are unavailable".to_owned())?
-            .and_then(|snapshot| snapshot.effective_grants().cloned())
-            .ok_or_else(|| "managed module request provider is not approved".to_owned())?;
-        if provider_grants
-            .capability_ids()
-            .binary_search_by(|candidate| candidate.as_str().cmp(provider.capability_id()))
-            .is_err()
-        {
-            return Err("managed module request provider capability is not granted".to_owned());
-        }
-        let provider_launch = current_provider_launch(&self.store, &provider)?;
+        let resolved = resolve_provider_for_caller(&self.store, expectation, contract)?;
+        let provider = resolved.route;
+        let provider_launch = resolved.launch;
 
         let delivery = ManagedRuntimeModuleRequestDeliveryV1 {
             request_id: request.request_id.clone(),
@@ -139,6 +110,59 @@ where
         ensure_provider_fence(&self.store, &provider, &provider_launch)?;
         Ok(response)
     }
+}
+
+pub(crate) fn resolve_provider_for_caller(
+    store: &SqliteControlStore,
+    expectation: &ManagedRuntimeExpectation,
+    contract: &hermes_runtime_protocol::v1::ContractReferenceV1,
+) -> Result<ResolvedModuleRequestProviderV1, String> {
+    ensure_caller_fence(store, expectation)?;
+    let caller = store
+        .module_registration(expectation.registration_id())
+        .map_err(|_| "managed module request caller is unavailable".to_owned())?
+        .ok_or_else(|| "managed module request caller is unavailable".to_owned())?;
+    if caller.grant_epoch() != expectation.grant_epoch() {
+        return Err("managed module request caller fence is stale".to_owned());
+    }
+    let caller_grants = store
+        .module_grant_snapshot(expectation.registration_id())
+        .map_err(|_| "managed module request caller grants are unavailable".to_owned())?
+        .and_then(|snapshot| snapshot.effective_grants().cloned())
+        .ok_or_else(|| "managed module request caller is not approved".to_owned())?;
+    resolve_caller_capability(
+        store,
+        expectation.registration_id(),
+        caller_grants.capability_ids(),
+        contract,
+    )?;
+
+    let route = resolve_provider(store, contract)?;
+    let provider_grants = store
+        .module_grant_snapshot(route.registration_id())
+        .map_err(|_| "managed module request provider grants are unavailable".to_owned())?
+        .and_then(|snapshot| snapshot.effective_grants().cloned())
+        .ok_or_else(|| "managed module request provider is not approved".to_owned())?;
+    if provider_grants
+        .capability_ids()
+        .binary_search_by(|candidate| candidate.as_str().cmp(route.capability_id()))
+        .is_err()
+    {
+        return Err("managed module request provider capability is not granted".to_owned());
+    }
+    let launch = current_provider_launch(store, &route)?;
+    let registration = store
+        .module_registration(route.registration_id())
+        .map_err(|_| "managed module request provider is unavailable".to_owned())?
+        .ok_or_else(|| "managed module request provider is unavailable".to_owned())?;
+    if registration.grant_epoch() != launch.grant_epoch() {
+        return Err("managed module request provider fence is stale".to_owned());
+    }
+    Ok(ResolvedModuleRequestProviderV1 {
+        route,
+        registration,
+        launch,
+    })
 }
 
 fn resolve_caller_capability(

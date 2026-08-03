@@ -17,10 +17,10 @@ use hermes_runtime_protocol::v1::{
     BlobCustodyReleaseOutcomeV1, BlobCustodyReleaseReasonV1, BlobCustodySourceProofKindV1,
     BlobCustodySourceProofV1, BlobCustodyTransferGrantV1, BlobDataCustodyTransferRequestV1,
     BlobDataOperationV1, BlobDataReadRangeRequestV1, BlobDataRequestV1, BlobDataResponseV1,
-    BlobDataSessionGrantV1, BlobDataWriteRequestV1, ManagedRuntimeBlobCustodyDelegationRequestV1,
-    ManagedRuntimeBlobCustodyReleaseRequestV1, ManagedRuntimeBlobSessionRequestV1,
-    ManagedRuntimeControlRequestV1, ManagedRuntimeControlResponseV1,
-    blob_data_request_v1::Operation,
+    BlobDataSessionGrantV1, BlobDataWriteRequestV1, ContractReferenceV1,
+    ManagedRuntimeBlobCustodyDelegationRequestV1, ManagedRuntimeBlobCustodyReleaseRequestV1,
+    ManagedRuntimeBlobSessionRequestV1, ManagedRuntimeControlRequestV1,
+    ManagedRuntimeControlResponseV1, blob_data_request_v1::Operation,
     managed_runtime_control_request_v1::Operation as ControlOperation,
     managed_runtime_control_response_v1::Result as ControlResult,
 };
@@ -77,10 +77,23 @@ pub struct ManagedBlobCustodyDelegationRequestV1<'a> {
     pub target: ManagedBlobCustodyTargetV1<'a>,
 }
 
+pub struct ManagedBlobResolvedProviderCustodyDelegationRequestV1<'a> {
+    pub request_id: &'a [u8; 16],
+    pub capability_id: &'a str,
+    pub current_reference_id: &'a [u8; 16],
+    pub predecessor_custody_source_proof: &'a [u8],
+    pub predecessor_evidence_id: &'a [u8; 16],
+    pub predecessor_evidence_envelope_sha256: &'a [u8; 32],
+    pub target_request_contract: &'a ContractReferenceV1,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ManagedBlobCustodyDelegationV1 {
     pub request_id: [u8; 16],
     pub custody_transfer_source_proof: Vec<u8>,
+    pub resolved_target_owner_id: String,
+    pub resolved_target_module_id: String,
+    pub resolved_target_capability_id: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -328,6 +341,7 @@ pub fn request_managed_blob_custody_delegation_v2(
                         target_owner_id: request.target.owner_id.to_owned(),
                         target_module_id: request.target.module_id.to_owned(),
                         target_capability_id: request.target.capability_id.to_owned(),
+                        target_request_contract: None,
                     },
                 )),
             },
@@ -337,23 +351,114 @@ pub fn request_managed_blob_custody_delegation_v2(
     decode_custody_delegation_response(response, &request)
 }
 
+pub fn request_managed_blob_resolved_provider_custody_delegation_v1(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
+    request: ManagedBlobResolvedProviderCustodyDelegationRequestV1<'_>,
+) -> Result<ManagedBlobCustodyDelegationV1, BlobClientError> {
+    if request.request_id.iter().all(|byte| *byte == 0)
+        || !valid_token(request.capability_id)
+        || request.current_reference_id.iter().all(|byte| *byte == 0)
+        || request.predecessor_custody_source_proof.is_empty()
+        || request.predecessor_custody_source_proof.len() > 2_048
+        || request
+            .predecessor_evidence_id
+            .iter()
+            .all(|byte| *byte == 0)
+        || request
+            .predecessor_evidence_envelope_sha256
+            .iter()
+            .all(|byte| *byte == 0)
+        || !valid_contract_reference(request.target_request_contract)
+    {
+        return Err(BlobClientError::InvalidCustodyDelegationRequest);
+    }
+    let response = channel
+        .request_next_with_dispatch(
+            ManagedRuntimeControlRequestV1 {
+                operation: Some(ControlOperation::DelegateBlobCustody(
+                    ManagedRuntimeBlobCustodyDelegationRequestV1 {
+                        request_id: request.request_id.to_vec(),
+                        capability_id: request.capability_id.to_owned(),
+                        current_reference_id: request.current_reference_id.to_vec(),
+                        predecessor_custody_source_proof: request
+                            .predecessor_custody_source_proof
+                            .to_vec(),
+                        predecessor_evidence_id: request.predecessor_evidence_id.to_vec(),
+                        predecessor_evidence_envelope_sha256: request
+                            .predecessor_evidence_envelope_sha256
+                            .to_vec(),
+                        target_owner_id: String::new(),
+                        target_module_id: String::new(),
+                        target_capability_id: String::new(),
+                        target_request_contract: Some(request.target_request_contract.clone()),
+                    },
+                )),
+            },
+            dispatcher,
+        )
+        .map_err(|_| BlobClientError::Unavailable)?;
+    decode_resolved_custody_delegation_response(response, &request)
+}
+
 fn decode_custody_delegation_response(
     response: ManagedRuntimeControlResponseV1,
     request: &ManagedBlobCustodyDelegationRequestV1<'_>,
 ) -> Result<ManagedBlobCustodyDelegationV1, BlobClientError> {
-    let delivery = match response.result {
+    let delivery = delegation_delivery(response)?;
+    let decoded = decode_delegation_proof(
+        &delivery,
+        request.request_id,
+        request.current_reference_id,
+        request.predecessor_custody_source_proof,
+    )?;
+    if decoded.resolved_target_owner_id != request.target.owner_id
+        || decoded.resolved_target_module_id != request.target.module_id
+        || decoded.resolved_target_capability_id != request.target.capability_id
+    {
+        return Err(BlobClientError::InvalidResponse);
+    }
+    Ok(decoded)
+}
+
+fn decode_resolved_custody_delegation_response(
+    response: ManagedRuntimeControlResponseV1,
+    request: &ManagedBlobResolvedProviderCustodyDelegationRequestV1<'_>,
+) -> Result<ManagedBlobCustodyDelegationV1, BlobClientError> {
+    let delivery = delegation_delivery(response)?;
+    decode_delegation_proof(
+        &delivery,
+        request.request_id,
+        request.current_reference_id,
+        request.predecessor_custody_source_proof,
+    )
+}
+
+fn delegation_delivery(
+    response: ManagedRuntimeControlResponseV1,
+) -> Result<
+    hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyDelegationDeliveryV1,
+    BlobClientError,
+> {
+    match response.result {
         Some(ControlResult::BlobCustodyDelegation(delivery)) if response.error_code.is_empty() => {
-            delivery
+            Ok(delivery)
         }
         _ if response.error_code == "managed_blob_custody_delegation_unavailable" => {
-            return Err(BlobClientError::Unavailable);
+            Err(BlobClientError::Unavailable)
         }
-        _ => {
-            return Err(BlobClientError::Rejected(
-                "managed_blob_custody_delegation_denied".to_owned(),
-            ));
-        }
-    };
+        _ => Err(BlobClientError::Rejected(
+            "managed_blob_custody_delegation_denied".to_owned(),
+        )),
+    }
+}
+
+fn decode_delegation_proof(
+    delivery: &hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyDelegationDeliveryV1,
+    expected_request_id: &[u8; 16],
+    expected_reference_id: &[u8; 16],
+    predecessor_proof: &[u8],
+) -> Result<ManagedBlobCustodyDelegationV1, BlobClientError> {
     let request_id: [u8; 16] = delivery
         .request_id
         .as_slice()
@@ -361,24 +466,39 @@ fn decode_custody_delegation_response(
         .map_err(|_| BlobClientError::InvalidResponse)?;
     let proof = BlobCustodySourceProofV1::decode(delivery.custody_transfer_source_proof.as_slice())
         .map_err(|_| BlobClientError::InvalidResponse)?;
-    if request_id != *request.request_id
+    if request_id != *expected_request_id
         || proof.proof_kind
             != BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1
                 as i32
-        || proof.delegation_id != request.request_id
-        || proof.reference_id != request.current_reference_id
+        || proof.delegation_id != expected_request_id
+        || proof.reference_id != expected_reference_id
         || proof.predecessor_proof_sha256
-            != Sha256::digest(request.predecessor_custody_source_proof).as_slice()
-        || proof.target_owner_id != request.target.owner_id
-        || proof.target_module_id != request.target.module_id
-        || proof.target_capability_id != request.target.capability_id
+            != Sha256::digest(predecessor_proof).as_slice()
+        || !valid_target_token(&delivery.resolved_target_owner_id)
+        || !valid_target_token(&delivery.resolved_target_module_id)
+        || !valid_target_token(&delivery.resolved_target_capability_id)
+        || proof.target_owner_id != delivery.resolved_target_owner_id
+        || proof.target_module_id != delivery.resolved_target_module_id
+        || proof.target_capability_id != delivery.resolved_target_capability_id
     {
         return Err(BlobClientError::InvalidResponse);
     }
     Ok(ManagedBlobCustodyDelegationV1 {
         request_id,
-        custody_transfer_source_proof: delivery.custody_transfer_source_proof,
+        custody_transfer_source_proof: delivery.custody_transfer_source_proof.clone(),
+        resolved_target_owner_id: delivery.resolved_target_owner_id.clone(),
+        resolved_target_module_id: delivery.resolved_target_module_id.clone(),
+        resolved_target_capability_id: delivery.resolved_target_capability_id.clone(),
     })
+}
+
+fn valid_contract_reference(value: &ContractReferenceV1) -> bool {
+    valid_target_token(&value.owner)
+        && valid_target_token(&value.name)
+        && value.major > 0
+        && value.revision > 0
+        && value.schema_sha256.len() == 32
+        && value.schema_sha256.iter().any(|byte| *byte != 0)
 }
 
 fn valid_token(value: &str) -> bool {
@@ -1016,6 +1136,9 @@ mod tests {
                 hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyDelegationDeliveryV1 {
                     request_id: request_id.to_vec(),
                     custody_transfer_source_proof: proof.encode_to_vec(),
+                    resolved_target_owner_id: target.owner_id.to_owned(),
+                    resolved_target_module_id: target.module_id.to_owned(),
+                    resolved_target_capability_id: target.capability_id.to_owned(),
                 },
             )),
             error_code: String::new(),
@@ -1035,6 +1158,60 @@ mod tests {
         assert_eq!(
             decode_custody_delegation_response(response, &wrong_target),
             Err(BlobClientError::InvalidResponse)
+        );
+    }
+
+    #[test]
+    fn resolved_provider_delegation_trusts_only_kernel_returned_exact_target() {
+        let request_id = [1; 16];
+        let reference_id = [2; 16];
+        let predecessor = [3; 64];
+        let evidence_id = [4; 16];
+        let evidence_sha256 = [5; 32];
+        let contract = ContractReferenceV1 {
+            owner: "speech_to_text".to_owned(),
+            name: "speech_to_text_provider_transcribe".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: vec![6; 32],
+        };
+        let request = ManagedBlobResolvedProviderCustodyDelegationRequestV1 {
+            request_id: &request_id,
+            capability_id: "speech_to_text.blob.v1",
+            current_reference_id: &reference_id,
+            predecessor_custody_source_proof: &predecessor,
+            predecessor_evidence_id: &evidence_id,
+            predecessor_evidence_envelope_sha256: &evidence_sha256,
+            target_request_contract: &contract,
+        };
+        let proof = BlobCustodySourceProofV1 {
+            proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindCurrentCustodianRedelegationV1 as i32,
+            delegation_id: request_id.to_vec(),
+            predecessor_proof_sha256: Sha256::digest(predecessor).to_vec(),
+            reference_id: reference_id.to_vec(),
+            target_owner_id: "whisper_stt".to_owned(),
+            target_module_id: "hermes-whisper-stt-runtime".to_owned(),
+            target_capability_id: "speech_to_text.provider.v1".to_owned(),
+            ..Default::default()
+        };
+        let response = ManagedRuntimeControlResponseV1 {
+            result: Some(ControlResult::BlobCustodyDelegation(
+                hermes_runtime_protocol::v1::ManagedRuntimeBlobCustodyDelegationDeliveryV1 {
+                    request_id: request_id.to_vec(),
+                    custody_transfer_source_proof: proof.encode_to_vec(),
+                    resolved_target_owner_id: "whisper_stt".to_owned(),
+                    resolved_target_module_id: "hermes-whisper-stt-runtime".to_owned(),
+                    resolved_target_capability_id: "speech_to_text.provider.v1".to_owned(),
+                },
+            )),
+            error_code: String::new(),
+        };
+        let decoded = decode_resolved_custody_delegation_response(response, &request)
+            .expect("resolved delegation");
+        assert_eq!(decoded.resolved_target_owner_id, "whisper_stt");
+        assert_eq!(
+            decoded.resolved_target_module_id,
+            "hermes-whisper-stt-runtime"
         );
     }
 

@@ -146,10 +146,18 @@ message ManagedRuntimeBlobCustodyDelegationRequestV1 {
   string target_owner_id = 7;
   string target_module_id = 8;
   string target_capability_id = 9;
+  // Provider-neutral alternative to fields 7-9. Kernel resolves the single
+  // current request provider using the same dependency, grant and fence rules
+  // as RouteModuleRequest. Exact target coordinates and this contract are
+  // mutually exclusive.
+  ContractReferenceV1 target_request_contract = 10;
 }
 message ManagedRuntimeBlobCustodyDelegationDeliveryV1 {
   bytes request_id = 1;
   bytes custody_transfer_source_proof = 2;
+  string resolved_target_owner_id = 3;
+  string resolved_target_module_id = 4;
+  string resolved_target_capability_id = 5;
 }
 // Caller-to-Kernel request for one descriptor-declared query dependency.
 // Target process identity and capability are deliberately absent: Kernel

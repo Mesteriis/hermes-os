@@ -151,6 +151,13 @@ timeouts and provider errors. Executable запускается без shell, п
 absolute path and pinned binary/model hashes, с bounded stdin/stdout/files and
 deadline. Settings и Vault не содержат audio или transcript.
 
+Engine не знает owner/module identity конкретного provider. Для передачи Blob
+custody Kernel атомарно разрешает тот же exact request-provider contract,
+проверяет dependency/grants/current runtime fences и выпускает proof на
+фактически выбранные provider owner/module/capability. Caller не передаёт эти
+координаты в provider-neutral режиме. Явная target delegation остаётся отдельным
+низкоуровневым режимом и не используется STT engine для выбора Whisper.
+
 Generic `ai.inference`, Ollama text generation и Communications AI source
 contracts не участвуют в этом flow. Последующий summary transcript является
 отдельным explicit workflow над transcript artifact и не расширяет

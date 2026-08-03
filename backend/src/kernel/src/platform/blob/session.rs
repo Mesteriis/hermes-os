@@ -229,6 +229,7 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
                         .allows(ModuleBlobOperationV1::CustodyTransfer)
             })
             .ok_or_else(custody_delegation_denied)?;
+        let target = resolve_delegation_target(&self.store, expectation, &request)?;
         let now = now_unix_ms()?;
         let signer = FileDeviceSigner::open_for_instance(&self.data_dir)?;
         let predecessor = verify_custody_source_proof(
@@ -285,9 +286,9 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
             &grant,
             &predecessor.receipt_sha256,
             CustodyProofTargetV1 {
-                owner_id: &request.target_owner_id,
-                module_id: &request.target_module_id,
-                capability_id: &request.target_capability_id,
+                owner_id: &target.owner_id,
+                module_id: &target.module_id,
+                capability_id: &target.capability_id,
             },
             now,
             CustodyProofLineageV1 {
@@ -299,6 +300,9 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         Ok(ManagedRuntimeBlobCustodyDelegationDeliveryV1 {
             request_id: request.request_id,
             custody_transfer_source_proof: proof,
+            resolved_target_owner_id: target.owner_id,
+            resolved_target_module_id: target.module_id,
+            resolved_target_capability_id: target.capability_id,
         })
     }
 }
@@ -437,9 +441,60 @@ pub(crate) fn valid_delegation_request(
             .predecessor_evidence_envelope_sha256
             .iter()
             .any(|byte| *byte != 0)
-        && valid_target_token(&request.target_owner_id)
+        && valid_delegation_target(request)
+}
+
+struct ResolvedCustodyTargetV1 {
+    owner_id: String,
+    module_id: String,
+    capability_id: String,
+}
+
+fn valid_delegation_target(request: &ManagedRuntimeBlobCustodyDelegationRequestV1) -> bool {
+    let has_explicit = valid_target_token(&request.target_owner_id)
         && valid_target_token(&request.target_module_id)
-        && valid_target_token(&request.target_capability_id)
+        && valid_target_token(&request.target_capability_id);
+    let explicit_empty = request.target_owner_id.is_empty()
+        && request.target_module_id.is_empty()
+        && request.target_capability_id.is_empty();
+    let has_contract = request
+        .target_request_contract
+        .as_ref()
+        .is_some_and(valid_request_contract);
+    (has_explicit && request.target_request_contract.is_none()) || (explicit_empty && has_contract)
+}
+
+fn valid_request_contract(contract: &hermes_runtime_protocol::v1::ContractReferenceV1) -> bool {
+    valid_target_token(&contract.owner)
+        && valid_target_token(&contract.name)
+        && contract.major > 0
+        && contract.revision > 0
+        && contract.schema_sha256.len() == 32
+        && contract.schema_sha256.iter().any(|byte| *byte != 0)
+}
+
+fn resolve_delegation_target(
+    store: &hermes_kernel_control_store_sqlite::SqliteControlStore,
+    expectation: &ManagedRuntimeExpectation,
+    request: &ManagedRuntimeBlobCustodyDelegationRequestV1,
+) -> Result<ResolvedCustodyTargetV1, String> {
+    if let Some(contract) = request.target_request_contract.as_ref() {
+        let provider = crate::modules::capability::module_request::resolve_provider_for_caller(
+            store,
+            expectation,
+            contract,
+        )?;
+        return Ok(ResolvedCustodyTargetV1 {
+            owner_id: provider.registration.owner_id().to_owned(),
+            module_id: provider.registration.module_id().to_owned(),
+            capability_id: provider.route.capability_id().to_owned(),
+        });
+    }
+    Ok(ResolvedCustodyTargetV1 {
+        owner_id: request.target_owner_id.clone(),
+        module_id: request.target_module_id.clone(),
+        capability_id: request.target_capability_id.clone(),
+    })
 }
 
 pub(super) fn verify_custody_source_proof(
@@ -773,6 +828,7 @@ mod tests {
             target_owner_id: "attachment_archive_inspection".to_owned(),
             target_module_id: "hermes-attachment-archive-inspection-runtime".to_owned(),
             target_capability_id: "attachment_archive_inspection.blob.v1".to_owned(),
+            target_request_contract: None,
         };
         assert!(valid_delegation_request(&request));
 
@@ -780,6 +836,35 @@ mod tests {
         assert!(!valid_delegation_request(&request));
         request.target_module_id = "hermes-attachment-archive-inspection-runtime".to_owned();
         request.predecessor_evidence_envelope_sha256 = vec![0; 32];
+        assert!(!valid_delegation_request(&request));
+    }
+
+    #[test]
+    fn custody_delegation_accepts_exactly_one_explicit_or_resolved_provider_target() {
+        let contract = hermes_runtime_protocol::v1::ContractReferenceV1 {
+            owner: "speech_to_text".to_owned(),
+            name: "speech_to_text_provider_transcribe".to_owned(),
+            major: 1,
+            revision: 1,
+            schema_sha256: vec![7; 32],
+        };
+        let mut request = ManagedRuntimeBlobCustodyDelegationRequestV1 {
+            request_id: vec![1; 16],
+            capability_id: "speech_to_text.blob.v1".to_owned(),
+            current_reference_id: vec![2; 16],
+            predecessor_custody_source_proof: vec![3; 128],
+            predecessor_evidence_id: vec![4; 16],
+            predecessor_evidence_envelope_sha256: vec![5; 32],
+            target_owner_id: String::new(),
+            target_module_id: String::new(),
+            target_capability_id: String::new(),
+            target_request_contract: Some(contract),
+        };
+        assert!(valid_delegation_request(&request));
+
+        request.target_owner_id = "whisper_stt".to_owned();
+        request.target_module_id = "hermes-whisper-stt-runtime".to_owned();
+        request.target_capability_id = "speech_to_text.provider.v1".to_owned();
         assert!(!valid_delegation_request(&request));
     }
 
