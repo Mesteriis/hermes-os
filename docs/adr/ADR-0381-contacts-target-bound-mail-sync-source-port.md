@@ -9,9 +9,10 @@ persistence/materialization и workflow forwarding до Mail-owned upsert comman
 Mail runtime теперь принимает target-bound custody, читает exact snapshot,
 выполняет Google People upsert или iCloud read-only rejection и публикует
 terminal result из owner-local outbox. Mail-owned target receipt persistence и
-disposable PostgreSQL restart replay реализованы; managed Blob/provider и
-browser conformance ещё не реализованы, поэтому `mail_contacts_sync_v1`
-остаётся `planned`.
+disposable PostgreSQL restart replay реализованы. Managed Blob/Google update,
+missing-write-scope и iCloud read-only provider evidence также реализованы;
+Google create, revoke/outage recovery и browser conformance ещё не реализованы,
+поэтому `mail_contacts_sync_v1` остаётся `planned`.
 
 Уточняет:
 

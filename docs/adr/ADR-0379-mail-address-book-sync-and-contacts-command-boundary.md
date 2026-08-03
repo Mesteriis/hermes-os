@@ -46,9 +46,12 @@ People `PATCH` с provider ETag и возвращает terminal result чере
 атомарно завершает owner-local reverse operation и исходный run; duplicate
 provider result не увеличивает counters и не создаёт повторный realtime
 transition. Disposable PostgreSQL отдельно доказывает completion после нового
-connection, exact replay и конфликт hash. Google create, explicit iCloud и
-missing-write-scope negatives, revoke/outage recovery и browser conformance ещё
-не доказаны,
+connection, exact replay и конфликт hash. Explicit iCloud read-only и
+missing-write-scope negatives теперь доказаны отдельными signed managed Mail
+flows: оба возвращают exact terminal rejection через NATS до Blob custody или
+provider mutation. Для iCloud добавлены отдельные additive Mail-owned CardDAV
+credential binding и lifecycle tables; IMAP credential state не переиспользуется.
+Google create, revoke/outage recovery и browser conformance ещё не доказаны,
 поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
 Contacts command открыт только после exact six-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
@@ -290,9 +293,12 @@ idempotent manual replay без повторного provider request и Schedul
 receipt только после terminal workflow state. Тот же contour доказывает
 authorized Google bidirectional update: target-bound Blob transfer, private
 snapshot read, ETag-fenced provider `PATCH`, terminal Mail result и completion
-исходного workflow run без direct owner calls или cross-owner SQL. Этот evidence
-не считается доказательством Google create, explicit negative, outage/revoke или
-browser частей gate.
+исходного workflow run без direct owner calls или cross-owner SQL. Отдельные
+managed provider flows закрывают пункт 5: Google binding без exact Contacts
+write authority возвращает `WRITE_SCOPE_REQUIRED` без Blob/provider IO, а
+iCloud CardDAV возвращает `READ_ONLY_PROVIDER` без remote write. Этот evidence
+не считается доказательством Google create, outage/revoke или browser частей
+gate.
 
 ## Последствия
 

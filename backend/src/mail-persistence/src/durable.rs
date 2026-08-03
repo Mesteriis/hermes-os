@@ -355,6 +355,10 @@ impl MailDurablePersistence {
         sqlx::raw_sql(crate::MAIL_SCHEMA_V10)
             .execute(&self.pool)
             .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
+        sqlx::raw_sql(crate::MAIL_ICLOUD_CARDDAV_CREDENTIAL_SCHEMA_V1)
+            .execute(&self.pool)
+            .await
             .map(|_| ())
             .map_err(|_| MailDurablePersistenceError::Database)
     }

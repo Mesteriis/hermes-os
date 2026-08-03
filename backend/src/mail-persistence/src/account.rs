@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS hermes_data.mail_account_credential_bindings (
 );
 "#;
 
+pub const MAIL_ICLOUD_CARDDAV_CREDENTIAL_SCHEMA_V1: &str =
+    include_str!("../migrations/0029_icloud_carddav_credential_bindings.sql");
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailCredentialBindingV1 {
     pub connection_id: String,
@@ -46,40 +49,58 @@ impl MailDurablePersistence {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
         let purpose = purpose_to_i16(request.purpose)?;
+        let address_book = request.purpose == MailCredentialPurposeV1::IcloudCardDavPassword;
         let row = if request.expected_binding_revision == 0 {
-            sqlx::query(
+            let statement = if address_book {
+                "INSERT INTO hermes_data.mail_icloud_carddav_credential_bindings (
+                    connection_id, configuration_instance_id, purpose, credential_revision,
+                    binding_revision, state, updated_at_unix_seconds
+                 ) VALUES ($1, $2, $3, $4, 1, 2, $5)
+                 ON CONFLICT (connection_id) DO NOTHING
+                 RETURNING connection_id, purpose, binding_revision, state"
+            } else {
                 "INSERT INTO hermes_data.mail_account_credential_bindings (
                     connection_id, configuration_instance_id, purpose, credential_revision,
                     binding_revision, state, updated_at_unix_seconds
                  ) VALUES ($1, $2, $3, $4, 1, 2, $5)
                  ON CONFLICT (connection_id, purpose) DO NOTHING
-                 RETURNING connection_id, purpose, binding_revision, state",
-            )
-            .bind(&request.connection_id)
-            .bind(configuration_instance_id)
-            .bind(purpose)
-            .bind(to_i64(request.credential_revision)?)
-            .bind(updated_at_unix_seconds)
-            .fetch_optional(&self.pool)
-            .await
+                 RETURNING connection_id, purpose, binding_revision, state"
+            };
+            sqlx::query(statement)
+                .bind(&request.connection_id)
+                .bind(configuration_instance_id)
+                .bind(purpose)
+                .bind(to_i64(request.credential_revision)?)
+                .bind(updated_at_unix_seconds)
+                .fetch_optional(&self.pool)
+                .await
         } else {
-            sqlx::query(
+            let statement = if address_book {
+                "UPDATE hermes_data.mail_icloud_carddav_credential_bindings
+                 SET credential_revision = $1, binding_revision = binding_revision + 1,
+                     state = 2, applied_runtime_generation = NULL,
+                     updated_at_unix_seconds = $2
+                 WHERE connection_id = $3 AND configuration_instance_id = $4
+                   AND purpose = $5 AND binding_revision = $6 AND state NOT IN (5)
+                 RETURNING connection_id, purpose, binding_revision, state"
+            } else {
                 "UPDATE hermes_data.mail_account_credential_bindings
                  SET credential_revision = $1, binding_revision = binding_revision + 1,
                      state = 2, applied_runtime_generation = NULL,
                      updated_at_unix_seconds = $2
                  WHERE connection_id = $3 AND configuration_instance_id = $4
                    AND purpose = $5 AND binding_revision = $6 AND state NOT IN (5)
-                 RETURNING connection_id, purpose, binding_revision, state",
-            )
-            .bind(to_i64(request.credential_revision)?)
-            .bind(updated_at_unix_seconds)
-            .bind(&request.connection_id)
-            .bind(configuration_instance_id)
-            .bind(purpose)
-            .bind(to_i64(request.expected_binding_revision)?)
-            .fetch_optional(&self.pool)
-            .await
+                 RETURNING connection_id, purpose, binding_revision, state"
+            };
+            sqlx::query(statement)
+                .bind(to_i64(request.credential_revision)?)
+                .bind(updated_at_unix_seconds)
+                .bind(&request.connection_id)
+                .bind(configuration_instance_id)
+                .bind(purpose)
+                .bind(to_i64(request.expected_binding_revision)?)
+                .fetch_optional(&self.pool)
+                .await
         }
         .map_err(|_| MailDurablePersistenceError::Database)?
         .ok_or(MailDurablePersistenceError::InvalidRow)?;
@@ -107,19 +128,25 @@ impl MailDurablePersistence {
         if connection_id.trim().is_empty() || !purpose.bindable_by_client() {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        sqlx::query(
+        let statement = if purpose == MailCredentialPurposeV1::IcloudCardDavPassword {
+            "SELECT connection_id, configuration_instance_id, purpose, credential_revision,
+                    binding_revision, state, applied_runtime_generation
+             FROM hermes_data.mail_icloud_carddav_credential_bindings
+             WHERE connection_id = $1 AND purpose = $2"
+        } else {
             "SELECT connection_id, configuration_instance_id, purpose, credential_revision,
                     binding_revision, state, applied_runtime_generation
              FROM hermes_data.mail_account_credential_bindings
-             WHERE connection_id = $1 AND purpose = $2",
-        )
-        .bind(connection_id)
-        .bind(purpose_to_i16(purpose)?)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|_| MailDurablePersistenceError::Database)?
-        .map(decode_binding)
-        .transpose()
+             WHERE connection_id = $1 AND purpose = $2"
+        };
+        sqlx::query(statement)
+            .bind(connection_id)
+            .bind(purpose_to_i16(purpose)?)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?
+            .map(decode_binding)
+            .transpose()
     }
 
     pub async fn account_credential_bindings(
@@ -133,7 +160,13 @@ impl MailDurablePersistence {
             "SELECT connection_id, configuration_instance_id, purpose, credential_revision,
                     binding_revision, state, applied_runtime_generation
              FROM hermes_data.mail_account_credential_bindings
-             WHERE connection_id = $1 ORDER BY purpose",
+             WHERE connection_id = $1
+             UNION ALL
+             SELECT connection_id, configuration_instance_id, purpose, credential_revision,
+                    binding_revision, state, applied_runtime_generation
+             FROM hermes_data.mail_icloud_carddav_credential_bindings
+             WHERE connection_id = $1
+             ORDER BY purpose",
         )
         .bind(connection_id)
         .fetch_all(&self.pool)
@@ -165,23 +198,30 @@ impl MailDurablePersistence {
         {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
-        let result = sqlx::query(
+        let statement = if purpose == MailCredentialPurposeV1::IcloudCardDavPassword {
+            "UPDATE hermes_data.mail_icloud_carddav_credential_bindings
+             SET state = 3, applied_runtime_generation = $1, updated_at_unix_seconds = $2
+             WHERE connection_id = $3 AND configuration_instance_id = $4
+               AND purpose = $5 AND binding_revision = $6 AND credential_revision = $7
+               AND state IN (2, 3)"
+        } else {
             "UPDATE hermes_data.mail_account_credential_bindings
              SET state = 3, applied_runtime_generation = $1, updated_at_unix_seconds = $2
              WHERE connection_id = $3 AND configuration_instance_id = $4
                AND purpose = $5 AND binding_revision = $6 AND credential_revision = $7
-               AND state IN (2, 3)",
-        )
-        .bind(to_i64(runtime_generation)?)
-        .bind(updated_at_unix_seconds)
-        .bind(connection_id)
-        .bind(configuration_instance_id)
-        .bind(purpose_to_i16(purpose)?)
-        .bind(to_i64(binding_revision)?)
-        .bind(to_i64(credential_revision)?)
-        .execute(&self.pool)
-        .await
-        .map_err(|_| MailDurablePersistenceError::Database)?;
+               AND state IN (2, 3)"
+        };
+        let result = sqlx::query(statement)
+            .bind(to_i64(runtime_generation)?)
+            .bind(updated_at_unix_seconds)
+            .bind(connection_id)
+            .bind(configuration_instance_id)
+            .bind(purpose_to_i16(purpose)?)
+            .bind(to_i64(binding_revision)?)
+            .bind(to_i64(credential_revision)?)
+            .execute(&self.pool)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
         (result.rows_affected() == 1)
             .then_some(())
             .ok_or(MailDurablePersistenceError::InvalidRow)

@@ -100,6 +100,12 @@ const files = {
     'src/mail-address-book-persistence/src/schema.rs',
     BACKEND_ROOT,
   ),
+  mailCredentialPersistence: new URL('src/mail-persistence/src/account.rs', BACKEND_ROOT),
+  mailLifecyclePersistence: new URL('src/mail-persistence/src/lifecycle.rs', BACKEND_ROOT),
+  mailCardDavCredentialMigration: new URL(
+    'src/mail-persistence/migrations/0029_icloud_carddav_credential_bindings.sql',
+    BACKEND_ROOT,
+  ),
   mailRuntimeSettings: new URL('src/mail-runtime/src/settings.rs', BACKEND_ROOT),
   mailRuntimeStorageBundle: new URL('src/mail-runtime/src/storage_bundle.rs', BACKEND_ROOT),
   mailRuntimeManifest: new URL('src/mail-runtime/Cargo.toml', BACKEND_ROOT),
@@ -451,6 +457,9 @@ test('Mail owns address-book persistence settings and credential authority witho
     delivery,
     fetchDelivery,
     schema,
+    credentialPersistence,
+    lifecyclePersistence,
+    cardDavCredentialMigration,
     settings,
     storageBundle,
     oauthCore,
@@ -466,6 +475,9 @@ test('Mail owns address-book persistence settings and credential authority witho
     readFile(files.mailPersistenceDelivery, 'utf8'),
     readFile(files.mailPersistenceFetchDelivery, 'utf8'),
     readFile(files.mailPersistenceSchema, 'utf8'),
+    readFile(files.mailCredentialPersistence, 'utf8'),
+    readFile(files.mailLifecyclePersistence, 'utf8'),
+    readFile(files.mailCardDavCredentialMigration, 'utf8'),
     readFile(files.mailRuntimeSettings, 'utf8'),
     readFile(files.mailRuntimeStorageBundle, 'utf8'),
     readFile(files.mailOAuthCore, 'utf8'),
@@ -490,6 +502,12 @@ test('Mail owns address-book persistence settings and credential authority witho
   assert.doesNotMatch(manifest, /hermes-contacts|hermes-mail-contacts-sync/);
   assert.match(schema, /MAIL_ADDRESS_BOOK_STORAGE_BUNDLE_REVISION_V1: u32 = 28/);
   assert.match(storageBundle, /append_mail_address_book_storage_v1/);
+  assert.match(storageBundle, /append_mail_icloud_carddav_credential_storage_v1/);
+  assert.match(cardDavCredentialMigration, /mail_icloud_carddav_credential_bindings/);
+  assert.match(cardDavCredentialMigration, /mail_icloud_carddav_lifecycle_credentials/);
+  assert.doesNotMatch(cardDavCredentialMigration, /DROP |ALTER TABLE/i);
+  assert.match(credentialPersistence, /mail_icloud_carddav_credential_bindings/);
+  assert.match(lifecyclePersistence, /mail_icloud_carddav_lifecycle_credentials/);
   assert.match(migration, /mail_address_book_upsert_inbox/);
   assert.match(migration, /mail_address_book_upsert_result_outbox/);
   assert.match(migration, /contacts_write_authorized BOOLEAN NOT NULL DEFAULT FALSE/);
@@ -647,10 +665,14 @@ test('managed Mail provider conformance keeps endpoints credentials and evidence
   assert.match(setup, /CardDavAddressBook/);
   assert.match(flow, /managed_mail_google_people_page_is_exact_restart_safe_and_private/);
   assert.match(flow, /managed_mail_carddav_page_uses_separate_credential_and_read_only_provider/);
+  assert.match(flow, /MailAddressBookRejectCodeWriteScopeRequired/);
+  assert.match(flow, /MailAddressBookRejectCodeReadOnlyProvider/);
+  assert.match(flow, /accepted_people_writes\(\), 0/);
   assert.match(flow, /restart_mail_runtime_without_smtp/);
   assert.match(googleFixture, /\/v1\/people\/me\/connections/);
   assert.match(setup, /managed-mail-carddav-password/);
   assert.match(cardDavFixture, /authorization/);
+  assert.match(cardDavFixture, /set_nonblocking\(false\)/);
   assert.doesNotMatch(cardDavFixture, /managed-mail-carddav-password/);
   assert.doesNotMatch(`${worker}\n${setup}`, /hermes_contacts_(?:runtime|persistence)/);
 });

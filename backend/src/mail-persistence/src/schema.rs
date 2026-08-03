@@ -4,10 +4,11 @@ use hermes_storage_protocol::v1::{StorageBundleV1, StorageMigrationStepV1};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3, MAIL_SCHEMA_V4, MAIL_SCHEMA_V5, MAIL_SCHEMA_V6,
-    MAIL_SCHEMA_V7, MAIL_SCHEMA_V8, MAIL_SCHEMA_V9, MAIL_SCHEMA_V10, MAIL_SCHEMA_V11,
-    MAIL_SCHEMA_V12, MAIL_SCHEMA_V13, MAIL_SCHEMA_V14, MAIL_SCHEMA_V15, MAIL_SCHEMA_V16,
-    MAIL_SCHEMA_V17, MAIL_SCHEMA_V18, MAIL_SCHEMA_V19, MAIL_SCHEMA_V20,
+    MAIL_ICLOUD_CARDDAV_CREDENTIAL_SCHEMA_V1, MAIL_SCHEMA_V1, MAIL_SCHEMA_V2, MAIL_SCHEMA_V3,
+    MAIL_SCHEMA_V4, MAIL_SCHEMA_V5, MAIL_SCHEMA_V6, MAIL_SCHEMA_V7, MAIL_SCHEMA_V8, MAIL_SCHEMA_V9,
+    MAIL_SCHEMA_V10, MAIL_SCHEMA_V11, MAIL_SCHEMA_V12, MAIL_SCHEMA_V13, MAIL_SCHEMA_V14,
+    MAIL_SCHEMA_V15, MAIL_SCHEMA_V16, MAIL_SCHEMA_V17, MAIL_SCHEMA_V18, MAIL_SCHEMA_V19,
+    MAIL_SCHEMA_V20,
 };
 
 pub const MAIL_STORAGE_BUNDLE_REVISION_V1: u32 = 1;
@@ -36,6 +37,13 @@ pub const MAIL_STORAGE_BUNDLE_REVISION_V20: u32 = 20;
 /// bundle revisions fence release identity and do not require a same-numbered
 /// migration step.
 pub const MAIL_STORAGE_BUNDLE_REVISION_V22: u32 = 22;
+pub const MAIL_ICLOUD_CARDDAV_CREDENTIAL_STORAGE_BUNDLE_REVISION_V1: u32 = 29;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MailIcloudCardDavCredentialSchemaErrorV1 {
+    InvalidPredecessor,
+    InvalidSuccessor,
+}
 
 /// Returns the complete Mail schema as one immutable initial Storage bundle.
 ///
@@ -174,6 +182,30 @@ pub fn mail_storage_bundle_v1() -> StorageBundleV1 {
     }
 }
 
+pub fn append_mail_icloud_carddav_credential_storage_v1(
+    mut predecessor: StorageBundleV1,
+) -> Result<StorageBundleV1, MailIcloudCardDavCredentialSchemaErrorV1> {
+    if predecessor.major != 1
+        || predecessor.revision != MAIL_ICLOUD_CARDDAV_CREDENTIAL_STORAGE_BUNDLE_REVISION_V1 - 1
+        || predecessor.bundle_id != "mail_state"
+        || predecessor.owner_id != "mail"
+        || predecessor.steps.last().map(|step| step.revision) != Some(predecessor.revision)
+        || hermes_storage_protocol::validation::validate_storage_bundle(&predecessor).is_err()
+    {
+        return Err(MailIcloudCardDavCredentialSchemaErrorV1::InvalidPredecessor);
+    }
+    predecessor.steps.push(StorageMigrationStepV1 {
+        revision: MAIL_ICLOUD_CARDDAV_CREDENTIAL_STORAGE_BUNDLE_REVISION_V1,
+        migration_id: "mail_icloud_carddav_credential_bindings".to_owned(),
+        forward_sql_utf8: MAIL_ICLOUD_CARDDAV_CREDENTIAL_SCHEMA_V1.as_bytes().to_vec(),
+        sha256: Sha256::digest(MAIL_ICLOUD_CARDDAV_CREDENTIAL_SCHEMA_V1.as_bytes()).to_vec(),
+    });
+    predecessor.revision = MAIL_ICLOUD_CARDDAV_CREDENTIAL_STORAGE_BUNDLE_REVISION_V1;
+    hermes_storage_protocol::validation::validate_storage_bundle(&predecessor)
+        .map(|()| predecessor)
+        .map_err(|_| MailIcloudCardDavCredentialSchemaErrorV1::InvalidSuccessor)
+}
+
 #[cfg(test)]
 mod tests {
     use hermes_storage_protocol::validation::validate_storage_bundle;
@@ -234,5 +266,30 @@ mod tests {
         assert!(sql.contains("mail_message_permanent_delete_operations"));
         assert!(sql.contains("mail_imap_message_locators"));
         assert!(!sql.contains("hermes_data.attachment_security_"));
+    }
+
+    #[test]
+    fn carddav_credential_successor_is_additive_and_mail_owned() {
+        let mut predecessor = mail_storage_bundle_v1();
+        predecessor.revision = 28;
+        predecessor.steps.push(StorageMigrationStepV1 {
+            revision: 28,
+            migration_id: "mail_address_book_predecessor".to_owned(),
+            forward_sql_utf8:
+                b"CREATE TABLE hermes_data.mail_address_book_predecessor (id BIGINT);".to_vec(),
+            sha256: Sha256::digest(
+                b"CREATE TABLE hermes_data.mail_address_book_predecessor (id BIGINT);",
+            )
+            .to_vec(),
+        });
+        let bundle = append_mail_icloud_carddav_credential_storage_v1(predecessor)
+            .expect("valid CardDAV credential successor");
+        assert_eq!(bundle.revision, 29);
+        let sql = std::str::from_utf8(&bundle.steps.last().unwrap().forward_sql_utf8)
+            .expect("CardDAV credential SQL");
+        assert!(sql.contains("mail_icloud_carddav_credential_bindings"));
+        assert!(sql.contains("mail_icloud_carddav_lifecycle_credentials"));
+        assert!(!sql.contains("DROP "));
+        assert!(!sql.contains("communications"));
     }
 }

@@ -136,21 +136,27 @@ impl MailDurablePersistence {
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?;
         for progress in &credentials {
-            sqlx::query(
+            let statement = if progress.purpose == MailCredentialPurposeV1::IcloudCardDavPassword {
+                "INSERT INTO hermes_data.mail_icloud_carddav_lifecycle_credentials (
+                    operation_id, purpose, binding_revision, credential_revision,
+                    state, updated_at_unix_seconds
+                 ) VALUES ($1, $2, $3, $4, $5, $6)"
+            } else {
                 "INSERT INTO hermes_data.mail_account_lifecycle_credentials (
                     operation_id, purpose, binding_revision, credential_revision,
                     state, updated_at_unix_seconds
-                 ) VALUES ($1, $2, $3, $4, $5, $6)",
-            )
-            .bind(&command.operation_id)
-            .bind(purpose_to_i16(progress.purpose))
-            .bind(progress.binding_revision.map(to_i64).transpose()?)
-            .bind(to_i64(progress.credential_revision)?)
-            .bind(credential_state_to_i16(progress.state))
-            .bind(requested_at_unix_seconds)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| MailDurablePersistenceError::Database)?;
+                 ) VALUES ($1, $2, $3, $4, $5, $6)"
+            };
+            sqlx::query(statement)
+                .bind(&command.operation_id)
+                .bind(purpose_to_i16(progress.purpose))
+                .bind(progress.binding_revision.map(to_i64).transpose()?)
+                .bind(to_i64(progress.credential_revision)?)
+                .bind(credential_state_to_i16(progress.state))
+                .bind(requested_at_unix_seconds)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
         }
         if state == MailAccountLifecycleStateV1::Completed
             && action == MailAccountLifecycleActionV1::Delete
@@ -213,18 +219,23 @@ impl MailDurablePersistence {
         .await
         .map_err(|_| MailDurablePersistenceError::Database)?
         .ok_or(MailDurablePersistenceError::InvalidRow)?;
-        let result = sqlx::query(
+        let lifecycle_statement = if purpose == MailCredentialPurposeV1::IcloudCardDavPassword {
+            "UPDATE hermes_data.mail_icloud_carddav_lifecycle_credentials
+             SET state = $1, updated_at_unix_seconds = $2
+             WHERE operation_id = $3 AND purpose = $4 AND state IN (1, 4)"
+        } else {
             "UPDATE hermes_data.mail_account_lifecycle_credentials
              SET state = $1, updated_at_unix_seconds = $2
-             WHERE operation_id = $3 AND purpose = $4 AND state IN (1, 4)",
-        )
-        .bind(credential_state_to_i16(state))
-        .bind(updated_at_unix_seconds)
-        .bind(operation_id)
-        .bind(purpose_to_i16(purpose))
-        .execute(&mut *transaction)
-        .await
-        .map_err(|_| MailDurablePersistenceError::Database)?;
+             WHERE operation_id = $3 AND purpose = $4 AND state IN (1, 4)"
+        };
+        let result = sqlx::query(lifecycle_statement)
+            .bind(credential_state_to_i16(state))
+            .bind(updated_at_unix_seconds)
+            .bind(operation_id)
+            .bind(purpose_to_i16(purpose))
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| MailDurablePersistenceError::Database)?;
         if result.rows_affected() != 1 {
             return Err(MailDurablePersistenceError::InvalidRow);
         }
@@ -252,25 +263,32 @@ impl MailDurablePersistence {
                 .iter()
                 .find(|progress| progress.purpose == purpose)
                 .ok_or(MailDurablePersistenceError::InvalidRow)?;
-            let result = sqlx::query(
+            let binding_statement = if purpose == MailCredentialPurposeV1::IcloudCardDavPassword {
+                "UPDATE hermes_data.mail_icloud_carddav_credential_bindings
+                 SET state = $1, applied_runtime_generation = NULL,
+                     updated_at_unix_seconds = $2
+                 WHERE connection_id = $3 AND purpose = $4
+                   AND binding_revision = $5 AND credential_revision = $6"
+            } else {
                 "UPDATE hermes_data.mail_account_credential_bindings
                  SET state = $1, applied_runtime_generation = NULL,
                      updated_at_unix_seconds = $2
                  WHERE connection_id = $3 AND purpose = $4
-                   AND binding_revision = $5 AND credential_revision = $6",
-            )
-            .bind(match action {
-                MailAccountLifecycleActionV1::Retire => 4_i16,
-                MailAccountLifecycleActionV1::Delete => 5_i16,
-            })
-            .bind(updated_at_unix_seconds)
-            .bind(connection_id)
-            .bind(purpose_to_i16(purpose))
-            .bind(progress.binding_revision.map(to_i64).transpose()?)
-            .bind(to_i64(progress.credential_revision)?)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| MailDurablePersistenceError::Database)?;
+                   AND binding_revision = $5 AND credential_revision = $6"
+            };
+            let result = sqlx::query(binding_statement)
+                .bind(match action {
+                    MailAccountLifecycleActionV1::Retire => 4_i16,
+                    MailAccountLifecycleActionV1::Delete => 5_i16,
+                })
+                .bind(updated_at_unix_seconds)
+                .bind(connection_id)
+                .bind(purpose_to_i16(purpose))
+                .bind(progress.binding_revision.map(to_i64).transpose()?)
+                .bind(to_i64(progress.credential_revision)?)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| MailDurablePersistenceError::Database)?;
             if result.rows_affected() != 1 {
                 return Err(MailDurablePersistenceError::InvalidRow);
             }
@@ -406,6 +424,10 @@ async fn lifecycle_credentials(
         "SELECT purpose, binding_revision, credential_revision
          FROM hermes_data.mail_account_credential_bindings
          WHERE connection_id = $1 AND state NOT IN (5)
+         UNION ALL
+         SELECT purpose, binding_revision, credential_revision
+         FROM hermes_data.mail_icloud_carddav_credential_bindings
+         WHERE connection_id = $1 AND state NOT IN (5)
          ORDER BY purpose",
     )
     .bind(connection_id)
@@ -462,6 +484,10 @@ async fn lifecycle_credentials_for_operation(
         "SELECT purpose, state, binding_revision, credential_revision
          FROM hermes_data.mail_account_lifecycle_credentials
          WHERE operation_id = $1
+         UNION ALL
+         SELECT purpose, state, binding_revision, credential_revision
+         FROM hermes_data.mail_icloud_carddav_lifecycle_credentials
+         WHERE operation_id = $1
          ORDER BY purpose",
     )
     .bind(operation_id)
@@ -478,6 +504,10 @@ async fn lifecycle_credentials_for_pool(
     let rows = sqlx::query(
         "SELECT purpose, state, binding_revision, credential_revision
          FROM hermes_data.mail_account_lifecycle_credentials
+         WHERE operation_id = $1
+         UNION ALL
+         SELECT purpose, state, binding_revision, credential_revision
+         FROM hermes_data.mail_icloud_carddav_lifecycle_credentials
          WHERE operation_id = $1
          ORDER BY purpose",
     )

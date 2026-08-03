@@ -21,9 +21,12 @@ observation/result, duplicate suppression и successor Google runtime generation
 custody и Google People update с
 ETag, а workflow принимает exact terminal Mail result и завершает связанный
 bidirectional run. Отдельный disposable PostgreSQL test доказывает atomic
-terminal commit после нового connection, replay и hash conflict fencing. Google
-create, explicit iCloud/missing-scope negatives, revoke/outage recovery и
-browser conformance ещё не закрыты, поэтому наличие этого среза не открывает
+terminal commit после нового connection, replay и hash conflict fencing.
+Explicit iCloud read-only и missing-scope negatives закрыты signed managed Mail
+flows с typed terminal results через NATS и нулевым Blob/provider IO. CardDAV
+credential binding и lifecycle state хранятся в отдельных additive Mail-owned
+tables, а не в IMAP binding. Google create, revoke/outage recovery и browser
+conformance ещё не закрыты, поэтому наличие этого среза не открывает
 `mail_contacts_sync_v1`.
 
 Уточняет:

@@ -60,6 +60,9 @@ impl MailCardDavFixture {
                 match listener.accept() {
                     Ok((stream, _)) => {
                         stream
+                            .set_nonblocking(false)
+                            .expect("configure blocking CardDAV fixture connection");
+                        stream
                             .set_read_timeout(Some(Duration::from_secs(10)))
                             .expect("CardDAV read timeout");
                         stream

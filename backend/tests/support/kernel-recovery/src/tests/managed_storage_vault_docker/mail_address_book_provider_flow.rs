@@ -9,9 +9,18 @@ use hermes_events_jetstream::DurableSubjectV1;
 use hermes_mail_address_book_contract::{
     MAIL_ADDRESS_BOOK_COMMAND_SOURCE_MODULE_ID_V1, MailAddressBookContractV1,
     MailAddressBookEnvelopeContextV1, build_fetch_mail_address_book_page_command_v1,
+    build_upsert_mail_address_book_entry_command_v1,
     wire::{
         FetchMailAddressBookPageCommandV1, MailAddressBookEntryObservedV1,
-        MailAddressBookPageCompletedV1,
+        MailAddressBookEntryUpsertRejectedV1, MailAddressBookPageCompletedV1,
+        MailAddressBookRejectCodeV1, UpsertMailAddressBookEntryCommandV1,
+    },
+};
+use hermes_mail_api::{
+    account::{MailCredentialBindingStateV1, MailCredentialPurposeV1},
+    account_lifecycle::{
+        MailAccountLifecycleActionV1, MailAccountLifecycleCommandV1, MailAccountLifecycleStateV1,
+        MailCredentialLifecycleStateV1,
     },
 };
 use hermes_mail_persistence::GmailOAuthCredentialBindingV1;
@@ -170,6 +179,28 @@ fn managed_mail_google_people_page_is_exact_restart_safe_and_private() {
     });
     assert_eq!(provider.accepted_people_reads(), 2);
 
+    runtime
+        .block_on(durable.store_gmail_oauth_credential_binding(
+            MAIL_ACCOUNT_ID,
+            &seeded.binding(),
+            2,
+        ))
+        .expect("remove Google Contacts write authority");
+    let missing_scope = upsert_command([0x64; 16], [0x74; 16], 1);
+    runtime.block_on(publish(&context, &missing_scope));
+    let rejected = runtime.block_on(receive_contract(
+        &mut results,
+        MailAddressBookContractV1::EntryUpsertRejected,
+    ));
+    let rejected = MailAddressBookEntryUpsertRejectedV1::decode(rejected.payload.as_slice())
+        .expect("decode missing-scope rejection");
+    assert_eq!(
+        rejected.code,
+        MailAddressBookRejectCodeV1::MailAddressBookRejectCodeWriteScopeRequired as i32
+    );
+    assert!(!rejected.outcome_unknown);
+    assert_eq!(provider.accepted_people_writes(), 0);
+
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
@@ -238,6 +269,8 @@ fn managed_mail_carddav_page_uses_separate_credential_and_read_only_provider() {
     wait_for_mail_ready(&supervisor, &mail);
 
     let runtime = tokio::runtime::Runtime::new().expect("CardDAV conformance runtime");
+    let _runtime_context = runtime.enter();
+    let durable = runtime.block_on(connect_postgres());
     let endpoint = store
         .platform_event_hub_topology()
         .expect("read CardDAV Event Hub topology")
@@ -284,6 +317,63 @@ fn managed_mail_carddav_page_uses_separate_credential_and_read_only_provider() {
     );
     assert_eq!(provider.reports(), 1);
 
+    let read_only = upsert_command([0x65; 16], [0x75; 16], 1);
+    runtime.block_on(publish(&context, &read_only));
+    let rejected = runtime.block_on(receive_contract(
+        &mut results,
+        MailAddressBookContractV1::EntryUpsertRejected,
+    ));
+    let rejected = MailAddressBookEntryUpsertRejectedV1::decode(rejected.payload.as_slice())
+        .expect("decode iCloud read-only rejection");
+    assert_eq!(
+        rejected.code,
+        MailAddressBookRejectCodeV1::MailAddressBookRejectCodeReadOnlyProvider as i32
+    );
+    assert!(!rejected.outcome_unknown);
+    assert_eq!(
+        provider.reports(),
+        1,
+        "iCloud rejection must not perform provider IO"
+    );
+
+    let lifecycle = runtime
+        .block_on(durable.begin_account_lifecycle(
+            &MailAccountLifecycleCommandV1 {
+                operation_id: "managed-carddav-retire".to_owned(),
+                connection_id: MAIL_ACCOUNT_ID.to_owned(),
+                expected_lifecycle_revision: 0,
+            },
+            MailAccountLifecycleActionV1::Retire,
+            MAIL_ACCOUNT_ID,
+            10,
+        ))
+        .expect("begin CardDAV credential lifecycle");
+    assert!(lifecycle.created);
+    assert!(lifecycle.receipt.credentials.iter().any(|credential| {
+        credential.purpose == MailCredentialPurposeV1::IcloudCardDavPassword
+    }));
+    let mut terminal = lifecycle.receipt;
+    for (offset, credential) in terminal.credentials.clone().into_iter().enumerate() {
+        terminal = runtime
+            .block_on(durable.record_account_lifecycle_progress(
+                MAIL_ACCOUNT_ID,
+                "managed-carddav-retire",
+                credential.purpose,
+                MailCredentialLifecycleStateV1::Completed,
+                11 + i64::try_from(offset).expect("bounded lifecycle offset"),
+            ))
+            .expect("complete CardDAV credential lifecycle");
+    }
+    assert_eq!(terminal.state, MailAccountLifecycleStateV1::Completed);
+    let carddav_binding = runtime
+        .block_on(durable.account_credential_binding(
+            MAIL_ACCOUNT_ID,
+            MailCredentialPurposeV1::IcloudCardDavPassword,
+        ))
+        .expect("read retired CardDAV binding")
+        .expect("retired CardDAV binding");
+    assert_eq!(carddav_binding.state, MailCredentialBindingStateV1::Retired);
+
     supervisor
         .shutdown()
         .expect("stop managed CardDAV processes");
@@ -320,6 +410,36 @@ fn fetch_command(
         },
     )
     .expect("build address-book fetch command")
+}
+
+fn upsert_command(
+    command_id: [u8; 16],
+    run_id: [u8; 16],
+    expected_contact_revision: u64,
+) -> hermes_events_protocol::delivery::OutboxRecordV1 {
+    let now = wall_seconds();
+    build_upsert_mail_address_book_entry_command_v1(
+        UpsertMailAddressBookEntryCommandV1 {
+            command_id: command_id.to_vec(),
+            run_id: run_id.to_vec(),
+            logical_owner_id: "owner-1".to_owned(),
+            account_id: MAIL_ACCOUNT_ID.to_owned(),
+            contact_snapshot_reference_id: vec![0x91; 16],
+            contact_snapshot_sha256: vec![0x92; 32],
+            expected_contact_revision,
+            contact_snapshot_declared_bytes: 1,
+            contact_snapshot_custody_source_proof: vec![0x93],
+        },
+        now + 300,
+        &MailAddressBookEnvelopeContextV1 {
+            module_id: MAIL_ADDRESS_BOOK_COMMAND_SOURCE_MODULE_ID_V1.to_owned(),
+            runtime_instance_id: "mail-contacts-sync-conformance".to_owned(),
+            runtime_generation: 1,
+            recorded_at_unix_seconds: now,
+            recorded_at_nanos: 0,
+        },
+    )
+    .expect("build address-book upsert command")
 }
 
 async fn publish(
