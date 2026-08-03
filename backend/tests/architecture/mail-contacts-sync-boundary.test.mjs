@@ -321,7 +321,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
     gate: 'mail_contacts_sync_v1',
     role: 'workflow',
     owner: 'mail_contacts_sync',
-    state: 'planned',
+    state: 'implemented',
     dependsOn: ['mail_account_lifecycle_v1', 'contacts_mail_identity_command_v1'],
   });
   assert.match(adr, /Mail integration владеет Google People\/CardDAV protocol/);
