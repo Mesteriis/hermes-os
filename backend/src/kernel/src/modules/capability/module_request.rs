@@ -68,12 +68,20 @@ where
         let resolved = resolve_provider_for_caller(&self.store, expectation, contract)?;
         let provider = resolved.route;
         let provider_launch = resolved.launch;
+        let response_target = resolve_response_blob_target(
+            &self.store,
+            expectation,
+            &request.response_blob_capability_id,
+        )?;
 
         let delivery = ManagedRuntimeModuleRequestDeliveryV1 {
             request_id: request.request_id.clone(),
             logical_owner_id: logical_owner.owner_id().to_owned(),
             contract: request.contract.clone(),
             request_payload: request.request_payload,
+            response_blob_target_owner_id: response_target.owner_id,
+            response_blob_target_module_id: response_target.module_id,
+            response_blob_target_capability_id: response_target.capability_id,
         };
         validate_module_request_delivery_v1(&delivery)
             .map_err(|_| "managed module request delivery is denied".to_owned())?;
@@ -110,6 +118,40 @@ where
         ensure_provider_fence(&self.store, &provider, &provider_launch)?;
         Ok(response)
     }
+}
+
+struct ModuleRequestResponseBlobTargetV1 {
+    owner_id: String,
+    module_id: String,
+    capability_id: String,
+}
+
+fn resolve_response_blob_target(
+    store: &SqliteControlStore,
+    expectation: &ManagedRuntimeExpectation,
+    capability_id: &str,
+) -> Result<ModuleRequestResponseBlobTargetV1, String> {
+    if capability_id.is_empty() {
+        return Ok(ModuleRequestResponseBlobTargetV1 {
+            owner_id: String::new(),
+            module_id: String::new(),
+            capability_id: String::new(),
+        });
+    }
+    let entry = crate::platform::blob::catalog::resolve(store)?
+        .into_iter()
+        .find(|entry| {
+            entry.registration_id() == expectation.registration_id()
+                && entry.module_id() == expectation.module_id()
+                && entry.grant_epoch() == expectation.grant_epoch()
+                && entry.capability_id() == capability_id
+        })
+        .ok_or_else(|| "managed module request response Blob target is denied".to_owned())?;
+    Ok(ModuleRequestResponseBlobTargetV1 {
+        owner_id: entry.request().owner_id().to_owned(),
+        module_id: entry.module_id().to_owned(),
+        capability_id: entry.capability_id().to_owned(),
+    })
 }
 
 pub(crate) fn resolve_provider_for_caller(

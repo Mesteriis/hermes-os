@@ -158,6 +158,16 @@ custody Kernel атомарно разрешает тот же exact request-pro
 координаты в provider-neutral режиме. Явная target delegation остаётся отдельным
 низкоуровневым режимом и не используется STT engine для выбора Whisper.
 
+Blob-результат request RPC также не требует business dependency от provider к
+caller. Authenticated caller может передать только ID собственной текущей
+granted Blob capability как `response_blob_capability_id`. Kernel сверяет её с
+registration, module и grant epoch вызывающего runtime и сам добавляет в
+provider delivery exact transport-only owner/module/capability target. Caller
+не может передать owner/module coordinates, provider не выбирает arbitrary
+target и не импортирует contract workflow/domain, которому принадлежит
+результат. Empty capability означает, что Blob-результат этим request RPC не
+запрашивается.
+
 Generic `ai.inference`, Ollama text generation и Communications AI source
 contracts не участвуют в этом flow. Последующий summary transcript является
 отдельным explicit workflow над transcript artifact и не расширяет

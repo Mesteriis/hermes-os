@@ -193,6 +193,7 @@ impl DeliveryIntentRequestPortV1 for ManagedDelayedDeliveryRuntimePortV1<'_> {
             contract: Some(delivery_intent_command_contract_v1()),
             request_payload: payload,
             deadline_millis: DELIVERY_REQUEST_DEADLINE_MILLIS_V1,
+            response_blob_capability_id: String::new(),
         };
         validate_module_request_request_v1(&request)
             .map_err(|_| DeliveryIntentRequestErrorV1::Protocol)?;

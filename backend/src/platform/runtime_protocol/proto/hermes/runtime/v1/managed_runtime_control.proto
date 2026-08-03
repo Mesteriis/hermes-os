@@ -189,6 +189,10 @@ message ManagedRuntimeModuleRequestRequestV1 {
   ContractReferenceV1 contract = 2;
   bytes request_payload = 3;
   uint32 deadline_millis = 4;
+  // Optional capability owned by the authenticated caller. Kernel verifies it
+  // is a current granted Blob capability before adding a transport target to
+  // the provider delivery. Caller owner/module coordinates are not accepted.
+  string response_blob_capability_id = 5;
 }
 // Kernel-to-provider delivery after exact request-provider authorization.
 message ManagedRuntimeModuleRequestDeliveryV1 {
@@ -196,6 +200,11 @@ message ManagedRuntimeModuleRequestDeliveryV1 {
   string logical_owner_id = 2;
   ContractReferenceV1 contract = 3;
   bytes request_payload = 4;
+  // Empty together when no Blob result is expected. These fields are derived
+  // only from the authenticated caller registration and its current grants.
+  string response_blob_target_owner_id = 5;
+  string response_blob_target_module_id = 6;
+  string response_blob_target_capability_id = 7;
 }
 message ManagedRuntimeModuleRequestResponseV1 {
   bytes request_id = 1;

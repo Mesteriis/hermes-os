@@ -142,6 +142,7 @@ fn route_inference(
         contract: Some(communication_reply_inference_contract_reference_v1()),
         request_payload: request.encode_to_vec(),
         deadline_millis: INFERENCE_DEADLINE_MILLIS_V1,
+        response_blob_capability_id: String::new(),
     };
     validate_module_request_request_v1(&routed).map_err(|_| RouteInferenceErrorV1::Rejected)?;
     let response = channel

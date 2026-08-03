@@ -251,6 +251,9 @@ fn deliver_provider_request_for_owner_v1(
         logical_owner_id: logical_owner_id.to_owned(),
         contract: Some(ai_provider_reply_generation_contract_reference_v1()),
         request_payload: request.encode_to_vec(),
+        response_blob_target_owner_id: String::new(),
+        response_blob_target_module_id: String::new(),
+        response_blob_target_capability_id: String::new(),
     };
     let response = supervisor
         .relay(

@@ -29,3 +29,26 @@ test('provider-neutral Blob delegation reuses the exact Kernel request-provider 
   }
   assert.match(adr, /Caller не передаёт эти\s+координаты в provider-neutral режиме/);
 });
+
+test('module request response Blob target is derived from the authenticated caller grant', async () => {
+  const [protocol, requestRouter, adr] = await Promise.all([
+    read('backend/src/platform/runtime_protocol/proto/hermes/runtime/v1/managed_runtime_control.proto'),
+    read('backend/src/kernel/src/modules/capability/module_request.rs'),
+    read('docs/adr/ADR-0390-call-recording-custody-and-speech-to-text-boundary.md'),
+  ]);
+
+  const callerRequest = protocol.slice(
+    protocol.indexOf('message ManagedRuntimeModuleRequestRequestV1'),
+    protocol.indexOf('message ManagedRuntimeModuleRequestDeliveryV1'),
+  );
+  assert.match(callerRequest, /string response_blob_capability_id = 5/);
+  for (const forbidden of ['response_blob_target_owner_id', 'response_blob_target_module_id']) {
+    assert.ok(!callerRequest.includes(forbidden), `caller-selected response target ${forbidden}`);
+  }
+
+  assert.match(requestRouter, /fn resolve_response_blob_target/);
+  assert.match(requestRouter, /entry\.registration_id\(\) == expectation\.registration_id\(\)/);
+  assert.match(requestRouter, /entry\.module_id\(\) == expectation\.module_id\(\)/);
+  assert.match(requestRouter, /entry\.grant_epoch\(\) == expectation\.grant_epoch\(\)/);
+  assert.match(adr, /Kernel сверяет её с\s+registration, module и grant epoch вызывающего runtime/);
+});

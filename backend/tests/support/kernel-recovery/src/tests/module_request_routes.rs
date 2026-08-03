@@ -562,6 +562,7 @@ fn request_request() -> ManagedRuntimeModuleRequestRequestV1 {
         }),
         request_payload: vec![3],
         deadline_millis: 1_000,
+        response_blob_capability_id: String::new(),
     }
 }
 

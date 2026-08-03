@@ -20,6 +20,8 @@ pub fn validate_module_request_request_v1(
             .is_some_and(valid_contract_reference)
         || request.request_payload.len() > MODULE_REQUEST_MAX_PAYLOAD_BYTES_V1
         || !(1..=MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1).contains(&request.deadline_millis)
+        || (!request.response_blob_capability_id.is_empty()
+            && !valid_identifier(&request.response_blob_capability_id))
     {
         return Err(ModuleRequestValidationErrorV1::InvalidRequest);
     }
@@ -36,6 +38,7 @@ pub fn validate_module_request_delivery_v1(
             .as_ref()
             .is_some_and(valid_contract_reference)
         || delivery.request_payload.len() > MODULE_REQUEST_MAX_PAYLOAD_BYTES_V1
+        || !valid_response_blob_target(delivery)
     {
         return Err(ModuleRequestValidationErrorV1::InvalidDelivery);
     }
@@ -89,6 +92,16 @@ fn valid_error_code(value: &str) -> bool {
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_'))
 }
 
+fn valid_response_blob_target(delivery: &ManagedRuntimeModuleRequestDeliveryV1) -> bool {
+    let empty = delivery.response_blob_target_owner_id.is_empty()
+        && delivery.response_blob_target_module_id.is_empty()
+        && delivery.response_blob_target_capability_id.is_empty();
+    let exact = valid_identifier(&delivery.response_blob_target_owner_id)
+        && valid_identifier(&delivery.response_blob_target_module_id)
+        && valid_identifier(&delivery.response_blob_target_capability_id);
+    empty || exact
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,6 +123,7 @@ mod tests {
             contract: Some(contract()),
             request_payload: vec![8],
             deadline_millis: MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1,
+            response_blob_capability_id: "communication_delivery_intent.blob.v1".to_owned(),
         };
         assert_eq!(validate_module_request_request_v1(&request), Ok(()));
 
@@ -118,6 +132,10 @@ mod tests {
             logical_owner_id: "owner_local".to_owned(),
             contract: request.contract.clone(),
             request_payload: request.request_payload,
+            response_blob_target_owner_id: "communication_delivery_intent".to_owned(),
+            response_blob_target_module_id: "hermes-communication-delivery-intent-runtime"
+                .to_owned(),
+            response_blob_target_capability_id: request.response_blob_capability_id,
         };
         assert_eq!(validate_module_request_delivery_v1(&delivery), Ok(()));
 
@@ -136,6 +154,7 @@ mod tests {
             contract: Some(contract()),
             request_payload: Vec::new(),
             deadline_millis: 1,
+            response_blob_capability_id: String::new(),
         };
         assert_eq!(
             validate_module_request_request_v1(&request),

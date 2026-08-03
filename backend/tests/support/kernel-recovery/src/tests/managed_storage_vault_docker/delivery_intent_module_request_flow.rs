@@ -103,6 +103,7 @@ pub(super) fn assert_live_delivery_intent_module_request(
                 }
                 .encode_to_vec(),
                 deadline_millis: 5_000,
+                response_blob_capability_id: String::new(),
             },
         )
         .expect("route live delivery-intent module request");

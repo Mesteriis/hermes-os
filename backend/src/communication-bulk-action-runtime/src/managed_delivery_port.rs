@@ -33,6 +33,7 @@ impl DeliveryIntentRequestPortV1 for ManagedDeliveryIntentRequestPortV1<'_> {
             contract: Some(delivery_intent_command_contract_v1()),
             request_payload: payload,
             deadline_millis: 30_000,
+            response_blob_capability_id: String::new(),
         };
         validate_module_request_request_v1(&request)
             .map_err(|_| DeliveryIntentRequestErrorV1::Protocol)?;

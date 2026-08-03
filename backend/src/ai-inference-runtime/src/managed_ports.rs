@@ -136,6 +136,7 @@ impl AiInferenceExecutionPortsV1 for ManagedAiInferenceExecutionPortsV1<'_> {
             contract: Some(ai_provider_reply_generation_contract_reference_v1()),
             request_payload: std::mem::take(&mut payload),
             deadline_millis: MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1,
+            response_blob_capability_id: String::new(),
         };
         validate_module_request_request_v1(&routed)
             .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
@@ -201,6 +202,7 @@ impl AiInferenceExecutionPortsV1 for ManagedAiInferenceExecutionPortsV1<'_> {
             contract: Some(ai_provider_summary_generation_contract_reference_v1()),
             request_payload: std::mem::take(&mut payload),
             deadline_millis: MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1,
+            response_blob_capability_id: String::new(),
         };
         validate_module_request_request_v1(&routed)
             .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
@@ -276,6 +278,7 @@ impl AiInferenceExecutionPortsV1 for ManagedAiInferenceExecutionPortsV1<'_> {
             contract: Some(ai_provider_translation_contract_reference_v1()),
             request_payload: std::mem::take(&mut payload),
             deadline_millis: MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1,
+            response_blob_capability_id: String::new(),
         };
         validate_module_request_request_v1(&routed)
             .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
@@ -337,6 +340,7 @@ impl AiInferenceExecutionPortsV1 for ManagedAiInferenceExecutionPortsV1<'_> {
             contract: Some(ai_provider_explanation_contract_reference_v1()),
             request_payload: std::mem::take(&mut payload),
             deadline_millis: MODULE_REQUEST_MAX_DEADLINE_MILLIS_V1,
+            response_blob_capability_id: String::new(),
         };
         validate_module_request_request_v1(&routed)
             .map_err(|_| AiInferenceProviderPortErrorV1::Rejected)?;
