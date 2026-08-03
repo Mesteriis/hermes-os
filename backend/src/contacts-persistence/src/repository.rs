@@ -126,8 +126,10 @@ impl ContactsPersistenceV1 {
         }
         if outcome != ContactUpsertOutcomeV1::Unchanged {
             persist_contact(&mut transaction, &contact, outcome).await?;
-            persist_provider_link(&mut transaction, &contact).await?;
         }
+        // Provider provenance has an independent freshness lifecycle. Refresh it even
+        // when canonical Contact fields and contact_revision remain unchanged.
+        persist_provider_link(&mut transaction, &contact).await?;
         insert_outbox(
             &mut transaction,
             &input.draft.logical_owner_id,

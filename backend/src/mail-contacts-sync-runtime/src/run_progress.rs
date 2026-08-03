@@ -8,9 +8,9 @@ use hermes_mail_contacts_sync_persistence::{
 };
 use sha2::{Digest, Sha256};
 
-use crate::MailContactsSyncProviderRuntimeContextV1;
-
-const COMMAND_DEADLINE_SECONDS_V1: i64 = 30;
+use crate::{
+    MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1, MailContactsSyncProviderRuntimeContextV1,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailContactsSyncProgressErrorV1 {
@@ -54,7 +54,7 @@ pub async fn advance_ready_page_v1(
                 continuation_cursor: Some(cursor),
                 page_size: MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1,
             },
-            runtime.now_unix_millis / 1_000 + COMMAND_DEADLINE_SECONDS_V1,
+            runtime.now_unix_millis / 1_000 + MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1,
             &MailAddressBookEnvelopeContextV1 {
                 module_id: hermes_mail_contacts_sync_api::MAIL_CONTACTS_SYNC_MODULE_ID_V1
                     .to_owned(),

@@ -87,7 +87,7 @@ pub(crate) async fn consume_source_prepared_once_v1(
             contact_snapshot_declared_bytes: receipt.declared_bytes,
             contact_snapshot_custody_source_proof: receipt.custody_transfer_source_proof,
         },
-        context.now_unix_millis / 1_000 + 300,
+        context.now_unix_millis / 1_000 + crate::MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1,
         &envelope_context(context),
     )
     .map_err(|_| MailContactsSyncSourceResultErrorV1::InvalidPayload)?;

@@ -64,10 +64,23 @@ pub(super) struct MailGmailFixture {
     accepted_reads: Arc<AtomicUsize>,
     accepted_people_reads: Arc<AtomicUsize>,
     accepted_people_writes: Arc<AtomicUsize>,
+    drop_next_people_write_response: Arc<AtomicBool>,
+    ambiguous_people_write_committed: Arc<AtomicBool>,
     last_request: Arc<Mutex<Option<GmailSentRequestV1>>>,
     last_people_write: Arc<Mutex<Option<GooglePeopleWriteRequestV1>>>,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
+}
+
+struct GmailFixtureState<'a> {
+    accepted_mutations: &'a AtomicUsize,
+    accepted_reads: &'a AtomicUsize,
+    accepted_people_reads: &'a AtomicUsize,
+    accepted_people_writes: &'a AtomicUsize,
+    drop_next_people_write_response: &'a AtomicBool,
+    ambiguous_people_write_committed: &'a AtomicBool,
+    last_request: &'a Mutex<Option<GmailSentRequestV1>>,
+    last_people_write: &'a Mutex<Option<GooglePeopleWriteRequestV1>>,
 }
 
 impl MailGmailFixture {
@@ -94,6 +107,8 @@ impl MailGmailFixture {
         let accepted_reads = Arc::new(AtomicUsize::new(0));
         let accepted_people_reads = Arc::new(AtomicUsize::new(0));
         let accepted_people_writes = Arc::new(AtomicUsize::new(0));
+        let drop_next_people_write_response = Arc::new(AtomicBool::new(false));
+        let ambiguous_people_write_committed = Arc::new(AtomicBool::new(false));
         let last_request = Arc::new(Mutex::new(None));
         let last_people_write = Arc::new(Mutex::new(None));
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -101,6 +116,8 @@ impl MailGmailFixture {
         let worker_reads = Arc::clone(&accepted_reads);
         let worker_people_reads = Arc::clone(&accepted_people_reads);
         let worker_people_writes = Arc::clone(&accepted_people_writes);
+        let worker_drop_people_response = Arc::clone(&drop_next_people_write_response);
+        let worker_ambiguous_people_write = Arc::clone(&ambiguous_people_write_committed);
         let worker_request = Arc::clone(&last_request);
         let worker_people_write = Arc::clone(&last_people_write);
         let worker_shutdown = Arc::clone(&shutdown);
@@ -120,15 +137,17 @@ impl MailGmailFixture {
                         let connection =
                             ServerConnection::new(Arc::clone(&server)).expect("Gmail TLS session");
                         let mut stream = StreamOwned::new(connection, stream);
-                        serve_connection(
-                            &mut stream,
-                            &worker_mutations,
-                            &worker_reads,
-                            &worker_people_reads,
-                            &worker_people_writes,
-                            &worker_request,
-                            &worker_people_write,
-                        );
+                        let state = GmailFixtureState {
+                            accepted_mutations: &worker_mutations,
+                            accepted_reads: &worker_reads,
+                            accepted_people_reads: &worker_people_reads,
+                            accepted_people_writes: &worker_people_writes,
+                            drop_next_people_write_response: &worker_drop_people_response,
+                            ambiguous_people_write_committed: &worker_ambiguous_people_write,
+                            last_request: &worker_request,
+                            last_people_write: &worker_people_write,
+                        };
+                        serve_connection(&mut stream, &state);
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(10));
@@ -144,6 +163,8 @@ impl MailGmailFixture {
             accepted_reads,
             accepted_people_reads,
             accepted_people_writes,
+            drop_next_people_write_response,
+            ambiguous_people_write_committed,
             last_request,
             last_people_write,
             shutdown,
@@ -173,6 +194,11 @@ impl MailGmailFixture {
 
     pub(super) fn accepted_people_writes(&self) -> usize {
         self.accepted_people_writes.load(Ordering::SeqCst)
+    }
+
+    pub(super) fn drop_next_people_write_response(&self) {
+        self.drop_next_people_write_response
+            .store(true, Ordering::SeqCst);
     }
 
     pub(super) fn last_people_write(&self) -> GooglePeopleWriteRequestV1 {
@@ -206,12 +232,7 @@ impl Drop for MailGmailFixture {
 
 fn serve_connection(
     stream: &mut StreamOwned<ServerConnection, std::net::TcpStream>,
-    accepted_mutations: &AtomicUsize,
-    accepted_reads: &AtomicUsize,
-    accepted_people_reads: &AtomicUsize,
-    accepted_people_writes: &AtomicUsize,
-    last_request: &Mutex<Option<GmailSentRequestV1>>,
-    last_people_write: &Mutex<Option<GooglePeopleWriteRequestV1>>,
+    state: &GmailFixtureState<'_>,
 ) {
     let request_line = read_line(stream);
     let request_line = std::str::from_utf8(&request_line).expect("Gmail request line");
@@ -245,22 +266,22 @@ fn serve_connection(
                 stream,
                 &path,
                 &headers,
-                accepted_people_reads,
-                accepted_people_writes,
+                state.accepted_people_reads,
+                state.accepted_people_writes,
+                state.ambiguous_people_write_committed,
             );
-            accepted_reads.fetch_add(1, Ordering::SeqCst);
+            state.accepted_reads.fetch_add(1, Ordering::SeqCst);
         }
         "POST" if path == "/gmail/v1/users/me/messages/send" => {
-            serve_send(stream, &path, &headers, accepted_mutations, last_request);
+            serve_send(
+                stream,
+                &path,
+                &headers,
+                state.accepted_mutations,
+                state.last_request,
+            );
         }
-        "POST" | "PATCH" => serve_people_write(
-            stream,
-            method,
-            &path,
-            &headers,
-            accepted_people_writes,
-            last_people_write,
-        ),
+        "POST" | "PATCH" => serve_people_write(stream, method, &path, &headers, state),
         _ => panic!("unsupported Gmail fixture method"),
     }
 }
@@ -271,6 +292,7 @@ fn serve_get(
     headers: &BTreeMap<String, String>,
     accepted_people_reads: &AtomicUsize,
     accepted_people_writes: &AtomicUsize,
+    ambiguous_people_write_committed: &AtomicBool,
 ) {
     let body = if path.starts_with("/gmail/v1/users/me/messages?") {
         serde_json::to_vec(&serde_json::json!({
@@ -313,21 +335,38 @@ fn serve_get(
             Some("Bearer managed-mail-gmail-access-token")
         );
         accepted_people_reads.fetch_add(1, Ordering::SeqCst);
-        serde_json::to_vec(&serde_json::json!({
-            "connections": [{
-                "resourceName": "people/managed-contact-1",
+        let mut connections = vec![serde_json::json!({
+            "resourceName": "people/managed-contact-1",
+            "metadata": {
+                "deleted": false,
+                "sources": [{
+                    "type": "CONTACT",
+                    "id": "managed-contact-1",
+                    "etag": managed_etag
+                }]
+            },
+            "names": [{"displayName": "Private Managed Contact"}],
+            "emailAddresses": [{"value": "private-managed-contact@example.test"}],
+            "phoneNumbers": [{"value": "+12025550125"}]
+        })];
+        if ambiguous_people_write_committed.load(Ordering::SeqCst) {
+            connections.push(serde_json::json!({
+                "resourceName": "people/created-contact-1",
                 "metadata": {
                     "deleted": false,
                     "sources": [{
                         "type": "CONTACT",
-                        "id": "managed-contact-1",
-                        "etag": managed_etag
+                        "id": "created-contact-1",
+                        "etag": "created-etag-3"
                     }]
                 },
-                "names": [{"displayName": "Private Managed Contact"}],
-                "emailAddresses": [{"value": "private-managed-contact@example.test"}],
-                "phoneNumbers": [{"value": "+12025550125"}]
-            }],
+                "names": [{"displayName": "Local Ambiguous Contact"}],
+                "emailAddresses": [{"value": "local-create@example.test"}],
+                "phoneNumbers": [{"value": "+12025550199"}]
+            }));
+        }
+        serde_json::to_vec(&serde_json::json!({
+            "connections": connections,
             "nextSyncToken": "sync-token-must-not-be-page-token"
         }))
         .expect("encode Google People response")
@@ -377,8 +416,7 @@ fn serve_people_write(
     method: &str,
     path: &str,
     headers: &BTreeMap<String, String>,
-    accepted_people_writes: &AtomicUsize,
-    last_people_write: &Mutex<Option<GooglePeopleWriteRequestV1>>,
+    state: &GmailFixtureState<'_>,
 ) {
     assert_eq!(
         headers.get("authorization").map(String::as_str),
@@ -392,17 +430,28 @@ fn serve_people_write(
         "unsupported Google People write route"
     );
     let body = read_json_body(stream, headers);
-    *last_people_write.lock().expect("lock Google People write") =
-        Some(GooglePeopleWriteRequestV1 {
-            method: method.to_owned(),
-            path: path.to_owned(),
-            authorization: headers
-                .get("authorization")
-                .expect("Google People authorization")
-                .to_owned(),
-            body,
-        });
-    accepted_people_writes.fetch_add(1, Ordering::SeqCst);
+    *state
+        .last_people_write
+        .lock()
+        .expect("lock Google People write") = Some(GooglePeopleWriteRequestV1 {
+        method: method.to_owned(),
+        path: path.to_owned(),
+        authorization: headers
+            .get("authorization")
+            .expect("Google People authorization")
+            .to_owned(),
+        body,
+    });
+    state.accepted_people_writes.fetch_add(1, Ordering::SeqCst);
+    if state
+        .drop_next_people_write_response
+        .swap(false, Ordering::SeqCst)
+    {
+        state
+            .ambiguous_people_write_committed
+            .store(true, Ordering::SeqCst);
+        return;
+    }
     let (resource_name, id, etag) = if method == "POST" {
         (
             "people/created-contact-1",

@@ -34,12 +34,13 @@ pub fn decide_contact_upsert_v1(
             if current.logical_owner_id != normalized.logical_owner_id {
                 return Err(ContactUpsertDecisionErrorV1::ProviderLinkConflict);
             }
-            let changed = current.display_name != normalized.display_name
+            let contact_changed = current.display_name != normalized.display_name
                 || current.email_addresses != normalized.email_addresses
-                || current.phone_numbers != normalized.phone_numbers
-                || provider_material_changed(&current.provenance, &normalized.provenance);
-            if !changed {
-                return Ok((current.clone(), ContactUpsertOutcomeV1::Unchanged));
+                || current.phone_numbers != normalized.phone_numbers;
+            if !contact_changed {
+                let mut refreshed = current.clone();
+                refreshed.provenance = normalized.provenance;
+                return Ok((refreshed, ContactUpsertOutcomeV1::Unchanged));
             }
             let updated = ContactV1 {
                 contact_id: current.contact_id,
@@ -77,18 +78,6 @@ pub fn decide_contact_upsert_v1(
             Ok((contact, ContactUpsertOutcomeV1::Created))
         }
     }
-}
-
-fn provider_material_changed(
-    current: &crate::ContactProviderProvenanceV1,
-    observed: &crate::ContactProviderProvenanceV1,
-) -> bool {
-    current.source_account_id != observed.source_account_id
-        || current.provider_kind != observed.provider_kind
-        || current.provider_entry_id != observed.provider_entry_id
-        || current.provider_etag != observed.provider_etag
-        || current.source_revision != observed.source_revision
-        || current.entry_digest != observed.entry_digest
 }
 
 fn choose_target(
@@ -174,7 +163,33 @@ mod tests {
         let (result, outcome) =
             decide_contact_upsert_v1(repeated, matched, Some(&current)).expect("unchanged");
         assert_eq!(outcome, ContactUpsertOutcomeV1::Unchanged);
-        assert_eq!(result, current);
+        assert_eq!(result.contact_revision, current.contact_revision);
+        assert_eq!(result.display_name, current.display_name);
+        assert_eq!(result.updated_at, current.updated_at);
+        assert_eq!(
+            result.provenance.observed_at.unix_seconds,
+            current.provenance.observed_at.unix_seconds + 60
+        );
+    }
+
+    #[test]
+    fn provider_fence_refresh_does_not_change_canonical_contact_revision() {
+        let (current, _) = decide_contact_upsert_v1(draft(), no_match(), None).expect("contact");
+        let mut refreshed = draft();
+        refreshed.provenance.provider_etag = Some("etag-2".to_owned());
+        refreshed.provenance.source_revision = 5;
+        refreshed.provenance.observed_at.unix_seconds += 60;
+        let matched = ContactIdentityMatchV1 {
+            provider_link_contact_id: Some(current.contact_id),
+            email_contact_ids: vec![current.contact_id],
+            phone_contact_ids: vec![current.contact_id],
+        };
+        let (result, outcome) =
+            decide_contact_upsert_v1(refreshed, matched, Some(&current)).expect("refresh");
+        assert_eq!(outcome, ContactUpsertOutcomeV1::Unchanged);
+        assert_eq!(result.contact_revision, current.contact_revision);
+        assert_eq!(result.provenance.provider_etag.as_deref(), Some("etag-2"));
+        assert_eq!(result.provenance.source_revision, 5);
     }
 
     #[test]

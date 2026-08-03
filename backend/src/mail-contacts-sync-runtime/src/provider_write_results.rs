@@ -200,7 +200,7 @@ fn build_contacts_link_command(
             provider_entry_id: payload.provider_entry_id.clone(),
             provider_etag: Some(payload.provider_etag.clone()),
         },
-        context.now_unix_millis / 1_000 + 300,
+        context.now_unix_millis / 1_000 + crate::MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1,
         &ContactsCommandEnvelopeContextV1 {
             module_id: "hermes-mail-contacts-sync-runtime".to_owned(),
             runtime_instance_id: context.runtime_instance_id.to_owned(),

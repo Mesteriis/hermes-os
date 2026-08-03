@@ -234,7 +234,7 @@ fn build_page_records(
             job.admission.page_sequence,
             &entry.provider_entry_id,
         );
-        let source_revision = source_revision(&digest);
+        let source_revision = source_revision(now_unix_seconds)?;
         let payload = MailAddressBookEntryObservedV1 {
             observation_id: observation_id.to_vec(),
             run_id: job.admission.run_id.to_vec(),
@@ -390,8 +390,13 @@ fn observation_id(command_id: [u8; 16], page_sequence: u64, provider_id: &str) -
     digest[..16].try_into().expect("fixed digest width")
 }
 
-fn source_revision(digest: &[u8; 32]) -> u64 {
-    u64::from_be_bytes(digest[..8].try_into().expect("fixed digest width")).max(1)
+fn source_revision(
+    observed_at_unix_seconds: i64,
+) -> Result<u64, MailAddressBookFetchWorkerErrorV1> {
+    u64::try_from(observed_at_unix_seconds)
+        .ok()
+        .filter(|value| *value > 0)
+        .ok_or(MailAddressBookFetchWorkerErrorV1::InvalidClock)
 }
 
 fn encode_google_cursor(token: &str) -> Result<Vec<u8>, MailAddressBookRejectCodeV1> {
@@ -527,7 +532,11 @@ mod tests {
             observation_id([1; 16], 2, "people/1"),
             observation_id([1; 16], 3, "people/1")
         );
-        assert_ne!(source_revision(&entry_digest(&entry)), 0);
+        assert_eq!(source_revision(1_800_000_000), Ok(1_800_000_000));
+        assert_eq!(
+            source_revision(0),
+            Err(MailAddressBookFetchWorkerErrorV1::InvalidClock)
+        );
         let mut reordered = entry;
         reordered.email_addresses = vec![
             "second@example.test".to_owned(),

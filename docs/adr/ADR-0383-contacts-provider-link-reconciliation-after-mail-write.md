@@ -8,8 +8,9 @@
 provider-link reconciliation. Typed command/results, Contacts-owned atomic
 inbox/link/outbox, workflow-owned reconciliation ledger, exact replay/conflict
 fencing и signed managed `POST -> bind link -> PATCH` ensemble доказаны.
-`mail_contacts_sync_v1` остаётся planned до revoke/outage recovery и browser
-conformance.
+Managed outage/recovery/revoke gate также доказан; recovery обновляет
+Contacts-owned provider ETag без повторной remote mutation.
+`mail_contacts_sync_v1` остаётся planned только до browser conformance.
 
 Уточняет:
 

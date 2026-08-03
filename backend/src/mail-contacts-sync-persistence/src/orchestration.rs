@@ -222,7 +222,12 @@ impl MailContactsSyncPersistenceV1 {
         .fetch_one(&mut *transaction)
         .await
         .map_err(storage)?;
-        if recorded != i64::from(input.observed_entries) {
+        let expected = i64::from(input.observed_entries);
+        if recorded < expected {
+            transaction.commit().await.map_err(storage)?;
+            return Ok(MailContactsSyncPersistenceOutcomeV1::PendingPrerequisites);
+        }
+        if recorded > expected {
             return Err(MailContactsSyncPersistenceErrorV1::InvalidTransition);
         }
         let next = transition_mail_contacts_sync_v1(

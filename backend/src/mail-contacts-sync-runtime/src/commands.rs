@@ -6,7 +6,7 @@ use hermes_mail_contacts_sync_api::MAIL_CONTACTS_SYNC_MODULE_ID_V1;
 use hermes_mail_contacts_sync_persistence::OutboxEnvelopeV1;
 use sha2::{Digest, Sha256};
 
-const COMMAND_DEADLINE_SECONDS_V1: i64 = 30;
+use crate::MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct InitialFetchCommandContextV1 {
@@ -39,7 +39,8 @@ pub(crate) fn build_initial_fetch_command_v1(
             continuation_cursor: None,
             page_size: MAIL_ADDRESS_BOOK_MAX_PAGE_SIZE_V1,
         },
-        context.authoritative_now_unix_millis / 1_000 + COMMAND_DEADLINE_SECONDS_V1,
+        context.authoritative_now_unix_millis / 1_000
+            + MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1,
         &MailAddressBookEnvelopeContextV1 {
             module_id: MAIL_CONTACTS_SYNC_MODULE_ID_V1.to_owned(),
             runtime_instance_id: context.runtime_instance_id.clone(),

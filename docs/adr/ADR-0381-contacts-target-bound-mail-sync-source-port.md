@@ -12,9 +12,11 @@ terminal result из owner-local outbox. Mail-owned target receipt persistence �
 disposable PostgreSQL restart replay реализованы. Managed Blob/Google update,
 missing-write-scope и iCloud read-only provider evidence также реализованы;
 Google create и последующая Contacts-owned provider-link reconciliation теперь
-доказаны signed managed `POST -> bind link -> PATCH` flow. Revoke/outage
-recovery и browser conformance ещё не реализованы,
-поэтому `mail_contacts_sync_v1` остаётся `planned`.
+доказаны signed managed `POST -> bind link -> PATCH` flow. Managed
+outage/recovery/revoke gate также доказан; provider provenance refresh не
+повышает canonical Contact revision и не публикует feedback event. Browser
+conformance ещё не реализован, поэтому `mail_contacts_sync_v1` остаётся
+`planned`.
 
 Уточняет:
 

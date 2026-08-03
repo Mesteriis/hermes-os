@@ -31,8 +31,9 @@ use hermes_runtime_protocol::v1::ContractReferenceV1;
 use prost::Message;
 use sha2::{Digest, Sha256};
 
+use crate::MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1;
+
 const MAIL_RUNTIME_MODULE_ID_V1: &str = "hermes-mail-runtime";
-const CONTACT_COMMAND_DEADLINE_SECONDS_V1: i64 = 30;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailContactsSyncProviderRuntimeContextV1 {
@@ -124,7 +125,7 @@ pub async fn consume_mail_address_book_entry_once_v1(
             source_revision: payload.source_revision,
             entry_digest: entry_digest.to_vec(),
         },
-        runtime.now_unix_millis / 1_000 + CONTACT_COMMAND_DEADLINE_SECONDS_V1,
+        runtime.now_unix_millis / 1_000 + MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1,
         &ContactsCommandEnvelopeContextV1 {
             module_id: hermes_mail_contacts_sync_api::MAIL_CONTACTS_SYNC_MODULE_ID_V1.to_owned(),
             runtime_instance_id: runtime.runtime_instance_id.clone(),
@@ -172,7 +173,7 @@ pub async fn consume_mail_address_book_page_completed_once_v1(
         .map_err(|_| MailContactsSyncProviderEventErrorV1::InvalidPayload)?;
     let run_id = id16(&payload.run_id)?;
     validate_result_identity(&envelope, &payload.command_id, &run_id)?;
-    persistence
+    let outcome = persistence
         .accept_provider_page(&MailContactsSyncPageResultInputV1 {
             logical_owner_id: runtime.logical_owner_id.clone(),
             run_id,
@@ -185,6 +186,9 @@ pub async fn consume_mail_address_book_page_completed_once_v1(
         })
         .await
         .map_err(MailContactsSyncProviderEventErrorV1::Persistence)?;
+    if outcome == hermes_mail_contacts_sync_persistence::MailContactsSyncPersistenceOutcomeV1::PendingPrerequisites {
+        return Ok(false);
+    }
     crate::advance_ready_page_v1(persistence, runtime, run_id)
         .await
         .map_err(|error| match error {

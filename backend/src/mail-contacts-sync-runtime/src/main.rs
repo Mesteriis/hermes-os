@@ -144,29 +144,75 @@ where
             .as_millis()
             .try_into()
             .map_err(|_| "Mail Contacts Sync clock is invalid".to_owned())?;
-        retry_runtime(executor.block_on(runtime.pump_control_once(now)))?;
-        retry_runtime(executor.block_on(runtime.relay_outbox_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_scheduler_due_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_mail_entry_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_mail_page_completed_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_mail_page_rejected_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_contact_changed_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_contact_source_prepared_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_contact_source_rejected_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_mail_entry_upserted_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_mail_entry_upsert_rejected_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_provider_link_bound_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_provider_link_rejected_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_contact_upserted_once(now)))?;
-        retry_runtime(executor.block_on(runtime.consume_contact_rejected_once(now)))?;
-        retry_runtime(executor.block_on(runtime.queue_scheduler_terminal_once(now)))?;
-        retry_runtime(executor.block_on(runtime.relay_outbox_once(now)))?;
-        retry_runtime(executor.block_on(runtime.pump_client_realtime_once()))?;
+        retry_runtime("control", executor.block_on(runtime.pump_control_once(now)))?;
+        retry_runtime("outbox", executor.block_on(runtime.relay_outbox_once(now)))?;
+        retry_runtime(
+            "scheduler_due",
+            executor.block_on(runtime.consume_scheduler_due_once(now)),
+        )?;
+        retry_runtime(
+            "mail_entry",
+            executor.block_on(runtime.consume_mail_entry_once(now)),
+        )?;
+        retry_runtime(
+            "mail_page_completed",
+            executor.block_on(runtime.consume_mail_page_completed_once(now)),
+        )?;
+        retry_runtime(
+            "mail_page_rejected",
+            executor.block_on(runtime.consume_mail_page_rejected_once(now)),
+        )?;
+        retry_runtime(
+            "contact_changed",
+            executor.block_on(runtime.consume_contact_changed_once(now)),
+        )?;
+        retry_runtime(
+            "contact_source_prepared",
+            executor.block_on(runtime.consume_contact_source_prepared_once(now)),
+        )?;
+        retry_runtime(
+            "contact_source_rejected",
+            executor.block_on(runtime.consume_contact_source_rejected_once(now)),
+        )?;
+        retry_runtime(
+            "mail_entry_upserted",
+            executor.block_on(runtime.consume_mail_entry_upserted_once(now)),
+        )?;
+        retry_runtime(
+            "mail_entry_upsert_rejected",
+            executor.block_on(runtime.consume_mail_entry_upsert_rejected_once(now)),
+        )?;
+        retry_runtime(
+            "provider_link_bound",
+            executor.block_on(runtime.consume_provider_link_bound_once(now)),
+        )?;
+        retry_runtime(
+            "provider_link_rejected",
+            executor.block_on(runtime.consume_provider_link_rejected_once(now)),
+        )?;
+        retry_runtime(
+            "contact_upserted",
+            executor.block_on(runtime.consume_contact_upserted_once(now)),
+        )?;
+        retry_runtime(
+            "contact_rejected",
+            executor.block_on(runtime.consume_contact_rejected_once(now)),
+        )?;
+        retry_runtime(
+            "scheduler_terminal",
+            executor.block_on(runtime.queue_scheduler_terminal_once(now)),
+        )?;
+        retry_runtime("outbox", executor.block_on(runtime.relay_outbox_once(now)))?;
+        retry_runtime(
+            "client_realtime",
+            executor.block_on(runtime.pump_client_realtime_once()),
+        )?;
         std::thread::sleep(Duration::from_millis(25));
     }
 }
 
 fn retry_runtime(
+    stage: &'static str,
     result: Result<bool, MailContactsSyncManagedRuntimeErrorV1>,
 ) -> Result<(), String> {
     match result {
@@ -176,19 +222,51 @@ fn retry_runtime(
         | Err(MailContactsSyncManagedRuntimeErrorV1::Persistence(
             MailContactsSyncPersistenceErrorV1::StorageUnavailable,
         )) => Ok(()),
-        Err(error) => Err(runtime_error(error)),
+        Err(error) => Err(format!(
+            "Mail Contacts Sync runtime {stage} failed: {}",
+            runtime_error_code(error)
+        )),
     }
 }
 
 fn runtime_error(error: MailContactsSyncManagedRuntimeErrorV1) -> String {
-    let code = match error {
+    format!(
+        "Mail Contacts Sync runtime failed: {}",
+        runtime_error_code(error)
+    )
+}
+
+fn runtime_error_code(error: MailContactsSyncManagedRuntimeErrorV1) -> &'static str {
+    match error {
         MailContactsSyncManagedRuntimeErrorV1::Admission => "admission",
         MailContactsSyncManagedRuntimeErrorV1::EventContract => "event_contract",
         MailContactsSyncManagedRuntimeErrorV1::EventUnavailable => "event_unavailable",
-        MailContactsSyncManagedRuntimeErrorV1::Persistence(_) => "persistence",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::InvalidInput,
+        ) => "persistence_invalid_input",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::InvalidRow,
+        ) => "persistence_invalid_row",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::StorageUnavailable,
+        ) => "persistence_storage_unavailable",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::RequestConflict,
+        ) => "persistence_request_conflict",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::InboxConflict,
+        ) => "persistence_inbox_conflict",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::RevisionConflict,
+        ) => "persistence_revision_conflict",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::InvalidTransition,
+        ) => "persistence_invalid_transition",
+        MailContactsSyncManagedRuntimeErrorV1::Persistence(
+            MailContactsSyncPersistenceErrorV1::NotFound,
+        ) => "persistence_not_found",
         MailContactsSyncManagedRuntimeErrorV1::Unavailable => "unavailable",
-    };
-    format!("Mail Contacts Sync runtime failed: {code}")
+    }
 }
 
 fn export_bytes<I>(arguments: &mut I, bytes: Vec<u8>) -> Result<(), String>

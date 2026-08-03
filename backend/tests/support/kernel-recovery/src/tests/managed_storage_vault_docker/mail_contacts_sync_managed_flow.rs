@@ -6,6 +6,11 @@ use hermes_contacts_mail_sync_source_api::{
     ContactsMailSyncSourceEnvelopeContextV1, build_contact_changed_for_mail_sync_outbox_record_v1,
     wire::ContactChangedForMailSyncV1,
 };
+use hermes_events_protocol::validation::envelope::decode_envelope_v1;
+use hermes_kernel_control_store::PlatformStorageBindingStateV1;
+use hermes_mail_address_book_contract::wire::{
+    MailAddressBookEntryUpsertRejectedV1, MailAddressBookRejectCodeV1,
+};
 use hermes_mail_contacts_sync_api::{
     MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1, MAIL_CONTACTS_SYNC_MODULE_ID_V1,
     MAIL_CONTACTS_SYNC_OWNER_ID_V1, mail_contacts_sync_query_contract_v1,
@@ -16,6 +21,7 @@ use hermes_mail_contacts_sync_api::{
         StartMailContactsSyncResponseV1,
     },
 };
+use hermes_mail_contacts_sync_runtime::MAIL_CONTACTS_SYNC_STORAGE_CAPABILITY_ID_V1;
 use hermes_mail_persistence::GmailOAuthCredentialBindingV1;
 use hermes_runtime_protocol::v1::{
     ContractReferenceV1, ModuleClientRequestV1, ModuleClientResponseV1,
@@ -36,6 +42,8 @@ use crate::{
     identity::device::signer::DeviceSigner,
     modules::capability::router::{ManagedCapabilityRouteRequest, route_managed_client_request},
 };
+
+const MANAGED_EVENT_DEADLINE: Duration = Duration::from_secs(60);
 
 #[test]
 #[ignore = "requires disposable Docker plus real managed Vault, Storage, NATS, Mail, workflow and Contacts binaries"]
@@ -171,12 +179,17 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         account_id: MAIL_ACCOUNT_ID.to_owned(),
         direction: MailContactsSyncDirectionV1::MailContactsSyncDirectionBidirectional as i32,
     };
+    set_authenticated_nats_container_running(false);
     let accepted = route_start(&store, &supervisor, &sync.registration_id, 1, &request);
     assert_eq!(
         accepted.error,
         MailContactsSyncErrorCodeV1::MailContactsSyncErrorCodeUnspecified as i32
     );
     assert_eq!(accepted.run_id.len(), 16);
+    runtime.block_on(wait_for_workflow_pending_outbox());
+    assert_eq!(provider.accepted_people_reads(), 0);
+    assert_eq!(provider.accepted_people_writes(), 0);
+    set_authenticated_nats_container_running(true);
     if !wait_for_people_write(&provider, 1) {
         let diagnostic = runtime.block_on(reverse_diagnostic());
         panic!("Mail did not execute the expected Google People write: {diagnostic:?}");
@@ -205,8 +218,13 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         &supervisor,
         &sync.registration_id,
     ));
-    let completed =
-        wait_for_completed(&store, &supervisor, &sync.registration_id, &accepted.run_id);
+    let completed = wait_for_completed(
+        &store,
+        &supervisor,
+        &sync.registration_id,
+        &accepted.run_id,
+        &provider,
+    );
     assert_eq!(completed.account_id, MAIL_ACCOUNT_ID);
     assert_eq!(completed.provider_entries_seen, 1);
     assert_eq!(completed.contacts_created, 1);
@@ -270,13 +288,71 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         &supervisor,
         &sync.registration_id,
         &scheduled_run_id,
+        &provider,
     );
     assert_eq!(scheduled.account_id, MAIL_ACCOUNT_ID);
     assert_eq!(scheduled.provider_entries_seen, 1);
-    assert_eq!(scheduled.contacts_updated, 1);
-    assert_eq!(scheduled.contacts_unchanged, 0);
+    assert_eq!(scheduled.contacts_updated, 0);
+    assert_eq!(scheduled.contacts_unchanged, 1);
     assert_eq!(provider.accepted_people_reads(), 2);
+    assert_eq!(provider.accepted_people_writes(), 3);
+
+    provider.drop_next_people_write_response();
+    runtime.block_on(queue_local_contact_change(
+        local_contact_id,
+        3,
+        "Local Ambiguous Contact",
+        contacts.runtime_generation,
+    ));
+    assert!(wait_for_people_write(&provider, 4));
+    runtime.block_on(wait_for_reverse_contact_terminal(local_contact_id, 3, 5));
+    runtime.block_on(assert_latest_mail_write_is_outcome_unknown());
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        provider.accepted_people_writes(),
+        4,
+        "ambiguous provider mutation must never be retried automatically"
+    );
+
+    let recovery = route_start(
+        &store,
+        &supervisor,
+        &sync.registration_id,
+        4,
+        &StartMailContactsSyncRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0x85; 16],
+            account_id: MAIL_ACCOUNT_ID.to_owned(),
+            // Start must match the admitted configuration direction. The fresh run is
+            // observation-first because the fixture now exposes the committed provider
+            // resource; the workflow's loop-prevention metadata prevents a blind replay.
+            direction: MailContactsSyncDirectionV1::MailContactsSyncDirectionBidirectional as i32,
+        },
+    );
+    assert_eq!(
+        recovery.error,
+        MailContactsSyncErrorCodeV1::MailContactsSyncErrorCodeUnspecified as i32
+    );
+    assert_eq!(recovery.run_id.len(), 16);
+    let recovered = wait_for_completed(
+        &store,
+        &supervisor,
+        &sync.registration_id,
+        &recovery.run_id,
+        &provider,
+    );
+    assert_eq!(recovered.provider_entries_seen, 2);
+    assert_eq!(recovered.contacts_created, 0);
+    assert_eq!(recovered.contacts_updated, 0);
+    assert_eq!(recovered.contacts_unchanged, 2);
+    assert_eq!(recovered.rejected_entries, 0);
+    assert_eq!(provider.accepted_people_reads(), 3);
     assert_eq!(provider.accepted_people_writes(), 4);
+    runtime.block_on(assert_provider_link(
+        local_contact_id,
+        "people/created-contact-1",
+        "created-etag-3",
+    ));
     runtime.block_on(wait_for_scheduler_terminal(&scheduled_run_id));
 
     runtime.block_on(async {
@@ -297,19 +373,84 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
         .await
         .expect("count synced Contacts inbox");
         assert_eq!(contacts_count, 2);
-        assert_eq!(completed_inbox, 2);
+        assert_eq!(completed_inbox, 4);
         pool.close().await;
     });
 
     let duplicate = route_start(&store, &supervisor, &sync.registration_id, 3, &request);
     assert_eq!(duplicate.run_id, accepted.run_id);
-    let duplicate_completed =
-        wait_for_completed(&store, &supervisor, &sync.registration_id, &accepted.run_id);
+    let duplicate_completed = wait_for_completed(
+        &store,
+        &supervisor,
+        &sync.registration_id,
+        &accepted.run_id,
+        &provider,
+    );
     assert_eq!(duplicate_completed.state_revision, completed.state_revision);
-    assert_eq!(provider.accepted_people_reads(), 2);
+    assert_eq!(provider.accepted_people_reads(), 3);
     assert_eq!(provider.accepted_people_writes(), 4);
 
+    let provider_reads_before_revoke = provider.accepted_people_reads();
+    let provider_writes_before_revoke = provider.accepted_people_writes();
+    let (owner_runtime_dir, owner_control) =
+        start_owner_control(&data, &store, &shutdown, &supervisor);
+    let revoked = transition_registration(
+        &owner_runtime_dir,
+        &owner_signer,
+        &sync.registration_id,
+        "revoked",
+    );
+    assert_eq!(revoked.state, "revoked");
+    assert!(revoked.grant_epoch > sync.grant_epoch);
+    assert_eq!(
+        store
+            .module_registration(&sync.registration_id)
+            .expect("read revoked Mail Contacts Sync registration")
+            .expect("revoked Mail Contacts Sync registration")
+            .state(),
+        ModuleRegistrationState::Revoked
+    );
+    assert_eq!(
+        store
+            .platform_storage_binding(
+                &sync.registration_id,
+                MAIL_CONTACTS_SYNC_STORAGE_CAPABILITY_ID_V1,
+            )
+            .expect("read revoked Mail Contacts Sync storage binding")
+            .expect("revoked Mail Contacts Sync storage binding")
+            .state(),
+        PlatformStorageBindingStateV1::Revoking
+    );
+    assert!(
+        !supervisor
+            .is_active(&sync.registration_id)
+            .expect("observe stopped Mail Contacts Sync workflow")
+    );
+    assert!(
+        supervisor
+            .is_active(&mail.registration_id)
+            .expect("observe active Mail integration")
+    );
+    assert!(
+        supervisor
+            .is_active(&contacts.registration_id)
+            .expect("observe active Contacts domain")
+    );
+    assert_revoked_start_route_is_rejected(&store, &supervisor, &sync);
+    assert_eq!(
+        provider.accepted_people_reads(),
+        provider_reads_before_revoke
+    );
+    assert_eq!(
+        provider.accepted_people_writes(),
+        provider_writes_before_revoke
+    );
+
     supervisor.shutdown().expect("stop managed processes");
+    owner_control
+        .join()
+        .expect("join owner control server")
+        .expect("owner control server result");
     shutdown.store(true, Ordering::SeqCst);
     unsafe {
         std::env::remove_var("HERMES_TEST_KERNEL_EXECUTABLE");
@@ -318,8 +459,45 @@ fn managed_mail_contacts_sync_reaches_contacts_through_events() {
     std::fs::remove_dir_all(data).expect("remove Mail Contacts Sync Kernel fixture");
 }
 
+fn assert_revoked_start_route_is_rejected(
+    store: &SqliteControlStore,
+    supervisor: &ManagedRuntimeSupervisor,
+    sync: &StartedMailContactsSyncRuntimeV1,
+) {
+    let request = ModuleClientRequestV1 {
+        protocol_major: 1,
+        module_id: MAIL_CONTACTS_SYNC_MODULE_ID_V1.to_owned(),
+        owner_id: MAIL_CONTACTS_SYNC_OWNER_ID_V1.to_owned(),
+        contract: Some(mail_contacts_sync_start_contract_v1()),
+        request_id: 5,
+        request_payload: StartMailContactsSyncRequestV1 {
+            protocol_major: 1,
+            operation_id: vec![0x86; 16],
+            account_id: MAIL_ACCOUNT_ID.to_owned(),
+            direction: MailContactsSyncDirectionV1::MailContactsSyncDirectionBidirectional as i32,
+        }
+        .encode_to_vec(),
+        logical_owner_id: MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1.to_owned(),
+        authenticated_device_id: "desktop-1".to_owned(),
+    }
+    .encode_to_vec();
+    let route = ManagedCapabilityRouteRequest::new(
+        &sync.registration_id,
+        &sync.runtime_instance_id,
+        sync.runtime_generation,
+        sync.grant_epoch,
+        MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1,
+        &request,
+    );
+    assert_eq!(
+        route_managed_client_request(store, &supervisor.relay_port(), &route)
+            .expect_err("revoked Mail Contacts Sync Start route"),
+        "module registration is not approved"
+    );
+}
+
 fn wait_for_people_write(provider: &MailGmailFixture, expected: usize) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
     while provider.accepted_people_writes() != expected {
         if Instant::now() >= deadline {
             return false;
@@ -361,13 +539,57 @@ async fn reverse_diagnostic() -> Vec<(i16, bool, bool, Option<i16>, Option<i16>)
     rows
 }
 
+async fn wait_for_workflow_pending_outbox() {
+    let pool = contacts_admin_pool_v1().await;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let pending: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM hermes_data.mail_contacts_sync_outbox WHERE \
+             logical_owner_id=$1 AND published_at_unix_millis IS NULL",
+        )
+        .bind(MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1)
+        .fetch_one(&pool)
+        .await
+        .expect("count pending Mail Contacts Sync outbox");
+        if pending == 1 {
+            pool.close().await;
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "Mail Contacts Sync did not retain one exact command during NATS outage: {pending}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+async fn assert_latest_mail_write_is_outcome_unknown() {
+    let pool = contacts_admin_pool_v1().await;
+    let exact_bytes: Vec<u8> = sqlx::query_scalar(
+        "SELECT exact_envelope_bytes FROM hermes_data.mail_address_book_upsert_result_outbox \
+         ORDER BY created_at_unix_seconds DESC, message_id DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read latest Mail address-book terminal result");
+    let envelope = decode_envelope_v1(&exact_bytes).expect("decode Mail address-book result");
+    let payload = MailAddressBookEntryUpsertRejectedV1::decode(envelope.payload.as_slice())
+        .expect("decode Mail outcome-unknown payload");
+    assert_eq!(
+        payload.code,
+        MailAddressBookRejectCodeV1::MailAddressBookRejectCodeOutcomeUnknown as i32
+    );
+    assert!(payload.outcome_unknown);
+    pool.close().await;
+}
+
 async fn wait_for_reverse_terminal(
     expected_state: i16,
     supervisor: &ManagedRuntimeSupervisor,
     registration_id: &str,
 ) {
     let pool = contacts_admin_pool_v1().await;
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
     loop {
         let state = sqlx::query_scalar::<_, i16>(
             "SELECT state FROM hermes_data.mail_contacts_sync_reverse_operations \
@@ -487,7 +709,7 @@ async fn wait_for_reverse_contact_terminal(
     expected_state: i16,
 ) {
     let pool = contacts_admin_pool_v1().await;
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
     loop {
         let state = sqlx::query_scalar::<_, i16>(
             "SELECT state FROM hermes_data.mail_contacts_sync_reverse_operations WHERE \
@@ -578,7 +800,7 @@ fn upsert_mail_contacts_sync_schedule(supervisor: &ManagedRuntimeSupervisor) {
 
 async fn wait_for_scheduled_run_id() -> [u8; 16] {
     let pool = contacts_admin_pool_v1().await;
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
     loop {
         let row = sqlx::query_scalar::<_, Vec<u8>>(
             "SELECT run_id FROM hermes_data.mail_contacts_sync_runs
@@ -603,7 +825,7 @@ async fn wait_for_scheduled_run_id() -> [u8; 16] {
 
 async fn wait_for_scheduler_terminal(run_id: &[u8; 16]) {
     let pool = contacts_admin_pool_v1().await;
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
     loop {
         let outcome = sqlx::query_scalar::<_, String>(
             "SELECT outcome FROM hermes_platform.scheduler_run_results WHERE run_id=$1",
@@ -631,16 +853,34 @@ fn route_start(
     request_id: u64,
     request: &StartMailContactsSyncRequestV1,
 ) -> StartMailContactsSyncResponseV1 {
-    let response = route_sync_request(
-        store,
-        supervisor,
-        registration_id,
-        request_id,
-        mail_contacts_sync_start_contract_v1(),
-        request.encode_to_vec(),
-    );
-    StartMailContactsSyncResponseV1::decode(response.response_payload.as_slice())
-        .expect("decode Mail Contacts Sync Start response")
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
+    loop {
+        match try_route_sync_request(
+            store,
+            supervisor,
+            registration_id,
+            request_id,
+            mail_contacts_sync_start_contract_v1(),
+            request.encode_to_vec(),
+        ) {
+            Ok(response) => {
+                return StartMailContactsSyncResponseV1::decode(
+                    response.response_payload.as_slice(),
+                )
+                .expect("decode Mail Contacts Sync Start response");
+            }
+            Err(error) => {
+                assert!(
+                    Instant::now() < deadline,
+                    "Mail Contacts Sync Start remained unavailable: {error}; active={:?}; \
+                     last_failure={:?}",
+                    supervisor.is_active(registration_id),
+                    supervisor.last_failure(registration_id)
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
 }
 
 fn wait_for_completed(
@@ -648,22 +888,37 @@ fn wait_for_completed(
     supervisor: &ManagedRuntimeSupervisor,
     registration_id: &str,
     run_id: &[u8],
+    provider: &MailGmailFixture,
 ) -> GetMailContactsSyncResponseV1 {
-    let deadline = Instant::now() + Duration::from_secs(30);
+    let deadline = Instant::now() + MANAGED_EVENT_DEADLINE;
     let mut request_id = 10;
     loop {
         let request = GetMailContactsSyncRequestV1 {
             protocol_major: 1,
             run_id: run_id.to_vec(),
         };
-        let response = route_sync_request(
+        let response = match try_route_sync_request(
             store,
             supervisor,
             registration_id,
             request_id,
             mail_contacts_sync_query_contract_v1(),
             request.encode_to_vec(),
-        );
+        ) {
+            Ok(response) => response,
+            Err(error) => {
+                assert!(
+                    Instant::now() < deadline,
+                    "Mail Contacts Sync Get remained unavailable: {error}; active={:?}; \
+                     last_failure={:?}",
+                    supervisor.is_active(registration_id),
+                    supervisor.last_failure(registration_id)
+                );
+                request_id += 1;
+                std::thread::sleep(Duration::from_millis(25));
+                continue;
+            }
+        };
         let response = GetMailContactsSyncResponseV1::decode(response.response_payload.as_slice())
             .expect("decode Mail Contacts Sync Get response");
         match MailContactsSyncStateV1::try_from(response.state) {
@@ -675,25 +930,28 @@ fn wait_for_completed(
         }
         assert!(
             Instant::now() < deadline,
-            "Mail Contacts Sync did not complete: {response:?}"
+            "Mail Contacts Sync did not complete: {response:?}; provider_reads={}; \
+             provider_writes={}",
+            provider.accepted_people_reads(),
+            provider.accepted_people_writes()
         );
         request_id += 1;
         std::thread::sleep(Duration::from_millis(25));
     }
 }
 
-fn route_sync_request(
+fn try_route_sync_request(
     store: &SqliteControlStore,
     supervisor: &ManagedRuntimeSupervisor,
     registration_id: &str,
     request_id: u64,
     contract: ContractReferenceV1,
     request_payload: Vec<u8>,
-) -> ModuleClientResponseV1 {
+) -> Result<ModuleClientResponseV1, String> {
     let launch = store
         .effective_managed_launch_record(registration_id)
-        .expect("read Mail Contacts Sync launch")
-        .expect("Mail Contacts Sync launch is active");
+        .map_err(|error| format!("read Mail Contacts Sync launch: {error:?}"))?
+        .ok_or_else(|| "Mail Contacts Sync launch is inactive".to_owned())?;
     let request = ModuleClientRequestV1 {
         protocol_major: 1,
         module_id: MAIL_CONTACTS_SYNC_MODULE_ID_V1.to_owned(),
@@ -713,16 +971,9 @@ fn route_sync_request(
         MAIL_CONTACTS_SYNC_CAPABILITY_ID_V1,
         &request,
     );
-    let bytes = route_managed_client_request(store, &supervisor.relay_port(), &route)
-        .unwrap_or_else(|error| {
-            panic!(
-                "route Mail Contacts Sync client request: {error}; active={:?}; last_failure={:?}",
-                supervisor.is_active(registration_id),
-                supervisor.last_failure(registration_id)
-            )
-        });
+    let bytes = route_managed_client_request(store, &supervisor.relay_port(), &route)?;
     ModuleClientResponseV1::decode(bytes.as_slice())
-        .expect("decode Mail Contacts Sync module response")
+        .map_err(|error| format!("decode Mail Contacts Sync module response: {error}"))
 }
 
 async fn contacts_admin_pool_v1() -> sqlx::PgPool {

@@ -59,3 +59,7 @@ pub use settings::{
 };
 
 pub const PACKAGE: &str = "hermes-mail-contacts-sync-runtime";
+
+/// Cross-owner durable commands remain bounded while allowing the sequential
+/// managed event pumps to recover from a short broker or runtime outage.
+pub(crate) const MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1: i64 = 300;

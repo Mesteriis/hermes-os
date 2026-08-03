@@ -742,3 +742,10 @@ ADR-0383 закрывает обязательную обратную reconcilia
 write: returned provider entry ID/ETag закрепляются только Contacts-owned exact
 command через NATS, workflow ждёт Contacts terminal result, а Mail, Kernel и
 Gateway не получают права писать canonical Contacts link.
+ADR-0384 разделяет retryable infrastructure outage и ambiguous provider write:
+NATS outbox replay сохраняет exact bytes, `OUTCOME_UNKNOWN` запрещает
+автоматический повтор provider mutation, recovery идёт через последующее
+provider observation, causal cross-subject delivery ждёт prerequisites,
+Contacts provenance refresh не создаёт feedback write, а
+revoke/generation/grant fence срабатывает до IO. Managed gate реализован;
+browser Start/Get/shared-SSE остаётся отдельным условием общего workflow gate.

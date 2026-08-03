@@ -53,9 +53,11 @@ provider mutation. Для iCloud добавлены отдельные additive 
 credential binding и lifecycle tables; IMAP credential state не переиспользуется.
 Google create теперь доказан вместе с обязательной event-only обратной
 привязкой returned provider ID/ETag в Contacts и последующим ETag-fenced PATCH;
-Mail и workflow не пишут Contacts storage. Revoke/outage recovery и browser
-conformance ещё не доказаны,
-поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
+Mail и workflow не пишут Contacts storage. Managed outage/recovery/revoke gate
+также доказан: pending outbox переживает NATS outage, ambiguous write не
+повторяется, recovery observation обновляет Contacts-owned provenance без
+feedback write, а revoke останавливает только workflow. Browser conformance
+ещё не доказан, поэтому общий `mail_contacts_sync_v1` gate остаётся закрытым.
 Contacts command открыт только после exact six-unit inventory,
 disposable PostgreSQL и signed managed Vault/Storage/NATS conformance. Наличие
 legacy address-book service, Mail account UI или статических contracts не

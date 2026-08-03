@@ -102,7 +102,7 @@ fn operation(
             target_mail_account_id: settings.account_id.clone(),
             logical_owner_id: context.logical_owner_id.to_owned(),
         },
-        context.now_unix_millis / 1_000 + 300,
+        context.now_unix_millis / 1_000 + crate::MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1,
         &ContactsMailSyncSourceEnvelopeContextV1 {
             module_id: CONTACT_MAIL_SYNC_SOURCE_REQUESTER_MODULE_ID_V1.to_owned(),
             runtime_instance_id: context.runtime_instance_id.to_owned(),

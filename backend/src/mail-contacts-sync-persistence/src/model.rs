@@ -114,6 +114,7 @@ pub enum MailContactsSyncInboxOutcomeV1 {
 pub enum MailContactsSyncPersistenceOutcomeV1 {
     Applied,
     Duplicate,
+    PendingPrerequisites,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -22,6 +22,10 @@ const files = {
     'docs/adr/ADR-0383-contacts-provider-link-reconciliation-after-mail-write.md',
     PROJECT_ROOT,
   ),
+  recoveryAdr: new URL(
+    'docs/adr/ADR-0384-mail-contacts-sync-outage-recovery-and-revocation-fencing.md',
+    PROJECT_ROOT,
+  ),
   inventory: new URL('architecture/communications-settings-reconstruction.json', BACKEND_ROOT),
   policy: new URL('architecture/policy.json', BACKEND_ROOT),
   apiManifest: new URL('src/contacts-command-api/Cargo.toml', BACKEND_ROOT),
@@ -241,6 +245,16 @@ const files = {
     BACKEND_ROOT,
   ),
   workflowRuntimeManifest: new URL('src/mail-contacts-sync-runtime/Cargo.toml', BACKEND_ROOT),
+  workflowRuntimeLib: new URL('src/mail-contacts-sync-runtime/src/lib.rs', BACKEND_ROOT),
+  workflowCommands: new URL('src/mail-contacts-sync-runtime/src/commands.rs', BACKEND_ROOT),
+  workflowProviderEvents: new URL(
+    'src/mail-contacts-sync-runtime/src/provider_events.rs',
+    BACKEND_ROOT,
+  ),
+  workflowRunProgress: new URL(
+    'src/mail-contacts-sync-runtime/src/run_progress.rs',
+    BACKEND_ROOT,
+  ),
   workflowRuntimeAdmission: new URL('src/mail-contacts-sync-runtime/src/admission.rs', BACKEND_ROOT),
   workflowManagedRuntime: new URL('src/mail-contacts-sync-runtime/src/managed_runtime.rs', BACKEND_ROOT),
   workflowRuntimeMain: new URL('src/mail-contacts-sync-runtime/src/main.rs', BACKEND_ROOT),
@@ -906,6 +920,66 @@ test('sync persistence owns atomic state relay, reverse operations and SSE repla
   );
 });
 
+test('Mail Contacts Sync failure isolation is durable and revoke-fenced', async () => {
+  const [
+    adr,
+    flow,
+    providerFixture,
+    fetchWorker,
+    runtimeLib,
+    commands,
+    providerEvents,
+    runProgress,
+  ] =
+    await Promise.all([
+    readFile(files.recoveryAdr, 'utf8'),
+    readFile(files.managedSyncFlow, 'utf8'),
+    readFile(files.managedGoogleFixture, 'utf8'),
+    readFile(files.mailRuntimeAddressBookFetchWorker, 'utf8'),
+    readFile(files.workflowRuntimeLib, 'utf8'),
+    readFile(files.workflowCommands, 'utf8'),
+    readFile(files.workflowProviderEvents, 'utf8'),
+    readFile(files.workflowRunProgress, 'utf8'),
+  ]);
+
+  assert.match(adr, /OUTCOME_UNKNOWN/);
+  assert.match(adr, /не выпускает второй[\s\S]*command/);
+  assert.match(adr, /Recovery выполняется observation-first/);
+  assert.match(adr, /grant epoch[\s\S]*отклоняются до provider IO/);
+  assert.match(adr, /deadline 300[\s\S]*секунд/);
+  assert.match(adr, /page_completed[\s\S]*PendingPrerequisites/);
+  assert.match(adr, /межsubjectная задержка[\s\S]*не завершает process/);
+  assert.match(adr, /canonical mutation[\s\S]*provider provenance refresh/);
+  assert.match(adr, /не повышают `contact_revision`[\s\S]*feedback write/);
+  assert.match(adr, /entry_digest[\s\S]*не используется как ordering revision/);
+  assert.match(adr, /source_revision[\s\S]*Mail-owned observed Unix time/);
+  assert.match(fetchWorker, /source_revision\(now_unix_seconds\)\?/);
+  assert.doesNotMatch(fetchWorker, /source_revision\(&digest\)/);
+  assert.match(providerEvents, /PendingPrerequisites/);
+  assert.match(runtimeLib, /MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1: i64 = 300/);
+  for (const source of [commands, providerEvents, runProgress]) {
+    assert.match(source, /MAIL_CONTACTS_SYNC_COMMAND_DEADLINE_SECONDS_V1/);
+    assert.doesNotMatch(source, /COMMAND_DEADLINE_SECONDS_V1: i64 = 30/);
+  }
+  assert.match(flow, /set_authenticated_nats_container_running\(false\)/);
+  assert.match(flow, /wait_for_workflow_pending_outbox/);
+  assert.match(flow, /provider\.accepted_people_reads\(\), 0/);
+  assert.match(flow, /provider\.accepted_people_writes\(\), 0/);
+  assert.match(flow, /set_authenticated_nats_container_running\(true\)/);
+  assert.match(flow, /drop_next_people_write_response/);
+  assert.match(flow, /assert_latest_mail_write_is_outcome_unknown/);
+  assert.match(flow, /ambiguous provider mutation must never be retried automatically/);
+  assert.match(flow, /created-etag-3/);
+  assert.match(flow, /transition_registration\(/);
+  assert.match(flow, /ModuleRegistrationState::Revoked/);
+  assert.match(flow, /assert_revoked_start_route_is_rejected/);
+  assert.match(flow, /is_active\(&mail\.registration_id\)/);
+  assert.match(flow, /is_active\(&contacts\.registration_id\)/);
+  assert.match(providerFixture, /drop_next_people_write_response\s*\.\s*swap\(false/);
+  assert.match(providerFixture, /ambiguous_people_write_committed\s*\.\s*store\(true/);
+  assert.match(providerFixture, /"etag": "created-etag-3"/);
+});
+
 test('staged Contacts slice keeps six functional build units isolated', async () => {
   const [
     providerLinkAdr,
@@ -1002,6 +1076,8 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
   assert.match(identity, /normalize_phone_v1/);
   assert.match(upsert, /IdentityAmbiguous/);
   assert.match(upsert, /ProviderLinkConflict/);
+  assert.match(upsert, /refreshed\.provenance = normalized\.provenance/);
+  assert.match(upsert, /provider_fence_refresh_does_not_change_canonical_contact_revision/);
   assert.doesNotMatch(
     `${core}\n${identity}\n${upsert}`,
     /provider sdk|oauth|postgres|gateway|nats|communications/i,
@@ -1014,6 +1090,8 @@ test('staged Contacts slice keeps six functional build units isolated', async ()
   assert.match(persistence, /reserve_contact_mail_sync_source/);
   assert.match(persistence, /persist_contact_mail_sync_source_result/);
   assert.match(persistence, /persist_contact/);
+  assert.match(persistence, /Provider provenance has an independent freshness lifecycle/);
+  assert.match(persistence, /persist_provider_link\(&mut transaction, &contact\)\.await\?/);
   assert.match(persistence, /insert_outbox/);
   assert.match(migration, /contacts_mail_entry_inbox/);
   assert.match(migration, /contacts_provider_links/);

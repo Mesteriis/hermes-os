@@ -28,9 +28,11 @@ credential binding и lifecycle state хранятся в отдельных add
 tables, а не в IMAP binding. Google create теперь доказан signed managed
 ensemble: returned provider ID/ETag event-only закрепляются Contacts-owned
 command, а следующее изменение выполняет ETag-fenced PATCH вместо повторного
-create. Revoke/outage recovery и browser conformance ещё не закрыты, поэтому
-наличие этого среза не открывает
-`mail_contacts_sync_v1`.
+create. Managed outage/recovery/revoke conformance закрыт: NATS outage не
+вызывает provider IO, post-write response loss даёт `OUTCOME_UNKNOWN` без
+автоповтора, а recovery закрепляет наблюдённый ETag через Contacts-owned
+command. Browser conformance ещё не закрыт, поэтому наличие этого среза не
+открывает `mail_contacts_sync_v1`.
 
 Уточняет:
 
