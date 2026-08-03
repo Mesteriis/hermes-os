@@ -5650,6 +5650,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-whisper-stt-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-whisper-stt-process"
 version = "0.1.0"
 dependencies = [

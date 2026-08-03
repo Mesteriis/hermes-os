@@ -121,6 +121,7 @@ members = [
   "src/speech-to-text-assembly",
   "src/speech-transcript-artifact",
   "src/whisper-stt-core",
+  "src/whisper-stt-persistence",
   "src/whisper-stt-process",
   "src/communication-summary-assembly",
   "src/communication-translation-api",

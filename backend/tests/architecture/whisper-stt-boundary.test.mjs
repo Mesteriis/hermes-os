@@ -68,6 +68,32 @@ test('Whisper core and native process are separate integration units', async () 
   assert.match(adr, /System executable\/model fallback/);
 });
 
+test('Whisper persistence is owner-local and stores no private source or transcript content', async () => {
+  const [manifest, model, repository, schema, migration] = await Promise.all([
+    read('backend/src/whisper-stt-persistence/Cargo.toml'),
+    read('backend/src/whisper-stt-persistence/src/model.rs'),
+    read('backend/src/whisper-stt-persistence/src/repository.rs'),
+    read('backend/src/whisper-stt-persistence/src/schema.rs'),
+    read('backend/src/whisper-stt-persistence/migrations/0001_whisper_stt_runs.sql'),
+  ]);
+
+  assert.match(manifest, /role = "integration"/);
+  assert.match(manifest, /owner = "whisper_stt"/);
+  assert.match(manifest, /surface = "persistence"/);
+  assert.match(model, /WhisperSttRunStateV1::Uncertain/);
+  assert.match(model, /current\.identity != transition\.next\.identity/);
+  assert.match(repository, /ON CONFLICT \(logical_owner_id, request_id\) DO NOTHING/);
+  assert.match(repository, /SELECT_RUN_FOR_UPDATE/);
+  assert.match(schema, /owner_id: "whisper_stt"/);
+  assert.match(migration, /model_revision_sha256/);
+  assert.match(migration, /transcript_sha256/);
+  assert.match(migration, /run_state BETWEEN 1 AND 5/);
+  assert.doesNotMatch(
+    `${repository}\n${migration}`,
+    /audio_bytes|transcript_text|segment_text|custody_proof|filesystem_path|stdout|stderr|communications_/i,
+  );
+});
+
 test('Whisper production gate remains closed until managed native conformance exists', async () => {
   const inventory = JSON.parse(
     await read('backend/architecture/communications-settings-reconstruction.json'),
