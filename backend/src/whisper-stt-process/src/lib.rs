@@ -291,6 +291,11 @@ struct WhisperJsonOffsetsV1 {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        os::unix::fs::{PermissionsExt, symlink},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
     use hermes_speech_to_text_api::{
         seal_speech_to_text_request_v1,
         wire::{SpeechAudioFormatV1, SpeechAudioSourceReceiptV1, SpeechToTextRequestV1},
@@ -298,6 +303,8 @@ mod tests {
     use hermes_whisper_stt_core::plan_whisper_stt_execution_v1;
 
     use super::*;
+
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
     fn plan() -> WhisperSttExecutionPlanV1 {
         let request = seal_speech_to_text_request_v1(SpeechToTextRequestV1 {
@@ -357,5 +364,121 @@ mod tests {
         assert!(production.contains("--output-json"));
         assert!(!production.contains("Command::new(\"sh\")"));
         assert!(!production.contains(".arg(\"-c\")"));
+    }
+
+    #[test]
+    fn real_process_output_is_parsed_and_private_work_is_removed() {
+        let fixture = process_fixture(
+            "while [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = \"--output-file\" ]; then shift; output=$1; fi\n  shift\ndone\nprintf '%s' '{\"result\":{\"language\":\"en\"},\"transcription\":[{\"offsets\":{\"from\":0,\"to\":1000},\"text\":\"hello\"}]}' > \"${output}.json\"\n",
+        );
+        let outcome = execute_whisper_stt_process_v1(&fixture.configuration, &plan(), &wav())
+            .expect("process outcome");
+        assert_eq!(outcome.segments.len(), 1);
+        assert_eq!(
+            fs::read_dir(&fixture.configuration.private_work_root)
+                .expect("work root")
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn malformed_output_and_non_zero_exit_are_rejected_and_cleaned() {
+        let malformed = process_fixture(
+            "while [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = \"--output-file\" ]; then shift; output=$1; fi\n  shift\ndone\nprintf '%s' 'not-json' > \"${output}.json\"\n",
+        );
+        assert_eq!(
+            execute_whisper_stt_process_v1(&malformed.configuration, &plan(), &wav()),
+            Err(WhisperSttProcessErrorV1::InvalidOutput)
+        );
+        assert_eq!(
+            fs::read_dir(&malformed.configuration.private_work_root)
+                .expect("work root")
+                .count(),
+            0
+        );
+
+        let rejected = process_fixture("exit 7\n");
+        assert_eq!(
+            execute_whisper_stt_process_v1(&rejected.configuration, &plan(), &wav()),
+            Err(WhisperSttProcessErrorV1::ProcessRejected)
+        );
+        assert_eq!(
+            fs::read_dir(&rejected.configuration.private_work_root)
+                .expect("work root")
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn timeout_kills_process_and_symlinked_runner_is_never_started() {
+        let hanging = process_fixture("while :; do :; done\n");
+        let mut short = plan();
+        short.timeout_millis = 1_000;
+        assert_eq!(
+            execute_whisper_stt_process_v1(&hanging.configuration, &short, &wav()),
+            Err(WhisperSttProcessErrorV1::TimedOut)
+        );
+        assert_eq!(
+            fs::read_dir(&hanging.configuration.private_work_root)
+                .expect("work root")
+                .count(),
+            0
+        );
+
+        let linked = process_fixture("exit 0\n");
+        let symlink_path = linked.root.join("linked-runner");
+        symlink(&linked.configuration.executable, &symlink_path).expect("symlink");
+        let mut configuration = linked.configuration.clone();
+        configuration.executable = symlink_path;
+        assert_eq!(
+            execute_whisper_stt_process_v1(&configuration, &plan(), &wav()),
+            Err(WhisperSttProcessErrorV1::InvalidConfiguration)
+        );
+    }
+
+    fn wav() -> Vec<u8> {
+        let mut bytes = vec![0_u8; 44];
+        bytes[..4].copy_from_slice(b"RIFF");
+        bytes[8..12].copy_from_slice(b"WAVE");
+        bytes
+    }
+
+    struct ProcessFixtureV1 {
+        root: PathBuf,
+        configuration: WhisperSttProcessConfigurationV1,
+    }
+
+    impl Drop for ProcessFixtureV1 {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn process_fixture(body: &str) -> ProcessFixtureV1 {
+        let root = std::env::temp_dir().join(format!(
+            "hermes-whisper-process-{}-{}",
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&root).expect("root");
+        let executable = root.join("runner");
+        fs::write(&executable, format!("#!/bin/sh\n{body}")).expect("runner");
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o500)).expect("runner mode");
+        let model = root.join("model");
+        fs::write(&model, b"model").expect("model");
+        fs::set_permissions(&model, fs::Permissions::from_mode(0o400)).expect("model mode");
+        let work = root.join("work");
+        fs::create_dir(&work).expect("work");
+        fs::set_permissions(&work, fs::Permissions::from_mode(0o700)).expect("work mode");
+        ProcessFixtureV1 {
+            root,
+            configuration: WhisperSttProcessConfigurationV1 {
+                executable,
+                model,
+                private_work_root: work,
+            },
+        }
     }
 }

@@ -5642,6 +5642,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-whisper-stt-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-whisper-stt-persistence",
+ "hermes-whisper-stt-runtime",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-whisper-stt-core"
 version = "0.1.0"
 dependencies = [
@@ -5666,6 +5679,25 @@ dependencies = [
  "hermes-whisper-stt-core",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "hermes-whisper-stt-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-runtime-protocol",
+ "hermes-speech-to-text-api",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "hermes-whisper-stt-core",
+ "hermes-whisper-stt-persistence",
+ "hermes-whisper-stt-process",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

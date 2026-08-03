@@ -94,6 +94,64 @@ test('Whisper persistence is owner-local and stores no private source or transcr
   );
 });
 
+test('Whisper managed runtime binds exact native resources and provider request routing', async () => {
+  const [manifest, admission, resources, runtime, worker, blob, processRoot] = await Promise.all([
+    read('backend/src/whisper-stt-runtime/Cargo.toml'),
+    read('backend/src/whisper-stt-runtime/src/admission.rs'),
+    read('backend/src/whisper-stt-runtime/src/resources.rs'),
+    read('backend/src/whisper-stt-runtime/src/managed_runtime.rs'),
+    read('backend/src/whisper-stt-runtime/src/worker.rs'),
+    read('backend/src/whisper-stt-runtime/src/blob.rs'),
+    read('backend/src/whisper-stt-runtime/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /role = "integration"/);
+  assert.match(manifest, /owner = "whisper_stt"/);
+  assert.match(manifest, /surface = "runtime"/);
+  assert.match(admission, /ModuleKindV1::Integration/);
+  assert.match(admission, /speech_to_text_provider_contract_reference_v1/);
+  assert.match(admission, /RuntimeArtifactUseV1::ReadOnlyData/);
+  assert.match(admission, /RuntimeArtifactUseV1::NativeExecutable/);
+  assert.match(resources, /path_before\.file_type\(\)\.is_symlink\(\)/);
+  assert.match(resources, /same_file\(&opened, &path_after\)/);
+  assert.match(resources, /observed\.as_slice\(\) != binding\.sha256\.as_slice\(\)/);
+  assert.match(runtime, /Operation::DeliverModuleRequest/);
+  assert.match(runtime, /delivery\.logical_owner_id == self\.logical_human_owner_id/);
+  assert.match(runtime, /response_blob_target_owner_id/);
+  assert.match(worker, /WhisperSttRunStateV1::Uncertain/);
+  assert.match(worker, /require_ready_match/);
+  assert.match(blob, /BlobDataOperationV1::BlobDataOperationReadRangeV1/);
+  assert.match(blob, /BlobDataOperationV1::BlobDataOperationWriteV1/);
+  assert.match(blob, /custody_target: Some\(ManagedBlobCustodyTargetV1/);
+  assert.match(processRoot, /serve-inherited/);
+  assert.match(processRoot, /prepare_whisper_stt_resources_v1/);
+  assert.doesNotMatch(
+    `${admission}\n${resources}\n${runtime}\n${worker}\n${blob}\n${processRoot}`,
+    /hermes_communications|communications_|automatic.*download|Command::new\("(?:sh|bash|zsh)"\)/i,
+  );
+});
+
+test('Whisper assembly emits unsigned runtime storage runner and model inputs only', async () => {
+  const [manifest, assembly, cli] = await Promise.all([
+    read('backend/src/whisper-stt-assembly/Cargo.toml'),
+    read('backend/src/whisper-stt-assembly/src/lib.rs'),
+    read('backend/src/whisper-stt-assembly/src/main.rs'),
+  ]);
+
+  assert.match(manifest, /surface = "assembly"/);
+  assert.match(manifest, /hermes-whisper-stt-runtime/);
+  assert.match(assembly, /whisper_stt_module_descriptor_v1/);
+  assert.match(assembly, /whisper_stt_settings_schema_v1/);
+  assert.match(assembly, /whisper_stt_storage_bundle_v1/);
+  assert.match(assembly, /module_runtime_native_executable/);
+  assert.match(assembly, /module_runtime_read_only_data/);
+  assert.match(assembly, /create_new\(true\)/);
+  assert.match(assembly, /mode\(0o600\)/);
+  assert.match(cli, /--runner/);
+  assert.match(cli, /--model/);
+  assert.doesNotMatch(`${assembly}\n${cli}`, /signing|launch|communications_/i);
+});
+
 test('Whisper production gate remains closed until managed native conformance exists', async () => {
   const inventory = JSON.parse(
     await read('backend/architecture/communications-settings-reconstruction.json'),
