@@ -12,6 +12,7 @@ release_root="${HERMES_DEV_RELEASE_ROOT:-$local_root/dev-release}"
 signing_key="${HERMES_DEV_RELEASE_SIGNING_KEY:-$local_root/dev-release-signing-key.pem}"
 tgcalls_root="${HERMES_DEV_TGCALLS_ROOT:-$local_root/dev-native/tgcalls}"
 attachment_text_extraction_ocr_root="${HERMES_DEV_ATTACHMENT_TEXT_EXTRACTION_OCR_ROOT:-$local_root/dev-native/attachment-text-extraction-ocr}"
+whisper_stt_root="${HERMES_DEV_WHISPER_STT_ROOT:-$local_root/dev-native/whisper-stt}"
 distribution_id="hermes-local-development"
 distribution_generation=""
 generation_metadata_name="development-distribution-generation"
@@ -107,6 +108,7 @@ require_absolute_path "HERMES_DEV_TGCALLS_ROOT" "$tgcalls_root"
 require_absolute_path \
 	"HERMES_DEV_ATTACHMENT_TEXT_EXTRACTION_OCR_ROOT" \
 	"$attachment_text_extraction_ocr_root"
+require_absolute_path "HERMES_DEV_WHISPER_STT_ROOT" "$whisper_stt_root"
 test "$(uname -m)" = "arm64" || fail "the current development release supports macOS arm64 only"
 
 mkdir -p "$local_root"
@@ -151,6 +153,18 @@ require_regular_file \
 require_regular_file \
 	"$attachment_text_extraction_ocr_russian" \
 	"Attachment Text Extraction Russian OCR model"
+
+whisper_stt_runner="$whisper_stt_root/whisper-cli"
+whisper_stt_model="$whisper_stt_root/ggml-base.bin"
+if ! test -e "$whisper_stt_root"; then
+	printf '%s\n' 'Building the pinned Whisper STT runtime for local development...' >&2
+	"$backend_root/scripts/build-whisper-stt-macos.sh" \
+		--output-dir "$whisper_stt_root"
+fi
+test -d "$whisper_stt_root" && test ! -L "$whisper_stt_root" \
+	|| fail "Whisper STT runtime root is invalid"
+require_regular_file "$whisper_stt_runner" "Whisper STT runner"
+require_regular_file "$whisper_stt_model" "Whisper STT model"
 
 printf '%s\n' 'Building signed-development runtime and assembly units...' >&2
 CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
@@ -215,6 +229,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-attachment-translation-assembly \
 	--package hermes-ollama-ai-runtime \
 	--package hermes-ollama-ai-assembly \
+	--package hermes-whisper-stt-runtime \
+	--package hermes-whisper-stt-assembly \
 	--package hermes-mail-runtime \
 	--package hermes-mail-assembly \
 	--package hermes-telegram-runtime \
@@ -286,6 +302,7 @@ attachment_preview_assembly="$assembly_root/attachment-preview"
 attachment_preview_evidence_replay_assembly="$assembly_root/attachment-preview-evidence-replay"
 attachment_translation_assembly="$assembly_root/attachment-translation"
 ollama_ai_assembly="$assembly_root/ollama-ai"
+whisper_stt_assembly="$assembly_root/whisper-stt"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
 whatsapp_assembly="$assembly_root/whatsapp"
@@ -402,6 +419,12 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$ollama_ai_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-ollama-ai-runtime"
+"$cargo_target_dir/debug/hermes-whisper-stt-assembly" \
+	--output "$whisper_stt_assembly" \
+	--build-id "$build_id" \
+	--runtime "$cargo_target_dir/debug/hermes-whisper-stt-runtime" \
+	--runner "$whisper_stt_runner" \
+	--model "$whisper_stt_model"
 "$cargo_target_dir/debug/hermes-mail-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$mail_assembly" \
@@ -476,6 +499,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$attachment_preview_evidence_replay_assembly/attachment_preview_evidence_replay.release-artifacts.json" \
 	--artifact-fragment "$attachment_translation_assembly/attachment_translation.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \
+	--artifact-fragment "$whisper_stt_assembly/whisper-stt.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \
 	--artifact-fragment "$whatsapp_assembly/whatsapp.release-artifacts.json" \

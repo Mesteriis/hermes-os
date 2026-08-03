@@ -180,6 +180,22 @@ test('Whisper native release build pins source model toolchain and reproducibili
   );
 });
 
+test('development release composes the exact Whisper assembly fragment', async () => {
+  const release = await read('backend/scripts/materialize-dev-release.sh');
+
+  assert.match(release, /HERMES_DEV_WHISPER_STT_ROOT/);
+  assert.match(release, /build-whisper-stt-macos\.sh/);
+  assert.match(release, /--package hermes-whisper-stt-runtime/);
+  assert.match(release, /--package hermes-whisper-stt-assembly/);
+  assert.match(release, /debug\/hermes-whisper-stt-assembly/);
+  assert.match(release, /--runner "\$whisper_stt_runner"/);
+  assert.match(release, /--model "\$whisper_stt_model"/);
+  assert.match(
+    release,
+    /--artifact-fragment "\$whisper_stt_assembly\/whisper-stt\.release-artifacts\.json"/,
+  );
+});
+
 test('Whisper production gate remains closed until managed native conformance exists', async () => {
   const inventory = JSON.parse(
     await read('backend/architecture/communications-settings-reconstruction.json'),

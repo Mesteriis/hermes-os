@@ -1732,6 +1732,102 @@ test('signs the exact Ollama AI runtime and Storage entries emitted by its assem
   }
 });
 
+test('signs the exact Whisper runtime Storage runner and model entries emitted by its assembly', async () => {
+  const root = canonicalTemporaryDirectory('hermes-whisper-stt-release-fragment-');
+  try {
+    const runtime = join(root, 'hermes-whisper-stt-runtime');
+    const runner = join(root, 'whisper-cli');
+    const model = join(root, 'ggml-base.bin');
+    const assemblyOutput = join(root, 'assembly');
+    const privateKeyPath = join(root, 'release-key.pem');
+    writeFileSync(runtime, 'whisper runtime bytes', { mode: 0o700 });
+    writeFileSync(runner, 'whisper runner bytes', { mode: 0o500 });
+    writeFileSync(model, 'whisper model bytes', { mode: 0o400 });
+    const keyPair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    writeFileSync(
+      privateKeyPath,
+      keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }),
+      { mode: 0o600 },
+    );
+    execFileSync('cargo', [
+      'run',
+      '--quiet',
+      '-p',
+      'hermes-whisper-stt-assembly',
+      '--',
+      '--output',
+      assemblyOutput,
+      '--build-id',
+      'build-whisper-stt',
+      '--runtime',
+      runtime,
+      '--runner',
+      runner,
+      '--model',
+      model,
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+    const fragment = JSON.parse(readFileSync(
+      join(assemblyOutput, 'whisper-stt.release-artifacts.json'),
+      'utf8',
+    ));
+    assert.deepEqual(
+      fragment.artifacts.map(({ artifact_id, artifact_kind }) => [artifact_id, artifact_kind]),
+      [
+        ['whisper_stt.model.v1', 'module_runtime_read_only_data'],
+        ['whisper_stt.runner.v1', 'module_runtime_native_executable'],
+        ['whisper_stt.runtime.v1', 'module_runtime'],
+        ['whisper_stt.storage.v1', 'storage_bundle'],
+      ],
+    );
+    assert.equal(fragment.owner_id, 'whisper_stt');
+    assert.equal(fragment.module_id, 'hermes-whisper-stt-runtime');
+
+    const input = composeReleaseCompilerInput({
+      verification_key_id: 'release-2026',
+      trust_root_revision: 1,
+      revision: 1,
+      distribution_id: 'hermes-desktop',
+      release_version: '1.0.0',
+      build_id: 'build-whisper-stt',
+      target_triple: 'aarch64-apple-darwin',
+      generation: 1,
+      ...releaseProvenance,
+      additional_verification_keys: [],
+      artifacts: [{
+        artifact_kind: 'browser_bootstrap_bundle',
+        artifact_id: 'browser.bootstrap',
+        relative_path: 'browser/bootstrap.html',
+        source_path: browserBootstrapSource,
+        required: true,
+      }],
+    }, [fragment]);
+    const release = await compileReleaseDistribution(
+      input,
+      loadReleaseSigningKey(privateKeyPath),
+    );
+    const signed = decodeFields(release.signedManifest);
+    const manifest = decodeFields(signed.get(2)[0]);
+    const artifacts = manifest.get(8).map(decodeFields);
+
+    assert.deepEqual(
+      artifacts.map((artifact) => [fieldString(artifact, 2), artifact.get(1)[0]]),
+      [
+        ['browser.bootstrap', 4n],
+        ['whisper_stt.model.v1', 8n],
+        ['whisper_stt.runner.v1', 7n],
+        ['whisper_stt.runtime.v1', 1n],
+        ['whisper_stt.storage.v1', 3n],
+      ],
+    );
+    assert.equal(fieldString(artifacts[1], 13), 'hermes-whisper-stt-runtime');
+    assert.equal(fieldString(artifacts[2], 13), 'hermes-whisper-stt-runtime');
+    assert.equal(artifacts[3].get(6)[0].length, 32);
+    assert.equal(artifacts[3].get(7)[0].length, 32);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('rejects unordered artifacts and an exposed release signing key', async () => {
   const root = canonicalTemporaryDirectory('hermes-release-compiler-invalid-');
   try {
