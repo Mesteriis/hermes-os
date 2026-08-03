@@ -24,7 +24,10 @@
       "role": "integration",
       "owner": "telegram",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "nats_data_plane_v1"
+      ]
     },
     {
       "gate": "telegram_tdlib_user_qr_identity_v1",
@@ -44,27 +47,33 @@
       "role": "integration",
       "owner": "telegram",
       "state": "implemented",
-      "dependsOn": ["telegram_core_operational_v1"]
+      "dependsOn": [
+        "telegram_core_operational_v1"
+      ]
     },
     {
       "gate": "telegram_folder_reassignment_v1",
       "role": "integration",
       "owner": "telegram",
       "state": "implemented",
-      "dependsOn": ["telegram_core_operational_v1"]
+      "dependsOn": [
+        "telegram_core_operational_v1"
+      ]
     },
     {
       "gate": "telegram_automation_v1",
       "role": "integration",
       "owner": "telegram",
       "state": "implemented",
-      "dependsOn": ["telegram_core_operational_v1"]
+      "dependsOn": [
+        "telegram_core_operational_v1"
+      ]
     },
     {
       "gate": "telegram_calls_operational_v1",
       "role": "integration",
       "owner": "telegram",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "telegram_call_history_v1",
         "telegram_call_signaling_v1",
@@ -76,21 +85,27 @@
       "role": "integration",
       "owner": "telegram",
       "state": "implemented",
-      "dependsOn": ["telegram_core_operational_v1"]
+      "dependsOn": [
+        "telegram_core_operational_v1"
+      ]
     },
     {
       "gate": "telegram_call_signaling_v1",
       "role": "integration",
       "owner": "telegram",
       "state": "implemented",
-      "dependsOn": ["telegram_call_history_v1"]
+      "dependsOn": [
+        "telegram_call_history_v1"
+      ]
     },
     {
       "gate": "telegram_call_media_v1",
       "role": "integration",
       "owner": "telegram",
-      "state": "planned",
-      "dependsOn": ["telegram_call_signaling_v1"]
+      "state": "implemented",
+      "dependsOn": [
+        "telegram_call_signaling_v1"
+      ]
     },
     {
       "gate": "whatsapp_full_operational_v1",
@@ -109,21 +124,28 @@
       "role": "integration",
       "owner": "whatsapp",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "nats_data_plane_v1"
+      ]
     },
     {
       "gate": "whatsapp_operational_read_v1",
       "role": "integration",
       "owner": "whatsapp",
       "state": "implemented",
-      "dependsOn": ["whatsapp_integration_v1"]
+      "dependsOn": [
+        "whatsapp_integration_v1"
+      ]
     },
     {
       "gate": "whatsapp_operational_realtime_v1",
       "role": "integration",
       "owner": "whatsapp",
       "state": "implemented",
-      "dependsOn": ["whatsapp_operational_read_v1"]
+      "dependsOn": [
+        "whatsapp_operational_read_v1"
+      ]
     },
     {
       "gate": "vault_credential_retirement_v1",
@@ -168,7 +190,10 @@
       "role": "integration",
       "owner": "zulip",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "nats_data_plane_v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "nats_data_plane_v1"
+      ]
     },
     {
       "gate": "zulip_account_lifecycle_v1",
@@ -187,21 +212,30 @@
       "role": "integration",
       "owner": "zulip",
       "state": "implemented",
-      "dependsOn": ["zulip_account_lifecycle_v1", "zulip_integration_v1"]
+      "dependsOn": [
+        "zulip_account_lifecycle_v1",
+        "zulip_integration_v1"
+      ]
     },
     {
       "gate": "zulip_operational_read_v1",
       "role": "integration",
       "owner": "zulip",
       "state": "implemented",
-      "dependsOn": ["zulip_history_sync_v1", "zulip_integration_v1"]
+      "dependsOn": [
+        "zulip_history_sync_v1",
+        "zulip_integration_v1"
+      ]
     },
     {
       "gate": "zulip_operational_realtime_v1",
       "role": "integration",
       "owner": "zulip",
       "state": "implemented",
-      "dependsOn": ["zulip_operational_read_v1", "zulip_integration_v1"]
+      "dependsOn": [
+        "zulip_operational_read_v1",
+        "zulip_integration_v1"
+      ]
     },
     {
       "gate": "mail_gmail_oauth_v1",
@@ -220,7 +254,11 @@
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "mail_account_lifecycle_v1", "mail.sync.v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "mail_account_lifecycle_v1",
+        "mail.sync.v1"
+      ]
     },
     {
       "gate": "mail_account_credential_binding_v1",
@@ -275,7 +313,7 @@
       "gate": "loopback_native_owner_device_proof_host_v1",
       "role": "app",
       "owner": "first_party_development",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "client_gateway_v1"
       ]
@@ -373,42 +411,58 @@
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["mail_account_lifecycle_v1", "mail.sync.v1"]
+      "dependsOn": [
+        "mail_account_lifecycle_v1",
+        "mail.sync.v1"
+      ]
     },
     {
       "gate": "mail_composition_v1",
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "mail.delivery.v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "mail.delivery.v1"
+      ]
     },
     {
       "gate": "mail_message_flags_command_v1",
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["mail_operational_read_v1", "mail_gmail_oauth_v1"]
+      "dependsOn": [
+        "mail_operational_read_v1",
+        "mail_gmail_oauth_v1"
+      ]
     },
     {
       "gate": "mail_provider_location_identity_v1",
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["mail_operational_read_v1", "mail_message_flags_command_v1"]
+      "dependsOn": [
+        "mail_operational_read_v1",
+        "mail_message_flags_command_v1"
+      ]
     },
     {
       "gate": "mail_message_location_command_v1",
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["mail_provider_location_identity_v1"]
+      "dependsOn": [
+        "mail_provider_location_identity_v1"
+      ]
     },
     {
       "gate": "mail_message_permanent_delete_command_v1",
       "role": "integration",
       "owner": "mail",
       "state": "implemented",
-      "dependsOn": ["mail_provider_location_identity_v1"]
+      "dependsOn": [
+        "mail_provider_location_identity_v1"
+      ]
     },
     {
       "gate": "mail_operational_command_v1",
@@ -427,63 +481,87 @@
       "role": "domain",
       "owner": "communications",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "communications.query.v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "communications.query.v1"
+      ]
     },
     {
       "gate": "communications_content_read_v1",
       "role": "domain",
       "owner": "communications",
       "state": "implemented",
-      "dependsOn": ["communications_canonical_read_v2", "communications.blob.v1"]
+      "dependsOn": [
+        "communications_canonical_read_v2",
+        "communications.blob.v1"
+      ]
     },
     {
       "gate": "communications_saved_search_v1",
       "role": "domain",
       "owner": "communications",
       "state": "implemented",
-      "dependsOn": ["communications_canonical_read_v2", "communications.search.index.v1"]
+      "dependsOn": [
+        "communications_canonical_read_v2",
+        "communications.search.index.v1"
+      ]
     },
     {
       "gate": "communications_sender_insights_v1",
       "role": "domain",
       "owner": "communications",
       "state": "implemented",
-      "dependsOn": ["communications_canonical_read_v2", "communications.search.index.v1"]
+      "dependsOn": [
+        "communications_canonical_read_v2",
+        "communications.search.index.v1"
+      ]
     },
     {
       "gate": "communications_export_v1",
       "role": "workflow",
       "owner": "communications_export",
       "state": "implemented",
-      "dependsOn": ["communications_content_read_v1", "blob_v1"]
+      "dependsOn": [
+        "communications_content_read_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "capability_routed_module_query_rpc_v1",
       "role": "platform",
       "owner": "kernel_capability_router",
       "state": "implemented",
-      "dependsOn": ["module_control_plane_v1"]
+      "dependsOn": [
+        "module_control_plane_v1"
+      ]
     },
     {
       "gate": "capability_routed_module_request_rpc_v1",
       "role": "platform",
       "owner": "kernel_capability_router",
       "state": "implemented",
-      "dependsOn": ["module_control_plane_v1"]
+      "dependsOn": [
+        "module_control_plane_v1"
+      ]
     },
     {
       "gate": "capability_routed_managed_client_realtime_v1",
       "role": "platform",
       "owner": "kernel_capability_router",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1", "module_control_plane_v1"]
+      "dependsOn": [
+        "client_gateway_v1",
+        "module_control_plane_v1"
+      ]
     },
     {
       "gate": "client_system_status_realtime_v1",
       "role": "platform",
       "owner": "kernel_system_status",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1"]
+      "dependsOn": [
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "communication_delivery_intent_v1",
@@ -501,7 +579,10 @@
       "role": "platform",
       "owner": "scheduler",
       "state": "implemented",
-      "dependsOn": ["scheduler_v1", "nats_data_plane_v1"]
+      "dependsOn": [
+        "scheduler_v1",
+        "nats_data_plane_v1"
+      ]
     },
     {
       "gate": "communication_delayed_delivery_v1",
@@ -645,42 +726,58 @@
       "role": "workflow",
       "owner": "communication_task_candidate_extraction",
       "state": "implemented",
-      "dependsOn": ["communications_content_read_v1"]
+      "dependsOn": [
+        "communications_content_read_v1"
+      ]
     },
     {
       "gate": "communication_note_candidate_extraction_v1",
       "role": "workflow",
       "owner": "communication_note_candidate_extraction",
       "state": "implemented",
-      "dependsOn": ["communications_content_read_v1"]
+      "dependsOn": [
+        "communications_content_read_v1"
+      ]
     },
     {
       "gate": "attachment_text_extraction_v1",
       "role": "workflow",
       "owner": "attachment_text_extraction",
       "state": "implemented",
-      "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
+      "dependsOn": [
+        "blob_v1",
+        "attachment_security_engine_v1"
+      ]
     },
     {
       "gate": "attachment_preview_v1",
       "role": "workflow",
       "owner": "attachment_preview",
       "state": "implemented",
-      "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
+      "dependsOn": [
+        "blob_v1",
+        "attachment_security_engine_v1"
+      ]
     },
     {
       "gate": "attachment_preview_retained_evidence_replay_v1",
       "role": "workflow",
       "owner": "attachment_preview_evidence_replay",
       "state": "implemented",
-      "dependsOn": ["communications_canonical_read_v2", "attachment_security_engine_v1"]
+      "dependsOn": [
+        "communications_canonical_read_v2",
+        "attachment_security_engine_v1"
+      ]
     },
     {
       "gate": "attachment_archive_inspection_v1",
       "role": "engine",
       "owner": "attachment_archive_inspection",
       "state": "implemented",
-      "dependsOn": ["blob_v1", "attachment_security_engine_v1"]
+      "dependsOn": [
+        "blob_v1",
+        "attachment_security_engine_v1"
+      ]
     },
     {
       "gate": "attachment_translation_v1",
@@ -700,28 +797,37 @@
       "role": "domain",
       "owner": "communications",
       "state": "implemented",
-      "dependsOn": ["communications_canonical_read_v2"]
+      "dependsOn": [
+        "communications_canonical_read_v2"
+      ]
     },
     {
       "gate": "call_transcription_v1",
       "role": "workflow",
       "owner": "call_transcription",
       "state": "planned",
-      "dependsOn": ["communications_call_evidence_v1", "blob_v1"]
+      "dependsOn": [
+        "communications_call_evidence_v1",
+        "blob_v1"
+      ]
     },
     {
       "gate": "review_communications_attention_v1",
       "role": "domain",
       "owner": "review",
       "state": "implemented",
-      "dependsOn": ["communications_canonical_read_v2"]
+      "dependsOn": [
+        "communications_canonical_read_v2"
+      ]
     },
     {
       "gate": "contacts_mail_identity_command_v1",
       "role": "domain",
       "owner": "contacts",
       "state": "implemented",
-      "dependsOn": ["client_gateway_v1"]
+      "dependsOn": [
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "mail_contacts_sync_v1",
@@ -738,49 +844,67 @@
       "role": "app",
       "owner": "first_party_client",
       "state": "planned",
-      "dependsOn": ["client_gateway_v1"]
+      "dependsOn": [
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "scheduler_settings_surface_v1",
       "role": "platform",
       "owner": "scheduler",
       "state": "planned",
-      "dependsOn": ["scheduler_v1", "client_gateway_v1"]
+      "dependsOn": [
+        "scheduler_v1",
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "telemetry_diagnostics_surface_v1",
       "role": "platform",
       "owner": "telemetry",
       "state": "planned",
-      "dependsOn": ["telemetry_v1", "client_gateway_v1"]
+      "dependsOn": [
+        "telemetry_v1",
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "platform_maintenance_surface_v1",
       "role": "app",
       "owner": "platform_maintenance_composition",
       "state": "planned",
-      "dependsOn": ["whole_instance_backup_v1", "client_gateway_v1"]
+      "dependsOn": [
+        "whole_instance_backup_v1",
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "system_architecture_status_surface_v1",
       "role": "app",
       "owner": "system_architecture_status_composition",
       "state": "planned",
-      "dependsOn": ["telemetry_diagnostics_surface_v1", "client_gateway_v1"]
+      "dependsOn": [
+        "telemetry_diagnostics_surface_v1",
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "calendar_account_settings_composition_v1",
       "role": "app",
       "owner": "calendar_account_settings_composition",
       "state": "planned",
-      "dependsOn": ["client_gateway_v1"]
+      "dependsOn": [
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "ai_settings_surface_v1",
       "role": "domain",
       "owner": "ai",
       "state": "planned",
-      "dependsOn": ["client_gateway_v1"]
+      "dependsOn": [
+        "client_gateway_v1"
+      ]
     },
     {
       "gate": "signal_hub_composition_v1",
