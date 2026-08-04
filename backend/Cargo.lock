@@ -2522,9 +2522,11 @@ dependencies = [
 name = "hermes-call-transcription-ingress"
 version = "0.1.0"
 dependencies = [
+ "hermes-events-protocol",
  "hermes-runtime-protocol",
  "prost 0.14.4",
  "prost-build 0.14.4",
+ "prost-types 0.14.4",
  "protoc-bin-vendored",
  "sha2 0.11.0",
 ]
@@ -3764,6 +3766,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-desktop-call-recording-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-desktop-call-recording-persistence",
+ "hermes-desktop-call-recording-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-desktop-call-recording-core"
 version = "0.1.0"
 dependencies = [
@@ -3779,6 +3794,27 @@ dependencies = [
  "hermes-storage-protocol",
  "sha2 0.11.0",
  "sqlx",
+]
+
+[[package]]
+name = "hermes-desktop-call-recording-runtime"
+version = "0.1.0"
+dependencies = [
+ "hermes-blob-client",
+ "hermes-call-transcription-ingress",
+ "hermes-desktop-call-recording-api",
+ "hermes-desktop-call-recording-core",
+ "hermes-desktop-call-recording-persistence",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]

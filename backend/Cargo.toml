@@ -118,6 +118,8 @@ members = [
   "src/desktop-call-recording-api",
   "src/desktop-call-recording-core",
   "src/desktop-call-recording-persistence",
+  "src/desktop-call-recording-runtime",
+  "src/desktop-call-recording-assembly",
   "src/call-transcription-ingress",
   "src/speech-to-text-core",
   "src/speech-to-text-persistence",

@@ -110,3 +110,73 @@ test('recording persistence owns lifecycle leases and exact outbox without priva
   assert.match(repository, /accept_or_replay/);
   assert.match(repository, /recording_revision=\$1[\s\S]*run_state=4/);
 });
+
+test('desktop recording runtime is an isolated managed integration with private host audio and shared realtime', async () => {
+  const [policySource, manifest, main, hostPort, hostTransport, realtime] = await Promise.all([
+    read('backend/architecture/policy.json'),
+    read('backend/src/desktop-call-recording-runtime/Cargo.toml'),
+    read('backend/src/desktop-call-recording-runtime/src/main.rs'),
+    read('backend/src/desktop-call-recording-runtime/src/host_port.rs'),
+    read('backend/src/desktop-call-recording-runtime/src/host_transport.rs'),
+    read('backend/src/desktop-call-recording-runtime/src/client_realtime.rs'),
+  ]);
+  const policy = JSON.parse(policySource);
+  assert.deepEqual(
+    policy.implementation.productionPackages.find(
+      ({ name }) => name === 'hermes-desktop-call-recording-runtime',
+    ),
+    {
+      name: 'hermes-desktop-call-recording-runtime',
+      role: 'integration',
+      owner: 'desktop_call_recording',
+      surface: 'runtime',
+    },
+  );
+  assert.match(manifest, /hermes-call-transcription-ingress/);
+  assert.doesNotMatch(manifest, /hermes-communications|call-transcription-(?:core|runtime|persistence)/);
+  assert.match(main, /serve-inherited/);
+  assert.doesNotMatch(main, /consent_attested|filesystem_path|ffmpeg/i);
+  assert.match(main, /ManagedIntegrationHostBridgeConfigurationV1/);
+  assert.match(hostTransport, /MAX_FRAME_BYTES_V1/);
+  assert.match(hostPort, /validate_canonical_wav_v1/);
+  assert.match(hostPort, /build_recording_ready_outbox_record_v1/);
+  assert.match(realtime, /validate_managed_client_realtime_publish_request_v1/);
+  assert.doesNotMatch(`${hostPort}\n${realtime}`, /setInterval|polling|audio.*realtime/i);
+});
+
+test('desktop recording assembly emits only unsigned runtime and owner storage inputs', async () => {
+  const [policySource, manifest, library, main, release] = await Promise.all([
+    read('backend/architecture/policy.json'),
+    read('backend/src/desktop-call-recording-assembly/Cargo.toml'),
+    read('backend/src/desktop-call-recording-assembly/src/lib.rs'),
+    read('backend/src/desktop-call-recording-assembly/src/main.rs'),
+    read('backend/scripts/materialize-dev-release.sh'),
+  ]);
+  const policy = JSON.parse(policySource);
+  assert.deepEqual(
+    policy.implementation.productionPackages.find(
+      ({ name }) => name === 'hermes-desktop-call-recording-assembly',
+    ),
+    {
+      name: 'hermes-desktop-call-recording-assembly',
+      role: 'integration',
+      owner: 'desktop_call_recording',
+      surface: 'assembly',
+    },
+  );
+  assert.match(manifest, /hermes-desktop-call-recording-runtime/);
+  assert.match(manifest, /hermes-desktop-call-recording-persistence/);
+  assert.doesNotMatch(manifest, /communications|call-transcription/);
+  assert.match(library, /artifact_kind: "module_runtime"/);
+  assert.match(library, /artifact_kind: "storage_bundle"/);
+  assert.doesNotMatch(
+    `${library}\n${main}`,
+    /sign(?:ing|ature|_release)|launch|serve-inherited|private key/i,
+  );
+  assert.match(release, /--package hermes-desktop-call-recording-assembly/);
+  assert.match(release, /debug\/hermes-desktop-call-recording-assembly/);
+  assert.match(
+    release,
+    /desktop-call-recording\.release-artifacts\.json/,
+  );
+});

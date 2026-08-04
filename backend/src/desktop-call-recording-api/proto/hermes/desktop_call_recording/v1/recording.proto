@@ -50,6 +50,10 @@ message DesktopRecordingHostHandshakeV1 {
   uint32 protocol_revision = 2;
   bytes route_binding_sha256 = 3;
 }
+message DesktopRecordingHostHandshakeAcceptedV1 {
+  uint32 protocol_major = 1;
+  uint32 protocol_revision = 2;
+}
 
 message DesktopRecordingHostCommandClaimV1 {
   bytes host_claim_id = 1;
@@ -71,6 +75,7 @@ message BeginDesktopCaptureCommandV1 {
 message StopDesktopCaptureCommandV1 { bytes recording_evidence_id = 1; }
 
 message DesktopRecordingHostCommandV1 {
+  bytes command_id = 3;
   oneof command {
     BeginDesktopCaptureCommandV1 begin_capture = 1;
     StopDesktopCaptureCommandV1 stop_capture = 2;
@@ -78,6 +83,8 @@ message DesktopRecordingHostCommandV1 {
 }
 
 message DesktopCaptureStartedV1 {
+  bytes command_id = 5;
+  bytes host_claim_id = 6;
   bytes challenge_id = 1;
   bytes recording_evidence_id = 2;
   int64 started_at_unix_ms = 3;
@@ -85,6 +92,8 @@ message DesktopCaptureStartedV1 {
 }
 
 message DesktopCaptureCompletedV1 {
+  bytes command_id = 7;
+  bytes host_claim_id = 8;
   bytes challenge_id = 1;
   bytes recording_evidence_id = 2;
   int64 started_at_unix_ms = 3;
@@ -94,6 +103,8 @@ message DesktopCaptureCompletedV1 {
 }
 
 message DesktopCaptureRejectedV1 {
+  bytes command_id = 4;
+  bytes host_claim_id = 5;
   bytes challenge_id = 1;
   bytes recording_evidence_id = 2;
   string rejection_code = 3;
@@ -112,4 +123,13 @@ message DesktopRecordingHostOperationV1 {
     DesktopRecordingHostCommandClaimV1 claim_commands = 1;
     DesktopRecordingHostObservationV1 observation = 2;
   }
+}
+
+message DesktopRecordingHostCommandLeaseV1 {
+  repeated DesktopRecordingHostCommandV1 commands = 1;
+}
+
+message DesktopRecordingHostObservationAcceptedV1 {
+  bytes recording_evidence_id = 1;
+  uint64 recording_revision = 2;
 }

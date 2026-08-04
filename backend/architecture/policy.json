@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "desktop_call_recording_persistence_v1",
+    "currentSlice": "desktop_call_recording_release_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1602,6 +1602,18 @@
         "role": "integration",
         "owner": "desktop_call_recording",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-desktop-call-recording-runtime",
+        "role": "integration",
+        "owner": "desktop_call_recording",
+        "surface": "runtime"
+      },
+      {
+        "name": "hermes-desktop-call-recording-assembly",
+        "role": "integration",
+        "owner": "desktop_call_recording",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5271,7 +5283,71 @@
       ],
       "hermes-call-transcription-ingress": [
         {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
           "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-desktop-call-recording-runtime": [
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-desktop-call-recording-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-desktop-call-recording-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-desktop-call-recording-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-desktop-call-recording-assembly": [
+        {
+          "name": "hermes-desktop-call-recording-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-desktop-call-recording-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ]
@@ -13072,6 +13148,14 @@
           "features": []
         },
         {
+          "name": "prost-types",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
           "name": "sha2",
           "kind": "normal",
           "source": "crates_io",
@@ -13101,6 +13185,80 @@
           "source": "crates_io",
           "version": "=0.11.0",
           "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-desktop-call-recording-runtime": [
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
+      ],
+      "hermes-desktop-call-recording-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
           "features": []
         }
       ]
@@ -14224,6 +14382,14 @@
       "hermes-call-transcription-ingress": {
         "primaryKind": "lib",
         "customBuildAllowed": true
+      },
+      "hermes-desktop-call-recording-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-desktop-call-recording-assembly": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -14948,6 +15114,9 @@
       "hermes-communications-attachment-contract",
       "hermes-communications-call-evidence-ingress",
       "hermes-communications-ingress"
+    ],
+    "integrationWorkflowContractPackages": [
+      "hermes-call-transcription-ingress"
     ]
   },
   "compileIsolation": {
@@ -14971,6 +15140,7 @@
   },
   "integrations": {
     "hostOnlyProviderExecutionOwners": [
+      "desktop_call_recording",
       "whatsapp"
     ]
   },

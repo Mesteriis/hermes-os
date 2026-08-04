@@ -13,8 +13,10 @@ owner = "call_transcription"
 surface = "contract"
 
 [dependencies]
+hermes-events-protocol = { path = "../platform/events" }
 hermes-runtime-protocol = { path = "../platform/runtime_protocol" }
 prost = "=0.14.4"
+prost-types = "=0.14.4"
 sha2 = { version = "=0.11.0", default-features = false }
 
 [build-dependencies]

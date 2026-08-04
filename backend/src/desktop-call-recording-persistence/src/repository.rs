@@ -1,18 +1,65 @@
 use hermes_desktop_call_recording_core::RecordingStateV1;
+use hermes_storage_protocol::StorageBindingV1;
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, Row, Transaction};
-
-use crate::{
-    ExactOutboxRecordV1, LeasedHostCommandV1, NewRecordingRunV1, PendingOutboxV1,
-    PersistedRecordingRunV1, PersistenceErrorV1, RealtimeTransitionV1, RejectRecordingWriteV1,
-    TerminalRecordingMetadataV1,
+use sqlx::{
+    PgPool, Postgres, Row, Transaction,
+    postgres::{PgConnectOptions, PgPoolOptions},
 };
 
+use crate::{
+    CaptureStartedWriteV1, ExactOutboxRecordV1, HostCommandCompletionV1, LeasedHostCommandV1,
+    NewRecordingRunV1, PendingOutboxV1, PendingRealtimeV1, PersistedRecordingRunV1,
+    PersistenceErrorV1, RealtimeTransitionV1, RejectRecordingWriteV1, TerminalRecordingMetadataV1,
+};
+
+#[derive(Clone)]
 pub struct DesktopCallRecordingRepositoryV1 {
     pool: PgPool,
 }
 
 impl DesktopCallRecordingRepositoryV1 {
+    pub async fn connect_runtime(
+        binding: &StorageBindingV1,
+        database_id: &str,
+        pgbouncer_host: &str,
+        pgbouncer_port: u32,
+        password: &str,
+    ) -> Result<Self, PersistenceErrorV1> {
+        if database_id.is_empty()
+            || database_id != binding.identity().database_id()
+            || pgbouncer_host.is_empty()
+            || pgbouncer_port == 0
+            || binding.access().runtime_principal().is_empty()
+        {
+            return Err(PersistenceErrorV1::StorageUnavailable);
+        }
+        let options = PgConnectOptions::new()
+            .host(pgbouncer_host)
+            .port(
+                u16::try_from(pgbouncer_port)
+                    .map_err(|_| PersistenceErrorV1::StorageUnavailable)?,
+            )
+            .username(binding.access().runtime_principal())
+            .password(password)
+            .database(binding.access().pool_alias());
+        let pool = PgPoolOptions::new()
+            .max_connections(u32::from(
+                binding.access().effective_budgets().max_connections(),
+            ))
+            .connect_with(options)
+            .await
+            .map_err(storage)?;
+        Ok(Self { pool })
+    }
+
+    pub async fn verify_storage_ready(&self) -> Result<(), PersistenceErrorV1> {
+        sqlx::query("SELECT 1 FROM hermes_data.desktop_call_recording_runs LIMIT 0")
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(storage)
+    }
+
     #[must_use]
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -81,24 +128,49 @@ impl DesktopCallRecordingRepositoryV1 {
 
     pub async fn mark_capturing(
         &self,
-        owner: &str,
-        recording_id: &[u8; 16],
-        expected_revision: u64,
-        started_at_unix_ms: i64,
-        realtime: &RealtimeTransitionV1,
+        write: &CaptureStartedWriteV1,
     ) -> Result<PersistedRecordingRunV1, PersistenceErrorV1> {
-        self.transition(TransitionWriteV1 {
-            owner,
-            recording_id,
-            expected_revision,
-            expected_state: 1,
-            next_state: 2,
-            started_at: Some(started_at_unix_ms),
-            error: None,
-            outbox: None,
-            realtime,
-        })
-        .await
+        if !valid_owner(&write.logical_owner_id)
+            || zero(&write.recording_evidence_id)
+            || write.expected_revision == 0
+            || write.started_at_unix_ms <= 0
+            || zero(&write.consent_receipt_id)
+            || zero(&write.command_id)
+            || zero(&write.claim_sha256)
+        {
+            return Err(PersistenceErrorV1::InvalidInput);
+        }
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let next_revision = write
+            .expected_revision
+            .checked_add(1)
+            .ok_or(PersistenceErrorV1::InvalidInput)?;
+        let command = sqlx::query("UPDATE hermes_data.desktop_call_recording_host_commands SET completed_at_unix_ms=$1 WHERE command_id=$2 AND logical_owner_id=$3 AND recording_evidence_id=$4 AND command_kind=1 AND leased_by_sha256=$5 AND completed_at_unix_ms IS NULL AND lease_expires_at_unix_ms >= $1")
+            .bind(write.started_at_unix_ms).bind(write.command_id.as_slice()).bind(&write.logical_owner_id)
+            .bind(write.recording_evidence_id.as_slice()).bind(write.claim_sha256.as_slice())
+            .execute(&mut *tx).await.map_err(storage)?;
+        if command.rows_affected() != 1 {
+            return Err(PersistenceErrorV1::Conflict);
+        }
+        let run = sqlx::query("UPDATE hermes_data.desktop_call_recording_runs SET recording_revision=$1,run_state=2,started_at_unix_ms=$2,consent_receipt_id=$3 WHERE logical_owner_id=$4 AND recording_evidence_id=$5 AND recording_revision=$6 AND run_state=1 AND challenge_expires_at_unix_ms >= $2")
+            .bind(to_i64(next_revision)?).bind(write.started_at_unix_ms).bind(write.consent_receipt_id.as_slice())
+            .bind(&write.logical_owner_id).bind(write.recording_evidence_id.as_slice()).bind(to_i64(write.expected_revision)?)
+            .execute(&mut *tx).await.map_err(storage)?;
+        if run.rows_affected() != 1 {
+            return Err(PersistenceErrorV1::Conflict);
+        }
+        insert_realtime(
+            &mut tx,
+            &write.logical_owner_id,
+            &write.recording_evidence_id,
+            next_revision,
+            &write.realtime,
+        )
+        .await?;
+        tx.commit().await.map_err(storage)?;
+        self.get(&write.logical_owner_id, &write.recording_evidence_id)
+            .await?
+            .ok_or(PersistenceErrorV1::InvalidRow)
     }
 
     pub async fn mark_materializing(
@@ -106,6 +178,7 @@ impl DesktopCallRecordingRepositoryV1 {
         owner: &str,
         recording_id: &[u8; 16],
         expected_revision: u64,
+        host_command_completion: Option<&HostCommandCompletionV1>,
         realtime: &RealtimeTransitionV1,
     ) -> Result<PersistedRecordingRunV1, PersistenceErrorV1> {
         self.transition(TransitionWriteV1 {
@@ -116,6 +189,7 @@ impl DesktopCallRecordingRepositoryV1 {
             next_state: 3,
             started_at: None,
             error: None,
+            host_command_completion,
             outbox: None,
             realtime,
         })
@@ -138,11 +212,12 @@ impl DesktopCallRecordingRepositoryV1 {
                 .checked_add(1)
                 .ok_or(PersistenceErrorV1::InvalidInput)?,
         )?;
-        let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_runs SET recording_revision=$1, run_state=4, ended_at_unix_ms=$2, consent_receipt_id=$3, source_reference_id=$4, source_declared_bytes=$5, source_duration_millis=$6, source_sha256=$7 WHERE logical_owner_id=$8 AND recording_evidence_id=$9 AND recording_revision=$10 AND run_state=3")
-            .bind(next).bind(metadata.ended_at_unix_ms).bind(metadata.consent_receipt_id.as_slice())
+        let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_runs SET recording_revision=$1, run_state=4, ended_at_unix_ms=$2, source_reference_id=$3, source_declared_bytes=$4, source_duration_millis=$5, source_sha256=$6 WHERE logical_owner_id=$7 AND recording_evidence_id=$8 AND recording_revision=$9 AND run_state=3 AND consent_receipt_id=$10")
+            .bind(next).bind(metadata.ended_at_unix_ms)
             .bind(metadata.source_reference_id.as_slice()).bind(to_i64(metadata.source_declared_bytes)?)
             .bind(to_i64(metadata.source_duration_millis)?).bind(metadata.source_sha256.as_slice())
             .bind(owner).bind(recording_id.as_slice()).bind(to_i64(expected_revision)?)
+            .bind(metadata.consent_receipt_id.as_slice())
             .execute(&mut *tx).await.map_err(storage)?;
         if result.rows_affected() != 1 {
             return Err(PersistenceErrorV1::Conflict);
@@ -177,6 +252,7 @@ impl DesktopCallRecordingRepositoryV1 {
             next_state: 5,
             started_at: None,
             error: Some(&write.public_error_code),
+            host_command_completion: write.host_command_completion.as_ref(),
             outbox: Some(&write.outbox),
             realtime: &write.realtime,
         })
@@ -220,6 +296,57 @@ impl DesktopCallRecordingRepositoryV1 {
             .collect()
     }
 
+    pub async fn request_stop(
+        &self,
+        owner: &str,
+        recording_id: &[u8; 16],
+        command_id: [u8; 16],
+    ) -> Result<PersistedRecordingRunV1, PersistenceErrorV1> {
+        if !valid_owner(owner) || zero(recording_id) || zero(&command_id) {
+            return Err(PersistenceErrorV1::InvalidInput);
+        }
+        let mut tx = self.pool.begin().await.map_err(storage)?;
+        let row = sqlx::query(RUN_COLUMNS_BY_RECORDING_FOR_UPDATE)
+            .bind(owner)
+            .bind(recording_id.as_slice())
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage)?
+            .ok_or(PersistenceErrorV1::Conflict)?;
+        let run = decode_run(row)?;
+        if matches!(
+            run.state,
+            RecordingStateV1::Ready | RecordingStateV1::Rejected
+        ) {
+            tx.commit().await.map_err(storage)?;
+            return Ok(run);
+        }
+        sqlx::query("INSERT INTO hermes_data.desktop_call_recording_host_commands (command_id,logical_owner_id,recording_evidence_id,command_kind,command_revision) VALUES ($1,$2,$3,2,$4) ON CONFLICT (command_id) DO NOTHING")
+            .bind(command_id.as_slice()).bind(owner).bind(recording_id.as_slice())
+            .bind(to_i64(run.recording_revision)?).execute(&mut *tx).await.map_err(storage)?;
+        tx.commit().await.map_err(storage)?;
+        Ok(run)
+    }
+
+    pub async fn complete_host_command(
+        &self,
+        command_id: [u8; 16],
+        claim_sha256: [u8; 32],
+        completed_at_unix_ms: i64,
+    ) -> Result<(), PersistenceErrorV1> {
+        if zero(&command_id) || zero(&claim_sha256) || completed_at_unix_ms <= 0 {
+            return Err(PersistenceErrorV1::InvalidInput);
+        }
+        let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_host_commands SET completed_at_unix_ms=$1 WHERE command_id=$2 AND leased_by_sha256=$3 AND completed_at_unix_ms IS NULL AND lease_expires_at_unix_ms >= $1")
+            .bind(completed_at_unix_ms).bind(command_id.as_slice()).bind(claim_sha256.as_slice())
+            .execute(&self.pool).await.map_err(storage)?;
+        if result.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(PersistenceErrorV1::Conflict)
+        }
+    }
+
     pub async fn pending_outbox(
         &self,
         limit: u32,
@@ -230,6 +357,56 @@ impl DesktopCallRecordingRepositoryV1 {
         let rows = sqlx::query("SELECT sequence_id,event_id,logical_owner_id,recording_evidence_id,contract_name,envelope_sha256,exact_envelope_bytes FROM hermes_data.desktop_call_recording_outbox WHERE delivered_at_unix_ms IS NULL ORDER BY sequence_id LIMIT $1")
             .bind(i64::from(limit)).fetch_all(&self.pool).await.map_err(storage)?;
         rows.into_iter().map(decode_outbox).collect()
+    }
+
+    pub async fn mark_outbox_delivered(
+        &self,
+        event_id: [u8; 16],
+        envelope_sha256: [u8; 32],
+        delivered_at_unix_ms: i64,
+    ) -> Result<(), PersistenceErrorV1> {
+        if zero(&event_id) || zero(&envelope_sha256) || delivered_at_unix_ms <= 0 {
+            return Err(PersistenceErrorV1::InvalidInput);
+        }
+        let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_outbox SET delivered_at_unix_ms=$1 WHERE event_id=$2 AND envelope_sha256=$3 AND delivered_at_unix_ms IS NULL")
+            .bind(delivered_at_unix_ms).bind(event_id.as_slice()).bind(envelope_sha256.as_slice())
+            .execute(&self.pool).await.map_err(storage)?;
+        if result.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(PersistenceErrorV1::Conflict)
+        }
+    }
+
+    pub async fn pending_realtime(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<PendingRealtimeV1>, PersistenceErrorV1> {
+        if !(1..=128).contains(&limit) {
+            return Err(PersistenceErrorV1::InvalidInput);
+        }
+        let rows = sqlx::query("SELECT sequence_id,logical_owner_id,recording_evidence_id,recording_revision,occurred_at_unix_ms,payload_bytes,payload_sha256 FROM hermes_data.desktop_call_recording_realtime WHERE published_at_unix_ms IS NULL ORDER BY sequence_id LIMIT $1")
+            .bind(i64::from(limit)).fetch_all(&self.pool).await.map_err(storage)?;
+        rows.into_iter().map(decode_realtime).collect()
+    }
+
+    pub async fn mark_realtime_published(
+        &self,
+        sequence_id: i64,
+        payload_sha256: [u8; 32],
+        published_at_unix_ms: i64,
+    ) -> Result<(), PersistenceErrorV1> {
+        if sequence_id <= 0 || zero(&payload_sha256) || published_at_unix_ms <= 0 {
+            return Err(PersistenceErrorV1::InvalidInput);
+        }
+        let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_realtime SET published_at_unix_ms=$1 WHERE sequence_id=$2 AND payload_sha256=$3 AND published_at_unix_ms IS NULL")
+            .bind(published_at_unix_ms).bind(sequence_id).bind(payload_sha256.as_slice())
+            .execute(&self.pool).await.map_err(storage)?;
+        if result.rows_affected() == 1 {
+            Ok(())
+        } else {
+            Err(PersistenceErrorV1::Conflict)
+        }
     }
 
     async fn transition(
@@ -244,6 +421,21 @@ impl DesktopCallRecordingRepositoryV1 {
             return Err(PersistenceErrorV1::InvalidInput);
         }
         let mut tx = self.pool.begin().await.map_err(storage)?;
+        if let Some(completion) = write.host_command_completion {
+            if zero(&completion.command_id)
+                || zero(&completion.claim_sha256)
+                || completion.completed_at_unix_ms <= 0
+            {
+                return Err(PersistenceErrorV1::InvalidInput);
+            }
+            let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_host_commands SET completed_at_unix_ms=$1 WHERE command_id=$2 AND logical_owner_id=$3 AND recording_evidence_id=$4 AND leased_by_sha256=$5 AND completed_at_unix_ms IS NULL AND lease_expires_at_unix_ms >= $1")
+                .bind(completion.completed_at_unix_ms).bind(completion.command_id.as_slice())
+                .bind(write.owner).bind(write.recording_id.as_slice())
+                .bind(completion.claim_sha256.as_slice()).execute(&mut *tx).await.map_err(storage)?;
+            if result.rows_affected() != 1 {
+                return Err(PersistenceErrorV1::Conflict);
+            }
+        }
         let result = sqlx::query("UPDATE hermes_data.desktop_call_recording_runs SET recording_revision=$1, run_state=$2, started_at_unix_ms=COALESCE($3,started_at_unix_ms), public_error_code=$4 WHERE logical_owner_id=$5 AND recording_evidence_id=$6 AND recording_revision=$7 AND run_state=$8")
             .bind(to_i64(write.expected_revision + 1)?).bind(write.next_state).bind(write.started_at).bind(write.error).bind(write.owner).bind(write.recording_id.as_slice()).bind(to_i64(write.expected_revision)?).bind(write.expected_state)
             .execute(&mut *tx).await.map_err(storage)?;
@@ -276,11 +468,13 @@ struct TransitionWriteV1<'a> {
     next_state: i16,
     started_at: Option<i64>,
     error: Option<&'a str>,
+    host_command_completion: Option<&'a crate::HostCommandCompletionV1>,
     outbox: Option<&'a ExactOutboxRecordV1>,
     realtime: &'a RealtimeTransitionV1,
 }
 
 const RUN_COLUMNS_BY_RECORDING: &str = "SELECT logical_owner_id,operation_id,request_sha256,call_evidence_id,call_evidence_revision,recording_evidence_id,recording_revision,run_state,device_actor_sha256,challenge_id,challenge_expires_at_unix_ms,maximum_duration_millis,consent_policy_revision,started_at_unix_ms,ended_at_unix_ms,consent_receipt_id,source_reference_id,source_declared_bytes,source_duration_millis,source_sha256,public_error_code FROM hermes_data.desktop_call_recording_runs WHERE logical_owner_id=$1 AND recording_evidence_id=$2";
+const RUN_COLUMNS_BY_RECORDING_FOR_UPDATE: &str = "SELECT logical_owner_id,operation_id,request_sha256,call_evidence_id,call_evidence_revision,recording_evidence_id,recording_revision,run_state,device_actor_sha256,challenge_id,challenge_expires_at_unix_ms,maximum_duration_millis,consent_policy_revision,started_at_unix_ms,ended_at_unix_ms,consent_receipt_id,source_reference_id,source_declared_bytes,source_duration_millis,source_sha256,public_error_code FROM hermes_data.desktop_call_recording_runs WHERE logical_owner_id=$1 AND recording_evidence_id=$2 FOR UPDATE";
 const RUN_COLUMNS_BY_OPERATION: &str = "SELECT logical_owner_id,operation_id,request_sha256,call_evidence_id,call_evidence_revision,recording_evidence_id,recording_revision,run_state,device_actor_sha256,challenge_id,challenge_expires_at_unix_ms,maximum_duration_millis,consent_policy_revision,started_at_unix_ms,ended_at_unix_ms,consent_receipt_id,source_reference_id,source_declared_bytes,source_duration_millis,source_sha256,public_error_code FROM hermes_data.desktop_call_recording_runs WHERE logical_owner_id=$1 AND operation_id=$2";
 
 async fn load_by_operation(
@@ -382,6 +576,17 @@ fn decode_outbox(row: sqlx::postgres::PgRow) -> Result<PendingOutboxV1, Persiste
         contract_name: row.try_get("contract_name").map_err(row_error)?,
         envelope_sha256: id32(row.try_get("envelope_sha256").map_err(row_error)?)?,
         exact_envelope_bytes: row.try_get("exact_envelope_bytes").map_err(row_error)?,
+    })
+}
+fn decode_realtime(row: sqlx::postgres::PgRow) -> Result<PendingRealtimeV1, PersistenceErrorV1> {
+    Ok(PendingRealtimeV1 {
+        sequence_id: row.try_get("sequence_id").map_err(row_error)?,
+        logical_owner_id: row.try_get("logical_owner_id").map_err(row_error)?,
+        recording_evidence_id: id16(row.try_get("recording_evidence_id").map_err(row_error)?)?,
+        recording_revision: positive_u64(row.try_get("recording_revision").map_err(row_error)?)?,
+        occurred_at_unix_ms: row.try_get("occurred_at_unix_ms").map_err(row_error)?,
+        payload_bytes: row.try_get("payload_bytes").map_err(row_error)?,
+        payload_sha256: id32(row.try_get("payload_sha256").map_err(row_error)?)?,
     })
 }
 fn same_request(a: &PersistedRecordingRunV1, b: &NewRecordingRunV1) -> bool {

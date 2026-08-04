@@ -54,7 +54,9 @@ function isAllowedDependency(policy, source, target, targetPackageName) {
         || (target.role === 'engine'
           && policy.dependencies.integrationEngineContractPackages.includes(targetPackageName))
         || (target.role === 'domain'
-          && policy.dependencies.integrationDomainContractPackages.includes(targetPackageName));
+          && policy.dependencies.integrationDomainContractPackages.includes(targetPackageName))
+        || (target.role === 'workflow'
+          && policy.dependencies.integrationWorkflowContractPackages.includes(targetPackageName));
     case 'workflow':
       return ['domain', 'integration', 'platform', 'engine', 'api', 'workflow'].includes(
         target.role,
@@ -383,6 +385,18 @@ export function validateDependencyEdges(policy, packages, descriptors) {
           'integration_domain_contract_dependency',
           `cargo:${pkg.name}:${kind}:${dependency.name}`,
           'integrations may publish domain-neutral evidence only through an explicitly allowed ingress package',
+        ));
+        continue;
+      }
+
+      if (source.role === 'integration'
+        && target.role === 'workflow'
+        && target.surface === 'contract'
+        && !policy.dependencies.integrationWorkflowContractPackages.includes(dependency.name)) {
+        violations.push(violation(
+          'integration_workflow_contract_dependency',
+          `cargo:${pkg.name}:${kind}:${dependency.name}`,
+          'integrations may hand off provider-neutral work only through an explicitly allowed target-owned workflow contract package',
         ));
         continue;
       }

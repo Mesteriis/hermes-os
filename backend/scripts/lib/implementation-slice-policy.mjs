@@ -1329,6 +1329,16 @@ const DESKTOP_CALL_RECORDING_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-desktop-call-recording-persistence', role: 'integration', owner: 'desktop_call_recording', surface: 'persistence' },
 ];
 
+const DESKTOP_CALL_RECORDING_RUNTIME_PRODUCTION_PACKAGES = [
+  ...DESKTOP_CALL_RECORDING_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-desktop-call-recording-runtime', role: 'integration', owner: 'desktop_call_recording', surface: 'runtime' },
+];
+
+const DESKTOP_CALL_RECORDING_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...DESKTOP_CALL_RECORDING_RUNTIME_PRODUCTION_PACKAGES,
+  { name: 'hermes-desktop-call-recording-assembly', role: 'integration', owner: 'desktop_call_recording', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3921,6 +3931,7 @@ const DESKTOP_CALL_RECORDING_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
     { name: 'hermes-desktop-call-recording-api', kind: 'normal' },
   ],
   'hermes-call-transcription-ingress': [
+    { name: 'hermes-events-protocol', kind: 'normal' },
     { name: 'hermes-runtime-protocol', kind: 'normal' },
   ],
 };
@@ -3929,6 +3940,32 @@ const DESKTOP_CALL_RECORDING_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...DESKTOP_CALL_RECORDING_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-desktop-call-recording-persistence': [
     { name: 'hermes-desktop-call-recording-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
+const DESKTOP_CALL_RECORDING_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...DESKTOP_CALL_RECORDING_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-desktop-call-recording-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-call-transcription-ingress', kind: 'normal' },
+    { name: 'hermes-desktop-call-recording-api', kind: 'normal' },
+    { name: 'hermes-desktop-call-recording-core', kind: 'normal' },
+    { name: 'hermes-desktop-call-recording-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
+const DESKTOP_CALL_RECORDING_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...DESKTOP_CALL_RECORDING_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-desktop-call-recording-assembly': [
+    { name: 'hermes-desktop-call-recording-persistence', kind: 'normal' },
+    { name: 'hermes-desktop-call-recording-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
     { name: 'hermes-storage-protocol', kind: 'normal' },
   ],
 };
@@ -5357,6 +5394,7 @@ const DESKTOP_CALL_RECORDING_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
   'hermes-call-transcription-ingress': [
     { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'prost-types', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
     { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
@@ -5369,6 +5407,26 @@ const DESKTOP_CALL_RECORDING_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   'hermes-desktop-call-recording-persistence': [
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
+const DESKTOP_CALL_RECORDING_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...DESKTOP_CALL_RECORDING_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-desktop-call-recording-runtime': [
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const DESKTOP_CALL_RECORDING_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...DESKTOP_CALL_RECORDING_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-desktop-call-recording-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -8231,6 +8289,28 @@ function expectedSlice(currentSlice) {
       packages: DESKTOP_CALL_RECORDING_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: DESKTOP_CALL_RECORDING_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: DESKTOP_CALL_RECORDING_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'desktop_call_recording_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: DESKTOP_CALL_RECORDING_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: DESKTOP_CALL_RECORDING_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: DESKTOP_CALL_RECORDING_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: DESKTOP_CALL_RECORDING_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'desktop_call_recording_release_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: DESKTOP_CALL_RECORDING_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: DESKTOP_CALL_RECORDING_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: DESKTOP_CALL_RECORDING_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: DESKTOP_CALL_RECORDING_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

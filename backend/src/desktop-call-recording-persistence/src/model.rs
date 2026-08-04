@@ -51,6 +51,18 @@ pub struct TerminalRecordingMetadataV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CaptureStartedWriteV1 {
+    pub logical_owner_id: String,
+    pub recording_evidence_id: [u8; 16],
+    pub expected_revision: u64,
+    pub started_at_unix_ms: i64,
+    pub consent_receipt_id: [u8; 16],
+    pub command_id: [u8; 16],
+    pub claim_sha256: [u8; 32],
+    pub realtime: RealtimeTransitionV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExactOutboxRecordV1 {
     pub event_id: [u8; 16],
     pub contract_name: String,
@@ -86,14 +98,33 @@ pub struct PendingOutboxV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingRealtimeV1 {
+    pub sequence_id: i64,
+    pub logical_owner_id: String,
+    pub recording_evidence_id: [u8; 16],
+    pub recording_revision: u64,
+    pub occurred_at_unix_ms: i64,
+    pub payload_bytes: Vec<u8>,
+    pub payload_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RejectRecordingWriteV1 {
     pub logical_owner_id: String,
     pub recording_evidence_id: [u8; 16],
     pub expected_revision: u64,
     pub expected_state: RecordingStateV1,
     pub public_error_code: String,
+    pub host_command_completion: Option<HostCommandCompletionV1>,
     pub outbox: ExactOutboxRecordV1,
     pub realtime: RealtimeTransitionV1,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HostCommandCompletionV1 {
+    pub command_id: [u8; 16],
+    pub claim_sha256: [u8; 32],
+    pub completed_at_unix_ms: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,0 +1,6 @@
+ALTER TABLE hermes_data.desktop_call_recording_realtime
+ADD COLUMN published_at_unix_ms BIGINT;
+
+CREATE INDEX desktop_call_recording_realtime_pending
+ON hermes_data.desktop_call_recording_realtime (sequence_id)
+WHERE published_at_unix_ms IS NULL;

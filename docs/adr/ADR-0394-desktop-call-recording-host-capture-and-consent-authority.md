@@ -131,8 +131,11 @@ challenge. Runtime не сохраняет filesystem path или staging path.
 После успешной source-owned Blob write integration запрашивает target-bound
 custody delegation к exact `call_transcription` recording ingress capability.
 Только затем она атомарно сохраняет terminal metadata и recording-ready outbox.
-Custody proof существует только в exact event payload и не сохраняется в
-PostgreSQL. Failure публикует typed bodyless rejection без audio/path/proof.
+Custody proof не декодируется и не нормализуется в отдельные PostgreSQL columns:
+до публикации он существует только внутри exact opaque outbox envelope bytes,
+которые ADR-0220 требует сохранять без re-encode. Query, projection, log и
+client surfaces proof не получают. Failure публикует typed bodyless rejection
+без audio/path/proof.
 
 ### Client surface and realtime
 
@@ -165,7 +168,10 @@ consent body, device identity, audio input label and filesystem path запре�
 - provider-name branches or Telemost-specific fields in recording contracts;
 - boolean consent, hidden/autostart capture, raw paths or external executable
   configuration;
-- audio or custody proof in PostgreSQL/events/client query/SSE/logs/errors.
+- audio в PostgreSQL/events/client query/SSE/logs/errors;
+- decoded/normalized custody proof в PostgreSQL и любой custody proof в client
+  query/SSE/logs/errors; exact opaque durable outbox bytes являются единственным
+  временным исключением до подтверждённой broker publication.
 
 ## Проверка
 

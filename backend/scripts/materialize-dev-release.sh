@@ -233,6 +233,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-speech-to-text-assembly \
 	--package hermes-whisper-stt-runtime \
 	--package hermes-whisper-stt-assembly \
+	--package hermes-desktop-call-recording-runtime \
+	--package hermes-desktop-call-recording-assembly \
 	--package hermes-mail-runtime \
 	--package hermes-mail-assembly \
 	--package hermes-telegram-runtime \
@@ -306,6 +308,7 @@ attachment_translation_assembly="$assembly_root/attachment-translation"
 ollama_ai_assembly="$assembly_root/ollama-ai"
 speech_to_text_assembly="$assembly_root/speech-to-text"
 whisper_stt_assembly="$assembly_root/whisper-stt"
+desktop_call_recording_assembly="$assembly_root/desktop-call-recording"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
 whatsapp_assembly="$assembly_root/whatsapp"
@@ -432,6 +435,10 @@ zulip_assembly="$assembly_root/zulip"
 	--runtime "$cargo_target_dir/debug/hermes-whisper-stt-runtime" \
 	--runner "$whisper_stt_runner" \
 	--model "$whisper_stt_model"
+"$cargo_target_dir/debug/hermes-desktop-call-recording-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$desktop_call_recording_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-desktop-call-recording-runtime"
 "$cargo_target_dir/debug/hermes-mail-assembly" \
 	--build-id "$build_id" \
 	--output-dir "$mail_assembly" \
@@ -508,6 +515,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \
 	--artifact-fragment "$speech_to_text_assembly/speech-to-text.release-artifacts.json" \
 	--artifact-fragment "$whisper_stt_assembly/whisper-stt.release-artifacts.json" \
+	--artifact-fragment "$desktop_call_recording_assembly/desktop-call-recording.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \
 	--artifact-fragment "$whatsapp_assembly/whatsapp.release-artifacts.json" \

@@ -2,10 +2,14 @@
 
 use hermes_runtime_protocol::v1::ContractReferenceV1;
 
+pub mod host_bridge;
+
 pub const PACKAGE: &str = "hermes-desktop-call-recording-api";
 pub const OWNER_ID_V1: &str = "desktop_call_recording";
 pub const MODULE_ID_V1: &str = "hermes-desktop-call-recording-runtime";
-pub const CLIENT_CONTRACT_NAME_V1: &str = "desktop_call_recording.client";
+pub const START_CONTRACT_NAME_V1: &str = "desktop_call_recording.start";
+pub const STOP_CONTRACT_NAME_V1: &str = "desktop_call_recording.stop";
+pub const GET_CONTRACT_NAME_V1: &str = "desktop_call_recording.get";
 pub const HOST_CONTRACT_NAME_V1: &str = "desktop_call_recording.host_bridge";
 pub const REALTIME_CONTRACT_NAME_V1: &str = "desktop_call_recording.status_changed";
 pub const CONTRACT_MAJOR_V1: u32 = 1;
@@ -14,7 +18,7 @@ pub const HOST_PROTOCOL_MAJOR_V1: u32 = 1;
 pub const HOST_PROTOCOL_REVISION_V1: u32 = 1;
 pub const MAX_AUDIO_BYTES_V1: usize = 64 * 1024 * 1024;
 pub const MAX_DURATION_MILLIS_V1: u64 = 4 * 60 * 60 * 1_000;
-pub const CANONICAL_AUDIO_FORMAT_V1: &str = "WAV_PCM_S16LE_MONO_16000_HZ";
+pub const CANONICAL_AUDIO_FORMAT_V1: &str = "wav_pcm_s16le_mono_16000";
 pub const CONSENT_PURPOSE_V1: &str = "call_transcription";
 
 pub mod wire {
@@ -67,5 +71,7 @@ mod tests {
                 .len(),
             32
         );
+        assert_ne!(START_CONTRACT_NAME_V1, STOP_CONTRACT_NAME_V1);
+        assert_ne!(STOP_CONTRACT_NAME_V1, GET_CONTRACT_NAME_V1);
     }
 }

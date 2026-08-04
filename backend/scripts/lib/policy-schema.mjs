@@ -790,6 +790,9 @@ export function validatePolicy(policy) {
     policy?.dependencies?.integrationEngineContractPackages,
   );
   const integrationDomainContracts = list(policy?.dependencies?.integrationDomainContractPackages);
+  const integrationWorkflowContracts = list(
+    policy?.dependencies?.integrationWorkflowContractPackages,
+  );
   if (!engineEngineContracts.length
     || engineEngineContracts.some((packageName) => typeof packagePrefix !== 'string'
       || !packageName.startsWith(packagePrefix))
@@ -804,11 +807,14 @@ export function validatePolicy(policy) {
       || !packageName.startsWith(packagePrefix))
     || !integrationDomainContracts.length
     || integrationDomainContracts.some((packageName) => typeof packagePrefix !== 'string'
+      || !packageName.startsWith(packagePrefix))
+    || !integrationWorkflowContracts.length
+    || integrationWorkflowContracts.some((packageName) => typeof packagePrefix !== 'string'
       || !packageName.startsWith(packagePrefix))) {
     violations.push(violation(
       'dependency_policy',
       'dependencies',
-      'engine-engine, engine-domain, engine-workflow, integration-engine and integration-domain contracts must use explicit package allowlists',
+      'engine-engine, engine-domain, engine-workflow, integration-engine, integration-domain and integration-workflow contracts must use explicit package allowlists',
     ));
   }
   const forbiddenAggregatePackages = list(policy?.compileIsolation?.forbiddenAggregatePackages);
