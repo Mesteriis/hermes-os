@@ -70,6 +70,8 @@ message BeginDesktopCaptureCommandV1 {
   uint32 consent_policy_revision = 6;
   string consent_purpose = 7;
   string canonical_audio_format = 8;
+  bytes call_evidence_id = 9;
+  uint64 call_evidence_revision = 10;
 }
 
 message StopDesktopCaptureCommandV1 { bytes recording_evidence_id = 1; }

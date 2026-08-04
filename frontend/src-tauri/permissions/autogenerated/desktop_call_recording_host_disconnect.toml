@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-call-recording-host-disconnect"
+description = "Enables the desktop_call_recording_host_disconnect command without any pre-configured scope."
+commands.allow = ["desktop_call_recording_host_disconnect"]
+
+[[permission]]
+identifier = "deny-desktop-call-recording-host-disconnect"
+description = "Denies the desktop_call_recording_host_disconnect command without any pre-configured scope."
+commands.deny = ["desktop_call_recording_host_disconnect"]

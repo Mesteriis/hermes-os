@@ -11,10 +11,8 @@ const APP_COMMANDS: &[&str] = &[
     "whatsapp_web_companion_relay_runtime_state",
     "open_yandex_telemost_companion",
     "yandex_telemost_companion_manifest",
-    "yandex_telemost_prepare_audio_device",
-    "yandex_telemost_recording_start",
-    "yandex_telemost_recording_stop",
-    "yandex_telemost_speaker_timeline_append",
+    "desktop_call_recording_host_connect",
+    "desktop_call_recording_host_disconnect",
 ];
 
 fn main() {

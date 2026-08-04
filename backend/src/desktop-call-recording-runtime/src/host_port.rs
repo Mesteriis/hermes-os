@@ -78,6 +78,8 @@ pub async fn handle_host_operation_v1(
                             consent_policy_revision: run.consent_policy_revision,
                             consent_purpose: CONSENT_PURPOSE_V1.to_owned(),
                             canonical_audio_format: CANONICAL_AUDIO_FORMAT_V1.to_owned(),
+                            call_evidence_id: run.call_evidence_id.to_vec(),
+                            call_evidence_revision: run.call_evidence_revision,
                         })
                     }
                     2 if matches!(
@@ -131,6 +133,16 @@ async fn capture_started(
     let command_id = id16(&value.command_id)?;
     let claim_sha256 = runtime.claim_sha256(id16(&value.host_claim_id)?);
     let run = load_run(runtime, recording_id).await?;
+    if run.state == RecordingStateV1::Capturing
+        && run.challenge_id == challenge_id
+        && run.started_at_unix_ms == Some(value.started_at_unix_ms)
+        && command_id == begin_command_id_v1(&run.logical_owner_id, run.operation_id)
+    {
+        return Ok(encode_observation_accepted_v1(
+            recording_id,
+            run.recording_revision,
+        ));
+    }
     if run.state != RecordingStateV1::AwaitingConsent
         || run.challenge_id != challenge_id
         || run.challenge_expires_at_unix_ms < value.started_at_unix_ms
@@ -179,6 +191,24 @@ async fn capture_completed(
     let command_id = id16(&value.command_id)?;
     let claim_sha256 = runtime.claim_sha256(id16(&value.host_claim_id)?);
     let run = load_run(runtime, recording_id).await?;
+    if run.state == RecordingStateV1::Ready {
+        let wav =
+            validate_canonical_wav_v1(&value.canonical_wav_bytes, run.maximum_duration_millis)
+                .map_err(|_| DesktopRecordingHostPortErrorV1::Protocol)?;
+        if run.challenge_id == id16(&value.challenge_id)?
+            && run.started_at_unix_ms == Some(value.started_at_unix_ms)
+            && run.ended_at_unix_ms == Some(value.ended_at_unix_ms)
+            && run.source_declared_bytes == u64::try_from(value.canonical_wav_bytes.len()).ok()
+            && run.source_duration_millis == Some(wav.duration_millis)
+            && run.source_sha256 == Some(wav.sha256)
+            && wav.sha256 == sha256(&value.audio_sha256)?
+        {
+            return Ok(encode_observation_accepted_v1(
+                recording_id,
+                run.recording_revision,
+            ));
+        }
+    }
     if run.state != RecordingStateV1::Capturing
         || run.challenge_id != id16(&value.challenge_id)?
         || run.started_at_unix_ms != Some(value.started_at_unix_ms)
@@ -311,6 +341,15 @@ async fn capture_rejected(
     let recording_id = id16(&value.recording_evidence_id)?;
     let command_id = id16(&value.command_id)?;
     let run = load_run(runtime, recording_id).await?;
+    if run.state == RecordingStateV1::Rejected
+        && run.challenge_id == id16(&value.challenge_id)?
+        && run.public_error_code.as_deref() == Some(public_rejection_code(&value.rejection_code))
+    {
+        return Ok(encode_observation_accepted_v1(
+            recording_id,
+            run.recording_revision,
+        ));
+    }
     if !matches!(
         run.state,
         RecordingStateV1::AwaitingConsent | RecordingStateV1::Capturing

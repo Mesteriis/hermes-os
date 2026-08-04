@@ -499,6 +499,8 @@ fn relay_runtime_state(route: &ActiveWhatsAppHostRoute, state: &'static str) -> 
         }),
         request_id: 1,
         request_payload: payload,
+        logical_owner_id: String::new(),
+        authenticated_device_id: String::new(),
     };
     let mut stream = connect_host_route(&route.route)?;
     write_frame(&mut stream, &request.encode_to_vec())?;

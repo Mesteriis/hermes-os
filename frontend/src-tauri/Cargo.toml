@@ -20,6 +20,12 @@ default = []
 # desktop bundle has no host bridge unless its exact feature is selected.
 whatsapp-host-webview = []
 telemost-host-companion = []
+desktop-call-recording-host = [
+    "dep:cpal",
+    "dep:getrandom",
+    "dep:hermes-desktop-call-recording-api",
+    "dep:rfd",
+]
 
 [build-dependencies]
 tauri-build = { version = "2.6.2", features = [] }
@@ -28,9 +34,13 @@ tauri-build = { version = "2.6.2", features = [] }
 hermes-owner-vault-provisioning-host = { path = "../native/owner-vault-provisioning-host" }
 hermes-runtime-protocol = { path = "../../backend/src/platform/runtime_protocol" }
 hermes-whatsapp-api = { path = "../../backend/src/whatsapp-api" }
+hermes-desktop-call-recording-api = { path = "../../backend/src/desktop-call-recording-api", optional = true }
+cpal = { version = "=0.18.1", optional = true }
 directories = "=6.0.0"
+getrandom = { version = "=0.4.3", optional = true }
 libc = "=0.2.186"
 prost = "=0.14.4"
+rfd = { version = "=0.17.2", optional = true }
 sha2 = { version = "=0.11.0", default-features = false }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }

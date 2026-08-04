@@ -4,8 +4,10 @@
 
 Дата: 2026-08-04
 
-Состояние реализации: planned. Решение не открывает
-`desktop_call_recording_v1` до выполнения всех gate из раздела «Проверка».
+Состояние реализации: partial; gate `desktop_call_recording_v1` остаётся
+planned. Пять integration packages, target-owned ingress foundation и Tauri
+host adapter реализованы, но решение не открывает gate до выполнения всех
+managed, PostgreSQL, browser и outage проверок из раздела «Проверка».
 
 Уточняет:
 
@@ -174,6 +176,25 @@ consent body, device identity, audio input label and filesystem path запре�
   временным исключением до подтверждённой broker publication.
 
 ## Проверка
+
+Текущий implementation evidence:
+
+- Tauri adapter разделён на route-bound transport, native consent и bounded
+  CoreAudio capture responsibilities; он собирается только с exact feature
+  `desktop-call-recording-host`;
+- macOS bundle объявляет microphone usage purpose и audio-input entitlement;
+- native sheet показывает immutable purpose, call anchor/revision, выбранный
+  system audio input и maximum duration до попытки открыть OS capture;
+- capture непосредственно формирует bounded mono 16 kHz PCM/WAVE без shell и
+  внешнего executable;
+- legacy Telemost recorder, MP3/path receipts, boolean consent и speaker-file
+  relay удалены, а provider WebView не получил recording authority;
+- unit и architecture evidence покрывают no-autostart, prompt binding,
+  cancel/permission-denied branches, canonical WAV bounds, private route
+  binding и запрещённые зависимости.
+
+Disposable PostgreSQL, signed managed contour, real Blob/NATS outage/restart и
+authenticated browser Start/Stop/Get/SSE evidence ещё не закрыты.
 
 Gate `desktop_call_recording_v1` открывается только когда:
 

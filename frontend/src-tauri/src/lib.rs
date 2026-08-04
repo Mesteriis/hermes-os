@@ -5,6 +5,8 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 
+#[cfg(feature = "desktop-call-recording-host")]
+mod desktop_call_recording_host;
 mod owner_vault_provisioning;
 #[cfg(feature = "whatsapp-host-webview")]
 mod whatsapp_companion;
@@ -44,6 +46,10 @@ pub fn run() {
         owner_vault_provisioning::owner_vault_provisioning_host_seal,
         owner_vault_provisioning::owner_vault_provisioning_host_open_receipt,
         owner_vault_provisioning::owner_vault_provisioning_host_cancel,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_connect,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_disconnect,
     ]);
     #[cfg(all(
         feature = "whatsapp-host-webview",
@@ -60,6 +66,10 @@ pub fn run() {
         whatsapp_companion::hide_whatsapp_web_companion,
         whatsapp_companion::connect_whatsapp_runtime_bridge,
         whatsapp_companion::whatsapp_web_companion_relay_runtime_state,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_connect,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_disconnect,
     ]);
     #[cfg(all(
         feature = "telemost-host-companion",
@@ -72,10 +82,10 @@ pub fn run() {
         owner_vault_provisioning::owner_vault_provisioning_host_cancel,
         yandex_telemost_companion::open_yandex_telemost_companion,
         yandex_telemost_companion::yandex_telemost_companion_manifest,
-        yandex_telemost_companion::yandex_telemost_prepare_audio_device,
-        yandex_telemost_companion::yandex_telemost_recording_start,
-        yandex_telemost_companion::yandex_telemost_recording_stop,
-        yandex_telemost_companion::yandex_telemost_speaker_timeline_append,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_connect,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_disconnect,
     ]);
     #[cfg(all(feature = "whatsapp-host-webview", feature = "telemost-host-companion"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -91,10 +101,10 @@ pub fn run() {
         whatsapp_companion::whatsapp_web_companion_relay_runtime_state,
         yandex_telemost_companion::open_yandex_telemost_companion,
         yandex_telemost_companion::yandex_telemost_companion_manifest,
-        yandex_telemost_companion::yandex_telemost_prepare_audio_device,
-        yandex_telemost_companion::yandex_telemost_recording_start,
-        yandex_telemost_companion::yandex_telemost_recording_stop,
-        yandex_telemost_companion::yandex_telemost_speaker_timeline_append,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_connect,
+        #[cfg(feature = "desktop-call-recording-host")]
+        desktop_call_recording_host::desktop_call_recording_host_disconnect,
     ]);
 
     builder
@@ -108,10 +118,10 @@ pub fn run() {
             }
             app.manage(KernelSidecar::default());
             app.manage(owner_vault_provisioning::OwnerVaultProvisioningHostStateV1::default());
+            #[cfg(feature = "desktop-call-recording-host")]
+            app.manage(desktop_call_recording_host::DesktopCallRecordingHostStateV1::default());
             #[cfg(feature = "whatsapp-host-webview")]
             app.manage(whatsapp_companion::WhatsAppHostRoutes::default());
-            #[cfg(feature = "telemost-host-companion")]
-            app.manage(yandex_telemost_companion::TelemostLocalRecorder::default());
             if !cfg!(debug_assertions) {
                 start_kernel_sidecar(app.handle().clone(), 0)?;
             }
