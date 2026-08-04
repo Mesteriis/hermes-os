@@ -130,13 +130,14 @@ test('Communications export is one exact workflow family with a public domain so
   const sourceSchema = sourceContract.replaceAll(/\/\/.*$/gm, '');
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_reverse_google_update_v1',
+    'desktop_call_recording_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory.workflows, [
     'attachment_preview',
     'attachment_preview_evidence_replay',
     'attachment_text_extraction',
     'attachment_translation',
+    'call_transcription',
     'communication_cross_channel_forward',
     'communication_delivery_intent',
     'communication_explanation',

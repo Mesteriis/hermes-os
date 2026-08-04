@@ -1317,6 +1317,13 @@ const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES = [
   { name: 'hermes-speech-to-text-persistence', role: 'engine', owner: 'speech_to_text', surface: 'persistence' },
 ];
 
+const DESKTOP_CALL_RECORDING_CONTRACT_CORE_PRODUCTION_PACKAGES = [
+  ...MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES,
+  { name: 'hermes-desktop-call-recording-api', role: 'integration', owner: 'desktop_call_recording', surface: 'contract' },
+  { name: 'hermes-desktop-call-recording-core', role: 'integration', owner: 'desktop_call_recording', surface: 'implementation' },
+  { name: 'hermes-call-transcription-ingress', role: 'workflow', owner: 'call_transcription', surface: 'contract' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3900,6 +3907,19 @@ const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const DESKTOP_CALL_RECORDING_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-desktop-call-recording-api': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+  'hermes-desktop-call-recording-core': [
+    { name: 'hermes-desktop-call-recording-api', kind: 'normal' },
+  ],
+  'hermes-call-transcription-ingress': [
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5310,6 +5330,27 @@ const MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const DESKTOP_CALL_RECORDING_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-desktop-call-recording-api': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-desktop-call-recording-core': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+  'hermes-call-transcription-ingress': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'prost-build', kind: 'build', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'protoc-bin-vendored', kind: 'build', source: 'crates_io', version: '=3.2.0', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'build', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -6142,6 +6183,22 @@ const MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY = {
   ].sort(),
 };
 
+const DESKTOP_CALL_RECORDING_CONTRACT_CORE_INVENTORY = {
+  ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY,
+  integrations: [
+    ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY.integrations,
+    'desktop_call_recording',
+  ].sort(),
+  workflows: [
+    ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY.workflows,
+    'call_transcription',
+  ].sort(),
+  engines: [
+    ...MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_INVENTORY.engines,
+    'speech_to_text',
+  ].sort(),
+};
+
 const MAIL_OUTBOUND_MIME_ATTACHMENTS_CARGO_FEATURE_ALLOWLIST = {
   'hermes-communication-cross-channel-forward-persistence': {
     default: [],
@@ -6442,6 +6499,8 @@ function isExactTargetPolicy(targetPolicy, expectedPackages) {
       'hermes-mail-address-book-contract',
       'hermes-mail-contacts-sync-api',
       'hermes-speech-to-text-api',
+      'hermes-desktop-call-recording-api',
+      'hermes-call-transcription-ingress',
       'hermes-mail-delivery-intent-contract',
       'hermes-telegram-delivery-intent-contract',
       'hermes-whatsapp-delivery-intent-contract',
@@ -8129,6 +8188,17 @@ function expectedSlice(currentSlice) {
       packages: MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES,
       workspaceDependencies: MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: MAIL_CONTACTS_SYNC_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'desktop_call_recording_contract_core_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: DESKTOP_CALL_RECORDING_CONTRACT_CORE_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: DESKTOP_CALL_RECORDING_CONTRACT_CORE_PRODUCTION_PACKAGES,
+      workspaceDependencies: DESKTOP_CALL_RECORDING_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: DESKTOP_CALL_RECORDING_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

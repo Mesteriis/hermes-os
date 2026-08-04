@@ -132,7 +132,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_reverse_google_update_v1',
+    'desktop_call_recording_contract_core_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',
@@ -141,12 +141,13 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     'review',
     'tasks',
   ]);
-  assert.deepEqual(inventory.integrations, ['mail']);
+  assert.deepEqual(inventory.integrations, ['desktop_call_recording', 'mail']);
   assert.deepEqual(inventory.workflows, [
     'attachment_preview',
     'attachment_preview_evidence_replay',
     'attachment_text_extraction',
     'attachment_translation',
+    'call_transcription',
     'communication_cross_channel_forward',
     'communication_delivery_intent',
     'communication_explanation',
@@ -165,6 +166,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
     'ai',
     'attachment_archive_inspection',
     'attachment_security',
+    'speech_to_text',
   ]);
   assert.deepEqual(
     policy.implementation.productionPackages
@@ -180,6 +182,8 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
       'hermes-mail-address-book-persistence',
       'hermes-mail-google-people',
       'hermes-mail-carddav',
+      'hermes-desktop-call-recording-api',
+      'hermes-desktop-call-recording-core',
     ],
   );
   assert.deepEqual(

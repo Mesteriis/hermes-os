@@ -58,16 +58,17 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_reverse_google_update_v1',
+    'desktop_call_recording_contract_core_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
-    integrations: ['mail'],
+    integrations: ['desktop_call_recording', 'mail'],
     workflows: [
       'attachment_preview',
       'attachment_preview_evidence_replay',
       'attachment_text_extraction',
       'attachment_translation',
+      'call_transcription',
       'communication_cross_channel_forward',
       'communication_delivery_intent',
       'communication_explanation',
@@ -82,7 +83,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'reviewed_note_candidate_promotion',
       'reviewed_task_candidate_promotion',
     ],
-    engines: ['ai', 'attachment_archive_inspection', 'attachment_security'],
+    engines: ['ai', 'attachment_archive_inspection', 'attachment_security', 'speech_to_text'],
     businessCapabilities: [
       'ai.attachment-translation.request.v1',
       'ai.explanation.request.v1',
@@ -319,6 +320,8 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'hermes-mail-address-book-persistence',
       'hermes-mail-google-people',
       'hermes-mail-carddav',
+      'hermes-desktop-call-recording-api',
+      'hermes-desktop-call-recording-core',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );

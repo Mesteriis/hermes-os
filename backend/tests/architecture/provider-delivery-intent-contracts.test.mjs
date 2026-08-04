@@ -75,14 +75,17 @@ test('provider delivery intents are four separate integration-owned contract bui
 
   assert.equal(
     policy.implementation.currentSlice,
-    'mail_contacts_sync_managed_reverse_google_update_v1',
+    'desktop_call_recording_contract_core_v1',
   );
   assert.equal(
     reconstruction.slices.find(({ gate }) => gate === 'communication_delivery_intent_v1')
       ?.state,
     'implemented',
   );
-  assert.deepEqual(policy.implementation.ownerInventory.integrations, ['mail']);
+  assert.deepEqual(policy.implementation.ownerInventory.integrations, [
+    'desktop_call_recording',
+    'mail',
+  ]);
   assert.deepEqual(
     policy.implementation.productionPackages
       .filter(({ name }) => name.endsWith('-delivery-intent-contract'))

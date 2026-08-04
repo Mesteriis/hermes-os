@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "mail_contacts_sync_managed_reverse_google_update_v1",
+    "currentSlice": "desktop_call_recording_contract_core_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1578,6 +1578,24 @@
         "role": "engine",
         "owner": "speech_to_text",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-desktop-call-recording-api",
+        "role": "integration",
+        "owner": "desktop_call_recording",
+        "surface": "contract"
+      },
+      {
+        "name": "hermes-desktop-call-recording-core",
+        "role": "integration",
+        "owner": "desktop_call_recording",
+        "surface": "implementation"
+      },
+      {
+        "name": "hermes-call-transcription-ingress",
+        "role": "workflow",
+        "owner": "call_transcription",
+        "surface": "contract"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5220,6 +5238,24 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-desktop-call-recording-api": [
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-desktop-call-recording-core": [
+        {
+          "name": "hermes-desktop-call-recording-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-call-transcription-ingress": [
+        {
+          "name": "hermes-runtime-protocol",
           "kind": "normal"
         }
       ]
@@ -12935,6 +12971,100 @@
             "tls-rustls-ring"
           ]
         }
+      ],
+      "hermes-desktop-call-recording-api": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-desktop-call-recording-core": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
+      ],
+      "hermes-call-transcription-ingress": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "prost-build",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "protoc-bin-vendored",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=3.2.0",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "build",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -14040,6 +14170,18 @@
       "hermes-speech-to-text-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-desktop-call-recording-api": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
+      },
+      "hermes-desktop-call-recording-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-call-transcription-ingress": {
+        "primaryKind": "lib",
+        "customBuildAllowed": true
       }
     },
     "developmentProfile": {
@@ -14083,6 +14225,7 @@
         "tasks"
       ],
       "integrations": [
+        "desktop_call_recording",
         "mail"
       ],
       "workflows": [
@@ -14090,6 +14233,7 @@
         "attachment_preview_evidence_replay",
         "attachment_text_extraction",
         "attachment_translation",
+        "call_transcription",
         "communication_cross_channel_forward",
         "communication_delivery_intent",
         "communication_explanation",
@@ -14107,7 +14251,8 @@
       "engines": [
         "ai",
         "attachment_archive_inspection",
-        "attachment_security"
+        "attachment_security",
+        "speech_to_text"
       ],
       "businessCapabilities": [
         "ai.attachment-translation.request.v1",
