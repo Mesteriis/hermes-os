@@ -5,10 +5,11 @@
 Дата: 2026-08-03
 
 Состояние реализации: реализовано частично. `call_transcription_v1` остаётся
-`planned`: recording producer уже доказан отдельно, а workflow пока имеет
-только exact ingress, generated client API и pure lifecycle core. Persistence,
-managed runtime, release assembly, client Blob и live conformance из раздела
-«Проверка» ещё не завершены.
+`planned`: recording producer уже доказан отдельно, а workflow имеет exact
+ingress, generated client API, pure lifecycle core и owner-local persistence с
+atomic inbox/outbox, fenced jobs/recovery, metadata-only realtime и
+actor/session-bound one-use Blob tickets. Managed runtime, release assembly,
+client Blob transport и live conformance из раздела «Проверка» ещё не завершены.
 Компилируемый workflow, который передаёт текст Communications в LLM или
 возвращает summary вместо transcript, не является реализацией этого ADR.
 

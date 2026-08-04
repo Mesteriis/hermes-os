@@ -1345,6 +1345,11 @@ const CALL_TRANSCRIPTION_CONTRACT_CORE_PRODUCTION_PACKAGES = [
   { name: 'hermes-call-transcription-core', role: 'workflow', owner: 'call_transcription', surface: 'implementation' },
 ];
 
+const CALL_TRANSCRIPTION_PERSISTENCE_PRODUCTION_PACKAGES = [
+  ...CALL_TRANSCRIPTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
+  { name: 'hermes-call-transcription-persistence', role: 'workflow', owner: 'call_transcription', surface: 'persistence' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -3986,6 +3991,15 @@ const CALL_TRANSCRIPTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const CALL_TRANSCRIPTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...CALL_TRANSCRIPTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-call-transcription-persistence': [
+    { name: 'hermes-call-transcription-api', kind: 'normal' },
+    { name: 'hermes-call-transcription-core', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5460,6 +5474,14 @@ const CALL_TRANSCRIPTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const CALL_TRANSCRIPTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...CALL_TRANSCRIPTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-call-transcription-persistence': [
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'sqlx', kind: 'normal', source: 'crates_io', version: '=0.9.0', defaultFeatures: false, features: ['postgres', 'runtime-tokio', 'tls-rustls-ring'] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -6313,6 +6335,14 @@ const CALL_TRANSCRIPTION_CONTRACT_CORE_INVENTORY = {
   businessCapabilities: [
     ...DESKTOP_CALL_RECORDING_CONTRACT_CORE_INVENTORY.businessCapabilities,
     'call_transcription.v1',
+  ].sort(),
+};
+
+const CALL_TRANSCRIPTION_PERSISTENCE_INVENTORY = {
+  ...CALL_TRANSCRIPTION_CONTRACT_CORE_INVENTORY,
+  businessCapabilities: [
+    ...CALL_TRANSCRIPTION_CONTRACT_CORE_INVENTORY.businessCapabilities,
+    'call_transcription.storage.v1',
   ].sort(),
 };
 
@@ -8361,6 +8391,17 @@ function expectedSlice(currentSlice) {
       packages: CALL_TRANSCRIPTION_CONTRACT_CORE_PRODUCTION_PACKAGES,
       workspaceDependencies: CALL_TRANSCRIPTION_CONTRACT_CORE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: CALL_TRANSCRIPTION_CONTRACT_CORE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'call_transcription_persistence_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: CALL_TRANSCRIPTION_PERSISTENCE_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: CALL_TRANSCRIPTION_PERSISTENCE_PRODUCTION_PACKAGES,
+      workspaceDependencies: CALL_TRANSCRIPTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CALL_TRANSCRIPTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

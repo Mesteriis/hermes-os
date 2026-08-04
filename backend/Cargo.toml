@@ -123,6 +123,7 @@ members = [
   "src/call-transcription-ingress",
   "src/call-transcription-api",
   "src/call-transcription-core",
+  "src/call-transcription-persistence",
   "src/speech-to-text-core",
   "src/speech-to-text-persistence",
   "src/speech-to-text-runtime",

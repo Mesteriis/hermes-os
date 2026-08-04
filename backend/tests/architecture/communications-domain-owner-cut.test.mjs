@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'call_transcription_contract_core_v1',
+    'call_transcription_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
@@ -117,6 +117,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'attachment_translation.source_rejected.v1',
       'attachment_translation.source_requested.v1',
       'attachment_translation.storage.v1',
+      'call_transcription.storage.v1',
       'call_transcription.v1',
       'communication.cross_channel_forward.v1',
       'communication.explanation.v1',

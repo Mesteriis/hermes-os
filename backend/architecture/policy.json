@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "call_transcription_contract_core_v1",
+    "currentSlice": "call_transcription_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1626,6 +1626,12 @@
         "role": "workflow",
         "owner": "call_transcription",
         "surface": "implementation"
+      },
+      {
+        "name": "hermes-call-transcription-persistence",
+        "role": "workflow",
+        "owner": "call_transcription",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5372,6 +5378,20 @@
       "hermes-call-transcription-core": [
         {
           "name": "hermes-call-transcription-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-call-transcription-persistence": [
+        {
+          "name": "hermes-call-transcription-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ]
@@ -13337,6 +13357,28 @@
           "defaultFeatures": false,
           "features": []
         }
+      ],
+      "hermes-call-transcription-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -14474,6 +14516,10 @@
       "hermes-call-transcription-core": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-call-transcription-persistence": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -14579,6 +14625,7 @@
         "attachment_translation.source_rejected.v1",
         "attachment_translation.source_requested.v1",
         "attachment_translation.storage.v1",
+        "call_transcription.storage.v1",
         "call_transcription.v1",
         "communication.cross_channel_forward.v1",
         "communication.explanation.v1",
