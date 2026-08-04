@@ -5,17 +5,19 @@
 Дата: 2026-08-03
 
 Состояние реализации: реализовано частично. `call_transcription_v1` остаётся
-`planned`, пока не реализованы и не доказаны recording producer, workflow и
-client Blob gates из раздела «Проверка».
+`planned`: recording producer уже доказан отдельно, а workflow пока имеет
+только exact ingress, generated client API и pure lifecycle core. Persistence,
+managed runtime, release assembly, client Blob и live conformance из раздела
+«Проверка» ещё не завершены.
 Компилируемый workflow, который передаёт текст Communications в LLM или
 возвращает summary вместо transcript, не является реализацией этого ADR.
 
-По состоянию на 2026-08-04 `speech_to_text_engine_v1` и
-`whisper_stt_provider_v1` реализованы и допущены отдельно. Доказаны exact managed
-request RPC, provider-neutral Blob custody chain, owner-local PostgreSQL, pinned
-native/model resources, signed managed admission, real-audio conformance и
-restart/replay. Это не открывает `desktop_call_recording_v1` или
-`call_transcription_v1`.
+По состоянию на 2026-08-04 `desktop_call_recording_v1`,
+`speech_to_text_engine_v1` и `whisper_stt_provider_v1` реализованы и допущены
+отдельно. Доказаны explicit native consent, exact managed request RPC,
+provider-neutral Blob custody chain, owner-local PostgreSQL, pinned native/model
+resources, signed managed admission, real-audio conformance и restart/replay.
+Эти independent gates сами по себе не открывают `call_transcription_v1`.
 
 Уточняет:
 

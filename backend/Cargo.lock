@@ -2519,6 +2519,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-call-transcription-api"
+version = "0.1.0"
+dependencies = [
+ "hermes-runtime-protocol",
+ "prost 0.14.4",
+ "prost-build 0.14.4",
+ "protoc-bin-vendored",
+ "sha2 0.11.0",
+]
+
+[[package]]
+name = "hermes-call-transcription-core"
+version = "0.1.0"
+dependencies = [
+ "hermes-call-transcription-api",
+ "sha2 0.11.0",
+]
+
+[[package]]
 name = "hermes-call-transcription-ingress"
 version = "0.1.0"
 dependencies = [

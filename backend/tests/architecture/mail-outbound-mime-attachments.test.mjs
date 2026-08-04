@@ -132,7 +132,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'desktop_call_recording_release_assembly_v1',
+    'call_transcription_contract_core_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',

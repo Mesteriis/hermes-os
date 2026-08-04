@@ -121,6 +121,8 @@ members = [
   "src/desktop-call-recording-runtime",
   "src/desktop-call-recording-assembly",
   "src/call-transcription-ingress",
+  "src/call-transcription-api",
+  "src/call-transcription-core",
   "src/speech-to-text-core",
   "src/speech-to-text-persistence",
   "src/speech-to-text-runtime",
