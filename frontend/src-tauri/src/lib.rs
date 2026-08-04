@@ -120,6 +120,11 @@ pub fn run() {
             app.manage(owner_vault_provisioning::OwnerVaultProvisioningHostStateV1::default());
             #[cfg(feature = "desktop-call-recording-host")]
             app.manage(desktop_call_recording_host::DesktopCallRecordingHostStateV1::default());
+            #[cfg(feature = "desktop-call-recording-host")]
+            desktop_call_recording_host::watch_for_route_admission(
+                app.handle().clone(),
+                app.state(),
+            )?;
             #[cfg(feature = "whatsapp-host-webview")]
             app.manage(whatsapp_companion::WhatsAppHostRoutes::default());
             if !cfg!(debug_assertions) {

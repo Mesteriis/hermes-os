@@ -220,6 +220,14 @@ mod mail_carddav_fixture;
 #[path = "managed_storage_vault_docker/mail_contacts_sync_managed_flow.rs"]
 mod mail_contacts_sync_managed_flow;
 use mail_carddav_fixture::*;
+#[path = "managed_storage_vault_docker/desktop_call_recording_blob_target_fixture.rs"]
+mod desktop_call_recording_blob_target_fixture;
+#[path = "managed_storage_vault_docker/desktop_call_recording_host_fixture.rs"]
+mod desktop_call_recording_host_fixture;
+#[path = "managed_storage_vault_docker/desktop_call_recording_managed_flow.rs"]
+mod desktop_call_recording_managed_flow;
+#[path = "managed_storage_vault_docker/desktop_call_recording_managed_setup.rs"]
+mod desktop_call_recording_managed_setup;
 #[path = "managed_storage_vault_docker/mail_composition_flow.rs"]
 mod mail_composition_flow;
 #[path = "managed_storage_vault_docker/mail_delivery_test_support.rs"]
@@ -279,6 +287,9 @@ mod task_candidate_managed_setup;
 mod task_candidate_persistence_flow;
 use ai_inference_blob_fixture::*;
 use ai_inference_managed_setup::*;
+use desktop_call_recording_blob_target_fixture::*;
+use desktop_call_recording_host_fixture::*;
+use desktop_call_recording_managed_setup::*;
 use mail_attachment_flow::*;
 use mail_delivery_test_support::*;
 use mail_event_flow::*;

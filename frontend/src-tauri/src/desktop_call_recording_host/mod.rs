@@ -21,7 +21,7 @@ use hermes_desktop_call_recording_api::{
     },
 };
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State, ipc::CapabilityBuilder};
 use transport::HostRouteClientV1;
 
 const CLAIM_LEASE_SECONDS: u32 = 10;
@@ -32,6 +32,7 @@ const OS_PERMISSION_REVISION_V1: u32 = 1;
 #[derive(Default)]
 pub(crate) struct DesktopCallRecordingHostStateV1 {
     worker: Mutex<Option<HostWorkerHandleV1>>,
+    admission_watcher: Mutex<Option<HostWorkerHandleV1>>,
 }
 
 struct HostWorkerHandleV1 {
@@ -46,6 +47,42 @@ struct ActiveCaptureV1 {
     recording_evidence_id: [u8; 16],
     started_at_unix_ms: i64,
     capture: NativeCaptureV1,
+}
+
+pub(crate) fn watch_for_route_admission(
+    app: AppHandle,
+    state: State<'_, DesktopCallRecordingHostStateV1>,
+) -> Result<(), String> {
+    let mut watcher = state
+        .admission_watcher
+        .lock()
+        .map_err(|_| "Desktop recording admission state is unavailable".to_owned())?;
+    if watcher.is_some() {
+        return Ok(());
+    }
+    let (stop, stop_receiver) = mpsc::channel();
+    let join = std::thread::Builder::new()
+        .name("desktop-call-recording-route-admission".to_owned())
+        .spawn(move || {
+            while stop_receiver.recv_timeout(CLAIM_INTERVAL).is_err() {
+                if !HostRouteClientV1::admitted_route_exists(&app) {
+                    continue;
+                }
+                let capability = CapabilityBuilder::new("desktop-call-recording-route-admitted")
+                    .window("main")
+                    .permission("allow-desktop-call-recording-host-connect")
+                    .permission("allow-desktop-call-recording-host-disconnect");
+                if app.add_capability(capability).is_ok() {
+                    return;
+                }
+            }
+        })
+        .map_err(|_| "Desktop recording admission watcher is unavailable".to_owned())?;
+    *watcher = Some(HostWorkerHandleV1 {
+        stop,
+        join: Some(join),
+    });
+    Ok(())
 }
 
 #[tauri::command]
@@ -95,12 +132,14 @@ pub(crate) async fn desktop_call_recording_host_disconnect(
 
 impl Drop for DesktopCallRecordingHostStateV1 {
     fn drop(&mut self) {
-        if let Ok(worker) = self.worker.get_mut()
-            && let Some(mut worker) = worker.take()
-        {
-            let _ = worker.stop.send(());
-            if let Some(join) = worker.join.take() {
-                let _ = join.join();
+        for slot in [&mut self.worker, &mut self.admission_watcher] {
+            if let Ok(worker) = slot.get_mut()
+                && let Some(mut worker) = worker.take()
+            {
+                let _ = worker.stop.send(());
+                if let Some(join) = worker.join.take() {
+                    let _ = join.join();
+                }
             }
         }
     }

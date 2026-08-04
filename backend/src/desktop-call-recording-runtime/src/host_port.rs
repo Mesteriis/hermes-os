@@ -91,7 +91,15 @@ pub async fn handle_host_operation_v1(
                             recording_evidence_id: run.recording_evidence_id.to_vec(),
                         })
                     }
-                    _ => return Err(DesktopRecordingHostPortErrorV1::Conflict),
+                    _ => {
+                        if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                            eprintln!(
+                                "developer_desktop_recording_claim_conflict kind={} state={:?}",
+                                leased.command_kind, run.state
+                            );
+                        }
+                        return Err(DesktopRecordingHostPortErrorV1::Conflict);
+                    }
                 };
                 commands.push(DesktopRecordingHostCommandV1 {
                     command_id: leased.command_id.to_vec(),

@@ -27,6 +27,7 @@ slice, executable evidence и только затем frontend activation.
 - [ADR-0353: reply suggestion and AI inference boundary](ADR-0353-communication-reply-suggestion-and-ai-inference-boundary.md).
 - [ADR-0390: call recording custody and Speech-to-Text boundary](ADR-0390-call-recording-custody-and-speech-to-text-boundary.md).
 - [ADR-0391: Whisper STT provider integration](ADR-0391-whisper-stt-provider-integration.md).
+- [ADR-0394: desktop call recording host and consent authority](ADR-0394-desktop-call-recording-host-capture-and-consent-authority.md).
 
 ## Контекст
 
@@ -298,7 +299,8 @@ generation. The first exact contour therefore has three independent
 prerequisites before `call_transcription_v1`:
 
 - `desktop_call_recording_v1` — explicit-consent recording integration and
-  source-owned Blob custody;
+  source-owned Blob custody, implemented after signed managed, authenticated
+  SSE, Blob/NATS outage and restart conformance;
 - `speech_to_text_engine_v1` — provider-neutral STT engine contract/runtime;
 - `whisper_stt_provider_v1` — separately admitted concrete STT integration.
 

@@ -4,10 +4,11 @@
 
 Дата: 2026-08-04
 
-Состояние реализации: partial; gate `desktop_call_recording_v1` остаётся
-planned. Пять integration packages, target-owned ingress foundation и Tauri
-host adapter реализованы, но решение не открывает gate до выполнения всех
-managed, PostgreSQL, browser и outage проверок из раздела «Проверка».
+Состояние реализации: implemented; gate `desktop_call_recording_v1` открыт.
+Пять integration packages, target-owned ingress foundation и Tauri host adapter
+прошли managed, PostgreSQL, authenticated client, Blob/NATS outage и restart
+проверки из раздела «Проверка». Это не открывает отдельный
+`call_transcription_v1` workflow gate.
 
 Уточняет:
 
@@ -191,10 +192,23 @@ consent body, device identity, audio input label and filesystem path запре�
   relay удалены, а provider WebView не получил recording authority;
 - unit и architecture evidence покрывают no-autostart, prompt binding,
   cancel/permission-denied branches, canonical WAV bounds, private route
-  binding и запрещённые зависимости.
-
-Disposable PostgreSQL, signed managed contour, real Blob/NATS outage/restart и
-authenticated browser Start/Stop/Get/SSE evidence ещё не закрыты.
+  binding и запрещённые зависимости;
+- Tauri main window не получает recording host permissions из static bundle:
+  exact connect/disconnect capability добавляется только после проверки
+  owner-private Kernel route descriptor, а connect повторно валидирует current
+  descriptor и binding;
+- disposable PostgreSQL доказывает idempotent lifecycle, command leases,
+  malformed/truncated WAV rejection, atomic terminal state, outbox и replay;
+- signed managed contour запускает отдельные Recording, Storage, Vault, Blob и
+  NATS runtimes и проводит bounded canonical WAV через source Blob write и
+  target-owned custody/event ingress;
+- authenticated Gateway Start/Stop/Get и заранее открытый shared SSE достигают
+  terminal state без polling; wrong session и replay gap fail closed;
+- NATS outage сохраняет terminal state и exact durable envelope до relay, Blob
+  outage даёт typed rejection без остановки Recording runtime, а successor
+  restart отвергает stale host route;
+- полный `make pre-push` прошёл перед изменением reconstruction inventory на
+  `implemented`.
 
 Gate `desktop_call_recording_v1` открывается только когда:
 

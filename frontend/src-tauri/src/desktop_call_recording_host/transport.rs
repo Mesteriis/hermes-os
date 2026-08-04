@@ -60,6 +60,57 @@ impl HostRouteClientV1 {
         Ok(Self { route })
     }
 
+    pub(super) fn admitted_route_exists(app: &AppHandle) -> bool {
+        let Ok(data_dir) = app.path().app_local_data_dir() else {
+            return false;
+        };
+        let Ok(directory) =
+            kernel_runtime_directory(&data_dir).map(|path| path.join("host-bridges"))
+        else {
+            return false;
+        };
+        let Ok(metadata) = fs::symlink_metadata(&directory) else {
+            return false;
+        };
+        if metadata.file_type().is_symlink()
+            || !metadata.file_type().is_dir()
+            || metadata.uid() != current_uid()
+            || metadata.permissions().mode() & 0o077 != 0
+        {
+            return false;
+        }
+        let Ok(entries) = fs::read_dir(directory) else {
+            return false;
+        };
+        entries.filter_map(Result::ok).any(|entry| {
+            let Ok(metadata) = fs::symlink_metadata(entry.path()) else {
+                return false;
+            };
+            if metadata.file_type().is_symlink()
+                || !metadata.file_type().is_file()
+                || metadata.uid() != current_uid()
+                || metadata.permissions().mode() & 0o077 != 0
+                || metadata.len() == 0
+                || metadata.len() > MAX_DESCRIPTOR_BYTES
+            {
+                return false;
+            }
+            let Ok(bytes) = fs::read(entry.path()) else {
+                return false;
+            };
+            let Ok(route) = ManagedIntegrationHostBridgeConfigurationV1::decode(bytes.as_slice())
+            else {
+                return false;
+            };
+            let expected_name =
+                std::ffi::OsString::from(host_descriptor_file_name(&route.registration_id));
+            route.owner_id == OWNER_ID
+                && validate_registration_id(&route.registration_id).is_ok()
+                && entry.file_name() == expected_name
+                && validate_managed_integration_host_bridge_configuration(&route).is_ok()
+        })
+    }
+
     pub(super) fn claim(
         &self,
         operation: DesktopRecordingHostOperationV1,

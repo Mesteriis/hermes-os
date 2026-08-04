@@ -1,7 +1,7 @@
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::os::unix::prelude::PermissionsExt;
+use std::os::unix::prelude::{FileTypeExt, PermissionsExt};
 
-use hermes_desktop_call_recording_api::{MODULE_ID_V1, OWNER_ID_V1};
+use hermes_desktop_call_recording_api::OWNER_ID_V1;
 use hermes_desktop_call_recording_persistence::{
     DesktopCallRecordingRepositoryV1, PersistenceErrorV1,
 };
@@ -297,17 +297,30 @@ impl DesktopRecordingManagedRuntimeV1 {
     pub async fn publish_realtime(
         &mut self,
     ) -> Result<bool, DesktopRecordingManagedRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| DesktopRecordingManagedRuntimeErrorV1::Unavailable)?;
         let mut dispatcher = NestedClientDispatcherV1 {
             persistence: &self.persistence,
         };
-        publish_pending_realtime_v1(
+        let result = publish_pending_realtime_v1(
             &self.persistence,
             &mut self.control_channel,
             &mut dispatcher,
             now_unix_ms()?,
         )
-        .await
-        .map_err(|_| DesktopRecordingManagedRuntimeErrorV1::Unavailable)
+        .await;
+        if let Err(error) = result
+            && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some()
+        {
+            eprintln!("developer_desktop_recording_realtime_error={error:?}");
+        }
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| DesktopRecordingManagedRuntimeErrorV1::Unavailable)?;
+        result.map_err(|_| DesktopRecordingManagedRuntimeErrorV1::Unavailable)
     }
 
     pub fn try_serve_host_bridge_once(
@@ -320,8 +333,16 @@ impl DesktopRecordingManagedRuntimeV1 {
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(false),
             Err(_) => return Err(DesktopRecordingManagedRuntimeErrorV1::HostBridge),
         };
-        crate::host_transport::serve_one_operation_v1(stream, self, handle, now_unix_ms()?)
-            .map_err(|_| DesktopRecordingManagedRuntimeErrorV1::HostBridge)?;
+        // A native-client protocol, authorization, or disconnected-stream
+        // failure belongs to this accepted connection. The private route
+        // remains available for the next explicitly authenticated host
+        // operation; untrusted input must not restart the managed runtime.
+        match crate::host_transport::serve_one_operation_v1(stream, self, handle, now_unix_ms()?) {
+            Err(error) if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() => {
+                eprintln!("developer_desktop_recording_host_transport_error={error:?}");
+            }
+            _ => {}
+        }
         Ok(true)
     }
 
@@ -386,11 +407,20 @@ impl DesktopRecordingManagedRuntimeV1 {
     }
 }
 
+impl Drop for DesktopRecordingManagedRuntimeV1 {
+    fn drop(&mut self) {
+        let path = std::path::Path::new(&self.host_bridge_socket_path);
+        if std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_socket()) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 fn validate_admission(
     admission: &DesktopRecordingRuntimeAdmissionV1,
 ) -> Result<(), DesktopRecordingManagedRuntimeErrorV1> {
     if admission.module_owner_id != OWNER_ID_V1
-        || admission.registration_id != MODULE_ID_V1
+        || !valid_token(&admission.registration_id)
         || !valid_token(&admission.logical_human_owner_id)
         || !valid_token(&admission.runtime_instance_id)
         || admission.runtime_generation == 0
@@ -572,7 +602,7 @@ mod tests {
         let admission = DesktopRecordingRuntimeAdmissionV1 {
             module_owner_id: OWNER_ID_V1.to_owned(),
             logical_human_owner_id: "owner-1".to_owned(),
-            registration_id: MODULE_ID_V1.to_owned(),
+            registration_id: "registration-1".to_owned(),
             runtime_instance_id: "runtime-1".to_owned(),
             runtime_generation: 1,
             grant_epoch: 1,

@@ -124,12 +124,14 @@ where
         .set_nonblocking(true)
         .map_err(|_| "Desktop recording host bridge is unavailable".to_owned())?;
     loop {
-        executor
-            .block_on(runtime.try_handle_client_delivery())
-            .map_err(runtime_error)?;
-        runtime
-            .try_serve_host_bridge_once(&listener, executor.handle())
-            .map_err(runtime_error)?;
+        if let Err(error) = executor.block_on(runtime.try_handle_client_delivery()) {
+            developer_runtime_error("client_delivery", error);
+            return Err(runtime_error(error));
+        }
+        if let Err(error) = runtime.try_serve_host_bridge_once(&listener, executor.handle()) {
+            developer_runtime_error("host_bridge", error);
+            return Err(runtime_error(error));
+        }
         if executor.block_on(runtime.relay_outbox()).is_err()
             && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some()
         {
@@ -141,6 +143,12 @@ where
             eprintln!("developer_desktop_recording_realtime_retry=true");
         }
         std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+fn developer_runtime_error(step: &str, error: DesktopRecordingManagedRuntimeErrorV1) {
+    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+        eprintln!("developer_desktop_recording_step={step} error={error:?}");
     }
 }
 
@@ -172,8 +180,8 @@ where
     let settings_schema = required_path(arguments, "--settings-schema-path")?;
     let settings_snapshot = required_path(arguments, "--settings-snapshot-path")?;
     let runtime_configuration = required_path(arguments, "--runtime-configuration-path")?;
-    let host_bridge_configuration = required_path(arguments, "--host-bridge-configuration-path")?;
     let runtime_instance_id = required_string(arguments, "--runtime-instance-id")?;
+    let host_bridge_configuration = required_path(arguments, "--host-bridge-configuration-path")?;
     require_no_arguments(arguments)?;
     Ok(InheritedPathsV1 {
         descriptor,

@@ -38,7 +38,12 @@ pub fn serve_one_operation_v1(
     let operation = read_frame(&mut stream)?;
     let response = handle
         .block_on(handle_host_operation_v1(runtime, &operation, now_unix_ms))
-        .map_err(|_| DesktopRecordingHostTransportErrorV1::Port)?;
+        .map_err(|error| {
+            if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
+                eprintln!("developer_desktop_recording_host_port_error={error:?}");
+            }
+            DesktopRecordingHostTransportErrorV1::Port
+        })?;
     write_frame(&mut stream, &response)
 }
 

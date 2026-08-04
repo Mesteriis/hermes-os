@@ -805,7 +805,7 @@
       "gate": "desktop_call_recording_v1",
       "role": "integration",
       "owner": "desktop_call_recording",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_call_evidence_v1",
         "blob_v1",

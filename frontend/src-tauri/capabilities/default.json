@@ -10,8 +10,6 @@
     "allow-owner-vault-provisioning-host-start",
     "allow-owner-vault-provisioning-host-seal",
     "allow-owner-vault-provisioning-host-open-receipt",
-    "allow-owner-vault-provisioning-host-cancel",
-    "allow-desktop-call-recording-host-connect",
-    "allow-desktop-call-recording-host-disconnect"
+    "allow-owner-vault-provisioning-host-cancel"
   ]
 }

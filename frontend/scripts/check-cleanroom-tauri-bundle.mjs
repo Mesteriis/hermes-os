@@ -7,10 +7,12 @@ import { fileURLToPath } from 'node:url';
 const frontendRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const configPath = resolve(frontendRoot, 'src-tauri/tauri.conf.json');
 const sourcePath = resolve(frontendRoot, 'src-tauri/src/lib.rs');
+const recordingHostPath = resolve(frontendRoot, 'src-tauri/src/desktop_call_recording_host/mod.rs');
 const mainCapabilityPath = resolve(frontendRoot, 'src-tauri/capabilities/default.json');
 const appRootPath = resolve(frontendRoot, 'src/app/layout/AppLayoutRoot.vue');
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
 const source = readFileSync(sourcePath, 'utf8');
+const recordingHost = readFileSync(recordingHostPath, 'utf8');
 const mainCapability = JSON.parse(readFileSync(mainCapabilityPath, 'utf8'));
 const appRoot = readFileSync(appRootPath, 'utf8');
 const failures = [];
@@ -38,6 +40,9 @@ if (mainCapability.permissions.some(
 }
 if ([...ownerVaultPermissions].some((permission) => !mainCapability.permissions.includes(permission))) {
   failures.push('Tauri main window must receive the exact owner Vault host-adapter permissions');
+}
+if (!/admitted_route_exists[\s\S]*add_capability/.test(recordingHost)) {
+  failures.push('Tauri recording host permissions must be added only after exact route admission');
 }
 if (/CommunicationsWorkspaceView|PersonasWorkspaceView|@\/integrations\//.test(appRoot)) {
   failures.push('Tauri recovery shell must not mount disabled product routes or provider host bridges');

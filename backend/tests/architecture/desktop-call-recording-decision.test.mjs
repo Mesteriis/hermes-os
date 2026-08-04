@@ -47,5 +47,5 @@ test('desktop recording decision rejects the legacy boolean path based recorder'
 
   assert.match(adr, /Audio.*private host-bridge request/);
   assert.match(adr, /запрещено в durable[\s\S]*PostgreSQL[\s\S]*SSE/);
-  assert.match(adr, /Состояние реализации: partial; gate `desktop_call_recording_v1` остаётся[\s\S]*planned/);
+  assert.match(adr, /Состояние реализации: implemented; gate `desktop_call_recording_v1` открыт/);
 });

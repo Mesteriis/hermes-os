@@ -106,6 +106,10 @@ hermes-speech-to-text-runtime = { path = "../../../src/speech-to-text-runtime" }
 hermes-speech-transcript-artifact = { path = "../../../src/speech-transcript-artifact" }
 hermes-whisper-stt-persistence = { path = "../../../src/whisper-stt-persistence" }
 hermes-whisper-stt-runtime = { path = "../../../src/whisper-stt-runtime" }
+hermes-call-transcription-ingress = { path = "../../../src/call-transcription-ingress" }
+hermes-desktop-call-recording-api = { path = "../../../src/desktop-call-recording-api" }
+hermes-desktop-call-recording-persistence = { path = "../../../src/desktop-call-recording-persistence" }
+hermes-desktop-call-recording-runtime = { path = "../../../src/desktop-call-recording-runtime" }
 hermes-review-attention-api = { path = "../../../src/review-attention-api" }
 hermes-review-attention-persistence = { path = "../../../src/review-attention-persistence" }
 hermes-review-attention-runtime = { path = "../../../src/review-attention-runtime" }
