@@ -208,7 +208,7 @@ const ALLOWED_STATES = new Set(['implemented', 'planned']);
 const BUSINESS_OWNER_ROLES = new Set(['domain', 'engine', 'integration', 'workflow']);
 const FORBIDDEN_BUSINESS_OWNERS = new Set(['core', 'gateway', 'kernel', 'settings']);
 
-test('ADR-0282 keeps an exact incomplete reconstruction inventory', async () => {
+test('ADR-0282 keeps an exact complete reconstruction inventory', async () => {
   const [inventorySource, policySource, adrSource] = await Promise.all([
     readFile(INVENTORY_PATH, 'utf8'),
     readFile(POLICY_PATH, 'utf8'),
@@ -219,7 +219,7 @@ test('ADR-0282 keeps an exact incomplete reconstruction inventory', async () => 
 
   assert.equal(inventory.version, 1);
   assert.equal(inventory.adr, 'ADR-0282');
-  assert.equal(inventory.status, 'incomplete');
+  assert.equal(inventory.status, 'complete');
   assert.equal(inventory.completionGate, 'communications_settings_reconstruction_complete_v1');
   assert.equal(inventory.legacyAuthorityAllowed, false);
   assert.ok(inventory.slices.length > 20);
@@ -227,7 +227,8 @@ test('ADR-0282 keeps an exact incomplete reconstruction inventory', async () => 
   const gates = inventory.slices.map(({ gate }) => gate);
   assert.equal(new Set(gates).size, gates.length, 'reconstruction gates must be unique');
   assert.ok(inventory.slices.every(({ state }) => ALLOWED_STATES.has(state)));
-  assert.ok(inventory.slices.some(({ state }) => state === 'planned'));
+  assert.equal(inventory.slices.length, 91);
+  assert.ok(inventory.slices.every(({ state }) => state === 'implemented'));
 
   for (const slice of inventory.slices) {
     assert.ok(ALLOWED_ROLES.has(slice.role), `unknown owner role for ${slice.gate}`);
@@ -262,7 +263,7 @@ test('ADR-0282 keeps an exact incomplete reconstruction inventory', async () => 
   );
   assert.ok(
     !Object.hasOwn(policy.phaseGates.requires, inventory.completionGate),
-    'completion gate must remain closed while inventory is incomplete',
+    'the aggregate reconstruction marker must not become a generic production capability',
   );
 });
 

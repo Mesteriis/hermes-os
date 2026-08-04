@@ -1,7 +1,7 @@
 {
   "version": 1,
   "adr": "ADR-0282",
-  "status": "incomplete",
+  "status": "complete",
   "completionGate": "communications_settings_reconstruction_complete_v1",
   "legacyAuthorityAllowed": false,
   "slices": [
@@ -836,7 +836,7 @@
       "gate": "call_transcription_v1",
       "role": "workflow",
       "owner": "call_transcription",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "communications_call_evidence_v1",
         "desktop_call_recording_v1",

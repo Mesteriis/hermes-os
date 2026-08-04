@@ -178,7 +178,7 @@ test('reconstruction keeps recording engine provider and workflow as four indepe
   assert.equal(gates.get('desktop_call_recording_v1').state, 'implemented');
   assert.equal(gates.get('speech_to_text_engine_v1').state, 'implemented');
   assert.equal(gates.get('whisper_stt_provider_v1').state, 'implemented');
-  assert.equal(gates.get('call_transcription_v1').state, 'planned');
+  assert.equal(gates.get('call_transcription_v1').state, 'implemented');
   assert.match(adr, /Generic `ai\.inference`, Ollama text generation/);
   assert.match(adr, /fixture provider\. Production admission/);
 });

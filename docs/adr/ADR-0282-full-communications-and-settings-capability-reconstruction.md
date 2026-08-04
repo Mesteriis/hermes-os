@@ -2,14 +2,14 @@
 
 Статус: Принято
 Дата: 2026-07-26
-Состояние реализации: решение и capability inventory приняты; implementation
-не завершена. Exact inventory уже отмечает независимо доказанные backend
-slices, включая `telegram_core_operational_v1`,
-`whatsapp_operational_read_v1` и `whatsapp_operational_realtime_v1`, но planned
-provider umbrella нельзя вывести из состояния backend gates. Этот ADR не
-открывает новые production capabilities сам по себе. Каждый описанный ниже
-slice требует отдельного exact admission в policy, реализации backend vertical
-slice, executable evidence и только затем frontend activation.
+Состояние реализации: завершено. Exact inventory содержит 91 из 91 независимо
+доказанных `implemented` slices. Последний `call_transcription_v1` закрыт
+managed real-audio, outage/reconnect, authenticated Gateway/SSE/ClientBlob и
+restart conformance. Полный root `make pre-push` является финальным evidence
+gate этой ревизии. Aggregate marker
+`communications_settings_reconstruction_complete_v1` не становится generic
+production capability: каждый runtime и capability остаётся отдельно admitted,
+revocable и owner-bound.
 
 Зависит от:
 
@@ -619,8 +619,8 @@ Rollback workflow не изменяет target-domain truth directly.
   contract revisions;
 - worktree, architecture evidence и full relevant gates green.
 
-До этого ADR-0281 остаётся завершённым как clean-room ownership/transport
-cutover, но слово «полностью» не применяется к capability reconstruction.
+ADR-0281 остаётся clean-room ownership/transport cutover, а этот ADR фиксирует
+полное закрытие capability reconstruction inventory без возврата legacy facade.
 
 ## Последствия
 

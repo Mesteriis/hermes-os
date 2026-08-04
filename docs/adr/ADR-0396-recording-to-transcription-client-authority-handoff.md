@@ -6,7 +6,8 @@
 
 Состояние реализации: typed recording `Get` authority и managed/browser
 conformance реализованы в слайсе `call_transcription_managed_conformance_v1`;
-gate `call_transcription_v1` остаётся закрытым до полного `make pre-push`.
+gate `call_transcription_v1` открыт как `implemented`, а полный root
+`make pre-push` является финальным evidence gate.
 
 Уточняет:
 
