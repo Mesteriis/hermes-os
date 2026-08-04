@@ -8,6 +8,9 @@ Protobuf и frontend contracts; Telegram client contract revision повышен
 hash/session-key bindings. Rust, generated frontend, unit, architecture и
 loopback browser gates зелёные. Реальный QR scan не выполнялся без
 пользовательских Telegram API ID/hash и не заявляется как evidence.
+Authorization transport extension переводится с polling на общий replayable
+Gateway SSE: code/unit evidence готово, повторный managed browser gate ещё не
+заявлен.
 
 Уточняет:
 
@@ -76,6 +79,13 @@ command и всегда передаётся frontend как `false`. Оно н�
 assertion: runtime считает account авторизованным только после TDLib
 authorization state `ready`.
 
+TDLib authorization state change публикуется как typed
+`telegram.authorization.status_changed.v1` через единственный Gateway SSE.
+Событие содержит только fixed public state и не переносит `tg://` link,
+password hint или credential material. Получив сигнал, frontend выполняет один
+generated authorization status recovery query; initial/manual recovery query
+также разрешён. Periodic polling запрещён.
+
 Реальный QR:
 
 - создаётся только из transient `tg://login?token=...`, полученного от TDLib;
@@ -103,7 +113,7 @@ managed runtime. Старые payload с `telegram_bot` или `telegram_bot_tok
 telegram-api                   user-only lifecycle and authorization contracts
 telegram-core                  exact Vault purposes for TDLib user setup
 telegram-runtime               TDLib user bootstrap and QR lifecycle
-telegram frontend              user account form, QR polling/rendering and 2FA
+telegram frontend              user account form, shared SSE, QR render and 2FA
 owner-vault development host   provider-neutral credential sealing only
 Communications domain          no Telegram account or QR dependency
 ```
@@ -118,7 +128,8 @@ Gate закрывается только при наличии:
 4. account provisioning with `qr_authorized = false`;
 5. real TDLib QR request and transient authorization status;
 6. local validation/rendering only for exact `tg://login` links;
-7. bounded polling, cancel, cleanup and 2FA continuation;
+7. shared Gateway SSE signal, initial/manual recovery query, no polling,
+   cancel, cleanup and 2FA continuation;
 8. no fixture/demo QR or external navigation;
 9. generated client, Rust, frontend, architecture and live loopback gates.
 

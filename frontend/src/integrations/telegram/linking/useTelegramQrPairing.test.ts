@@ -5,10 +5,12 @@ const {
 	getTelegramAuthorizationStatus,
 	submitTelegramAuthorizationPassword,
 	telegramQrDataUrl,
+	openTelegramAuthorizationRealtime,
 } = vi.hoisted(() => ({
 	getTelegramAuthorizationStatus: vi.fn(),
 	submitTelegramAuthorizationPassword: vi.fn(),
 	telegramQrDataUrl: vi.fn(),
+	openTelegramAuthorizationRealtime: vi.fn(),
 }))
 
 vi.mock('../api/telegramAuthorizationGateway', () => ({
@@ -16,6 +18,7 @@ vi.mock('../api/telegramAuthorizationGateway', () => ({
 	submitTelegramAuthorizationPassword,
 }))
 vi.mock('./telegramQrArtifact', () => ({ telegramQrDataUrl }))
+vi.mock('../api/telegramAuthorizationRealtime', () => ({ openTelegramAuthorizationRealtime }))
 
 import { useTelegramQrPairing } from './useTelegramQrPairing'
 
@@ -24,11 +27,16 @@ describe('Telegram QR pairing', () => {
 		getTelegramAuthorizationStatus.mockReset()
 		submitTelegramAuthorizationPassword.mockReset()
 		telegramQrDataUrl.mockReset()
+		openTelegramAuthorizationRealtime.mockReset()
+		openTelegramAuthorizationRealtime.mockReturnValue({ close: vi.fn() })
 	})
 
 	it('waits for effective Settings and then requests the real TDLib QR automatically', async () => {
 		const module = ref({
-			capabilityIds: ['telegram.authorization.v1'],
+			capabilityIds: [
+				'telegram.authorization.realtime.v1',
+				'telegram.authorization.v1',
+			],
 			settings: { effectiveRevision: 0n },
 		})
 		const startRequest = ref(0)
@@ -54,5 +62,7 @@ describe('Telegram QR pairing', () => {
 			'data:image/png;base64,provider-qr',
 		))
 		expect(telegramQrDataUrl).toHaveBeenCalledWith('tg://login?token=provider-token')
+		expect(openTelegramAuthorizationRealtime).toHaveBeenCalledOnce()
+		expect(String(useTelegramQrPairing)).not.toMatch(/setTimeout|setInterval|poll/i)
 	})
 })

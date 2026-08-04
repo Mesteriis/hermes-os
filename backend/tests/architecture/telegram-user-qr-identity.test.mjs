@@ -35,6 +35,18 @@ const paths = {
     'frontend/src/integrations/telegram/linking/telegramQrArtifact.ts',
     PROJECT_ROOT,
   ),
+  authorizationRealtime: new URL(
+    'frontend/src/integrations/telegram/api/telegramAuthorizationRealtime.ts',
+    PROJECT_ROOT,
+  ),
+  qrCoordinator: new URL(
+    'frontend/src/integrations/telegram/linking/useTelegramQrPairing.ts',
+    PROJECT_ROOT,
+  ),
+  runtimeRealtime: new URL(
+    'src/telegram-runtime/src/client_realtime.rs',
+    BACKEND_ROOT,
+  ),
 };
 
 test('Telegram account identity is user-only and QR authority stays with TDLib', async () => {
@@ -50,6 +62,9 @@ test('Telegram account identity is user-only and QR authority stays with TDLib',
     frontendGateway,
     frontendWorkflow,
     qrArtifact,
+    authorizationRealtime,
+    qrCoordinator,
+    runtimeRealtime,
   ] = await Promise.all([
     readFile(paths.inventory, 'utf8').then(JSON.parse),
     readFile(paths.adr, 'utf8'),
@@ -62,6 +77,9 @@ test('Telegram account identity is user-only and QR authority stays with TDLib',
     readFile(paths.frontendGateway, 'utf8'),
     readFile(paths.frontendWorkflow, 'utf8'),
     readFile(paths.qrArtifact, 'utf8'),
+    readFile(paths.authorizationRealtime, 'utf8'),
+    readFile(paths.qrCoordinator, 'utf8'),
+    readFile(paths.runtimeRealtime, 'utf8'),
   ]);
 
   const gate = inventory.slices.find(
@@ -101,4 +119,11 @@ test('Telegram account identity is user-only and QR authority stays with TDLib',
   assert.match(qrArtifact, /parsed\.hostname === 'login'/);
   assert.doesNotMatch(qrArtifact, /\bfetch\s*\(/);
   assert.doesNotMatch(qrArtifact, /window\.open|location\.assign/);
+  assert.match(authorizationRealtime, /getBrowserGatewayRealtimeHub/);
+  assert.match(authorizationRealtime, /telegram\.authorization\.status_changed\.v1/);
+  assert.doesNotMatch(qrCoordinator, /setInterval|setTimeout|poll/i);
+  assert.match(runtimeRealtime, /PublishClientRealtime/);
+  assert.match(runtimeRealtime, /qr_link: None/);
+  assert.match(runtimeRealtime, /password_hint: None/);
+  assert.match(adr, /Periodic polling запрещён/);
 });

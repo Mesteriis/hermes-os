@@ -4,11 +4,14 @@ import {
 	getTelegramAuthorizationStatus,
 	submitTelegramAuthorizationPassword,
 } from '../api/telegramAuthorizationGateway'
+import {
+	openTelegramAuthorizationRealtime,
+	type TelegramAuthorizationRealtimeBinding,
+} from '../api/telegramAuthorizationRealtime'
 import { telegramQrDataUrl } from './telegramQrArtifact'
 
 const TELEGRAM_AUTHORIZATION_CAPABILITY_ID = 'telegram.authorization.v1'
-const AUTHORIZATION_POLL_INTERVAL_MS = 2_000
-const TERMINAL_AUTHORIZATION_STATES = new Set(['ready', 'closed', 'error'])
+const TELEGRAM_AUTHORIZATION_REALTIME_CAPABILITY_ID = 'telegram.authorization.realtime.v1'
 
 export function useTelegramQrPairing(
 	module: () => ClientModuleBootstrapV1 | null,
@@ -21,9 +24,13 @@ export function useTelegramQrPairing(
 	const busy = ref(false)
 	const message = ref('')
 	const messageTone = ref<'neutral' | 'success' | 'error'>('neutral')
-	let pollTimer: ReturnType<typeof setTimeout> | null = null
+	let realtime: TelegramAuthorizationRealtimeBinding | null = null
 	const admitted = computed(
-		() => module()?.capabilityIds.includes(TELEGRAM_AUTHORIZATION_CAPABILITY_ID) ?? false,
+		() => {
+			const capabilities = module()?.capabilityIds ?? []
+			return capabilities.includes(TELEGRAM_AUTHORIZATION_CAPABILITY_ID)
+				&& capabilities.includes(TELEGRAM_AUTHORIZATION_REALTIME_CAPABILITY_ID)
+		},
 	)
 	const configured = computed(() => (module()?.settings?.effectiveRevision ?? 0n) > 0n)
 	const canRefresh = computed(() => admitted.value && configured.value)
@@ -42,7 +49,6 @@ export function useTelegramQrPairing(
 				: ''
 			message.value = statusMessage(state.value)
 			messageTone.value = state.value === 'ready' ? 'success' : 'neutral'
-			if (!TERMINAL_AUTHORIZATION_STATES.has(state.value)) scheduleRefresh()
 		} catch {
 			clearQr()
 			message.value = 'Telegram authorization status is unavailable.'
@@ -67,17 +73,22 @@ export function useTelegramQrPairing(
 		} finally {
 			busy.value = false
 		}
-		await refresh()
 	}
 
-	function scheduleRefresh(): void {
-		stopPolling()
-		pollTimer = setTimeout(() => void refresh(), AUTHORIZATION_POLL_INTERVAL_MS)
+	function openRealtime(): void {
+		if (realtime) return
+		realtime = openTelegramAuthorizationRealtime(
+			() => void refresh(),
+			() => {
+				message.value = 'Telegram authorization realtime is unavailable. Use Refresh for recovery.'
+				messageTone.value = 'error'
+			},
+		)
 	}
 
-	function stopPolling(): void {
-		if (pollTimer) clearTimeout(pollTimer)
-		pollTimer = null
+	function closeRealtime(): void {
+		realtime?.close()
+		realtime = null
 	}
 
 	function clearQr(): void {
@@ -87,6 +98,7 @@ export function useTelegramQrPairing(
 	watch(
 		[() => startRequest(), canRefresh],
 		([requested, ready]) => {
+			if (!ready) closeRealtime()
 			if (requested > handledStartRequest) pendingStartRequest = requested
 			if (!pendingStartRequest) return
 			if (!ready) {
@@ -96,13 +108,14 @@ export function useTelegramQrPairing(
 			}
 			handledStartRequest = pendingStartRequest
 			pendingStartRequest = 0
+			openRealtime()
 			void refresh()
 		},
 		{ immediate: true },
 	)
 
 	onBeforeUnmount(() => {
-		stopPolling()
+		closeRealtime()
 		clearQr()
 		password.value = ''
 	})

@@ -91,6 +91,8 @@ pub struct TelegramProcessLoop {
     composition: TelegramRuntimeComposition,
     provider_cursor: Option<String>,
     authorization_status: Option<hermes_telegram_api::TelegramAuthorizationStatus>,
+    authorization_status_revision: u64,
+    published_authorization_status_revision: u64,
     durable_restore_required: bool,
 }
 
@@ -101,6 +103,8 @@ impl TelegramProcessLoop {
             composition,
             provider_cursor: None,
             authorization_status: None,
+            authorization_status_revision: 0,
+            published_authorization_status_revision: 0,
             durable_restore_required: true,
         }
     }
@@ -119,6 +123,34 @@ impl TelegramProcessLoop {
         &self,
     ) -> Option<&hermes_telegram_api::TelegramAuthorizationStatus> {
         self.authorization_status.as_ref()
+    }
+
+    fn update_authorization_status(
+        &mut self,
+        status: hermes_telegram_api::TelegramAuthorizationStatus,
+    ) {
+        if self.authorization_status.as_ref() == Some(&status) {
+            return;
+        }
+        self.authorization_status = Some(status);
+        self.authorization_status_revision = self.authorization_status_revision.saturating_add(1);
+    }
+
+    fn pending_authorization_status_changed(
+        &self,
+    ) -> Option<(hermes_telegram_api::TelegramAuthorizationStatus, u64)> {
+        if self.authorization_status_revision <= self.published_authorization_status_revision {
+            return None;
+        }
+        self.authorization_status
+            .clone()
+            .map(|status| (status, self.authorization_status_revision))
+    }
+
+    fn mark_authorization_status_published(&mut self, revision: u64) {
+        if revision == self.authorization_status_revision {
+            self.published_authorization_status_revision = revision;
+        }
     }
 
     pub fn serve_client_connection_durable(
@@ -199,7 +231,7 @@ impl TelegramProcessLoop {
         if self.composition.has_pending_authorization() {
             let event = self.composition.poll_authorization(timeout)?;
             if let Some(event) = &event {
-                self.authorization_status = Some(authorization_status(event));
+                self.update_authorization_status(authorization_status(event));
             }
             return Ok(event
                 .map(|value| TelegramProcessTick::Authorization(Some(value)))
@@ -240,7 +272,7 @@ impl TelegramProcessLoop {
                 .poll_authorization(timeout)
                 .map_err(TelegramDurableProcessError::Provider)?;
             if let Some(event) = &event {
-                self.authorization_status = Some(authorization_status(event));
+                self.update_authorization_status(authorization_status(event));
             }
             return Ok(event
                 .map(|value| TelegramProcessTick::Authorization(Some(value)))
@@ -527,6 +559,37 @@ pub fn serve_admitted_provider_loop(
             ))
         };
         poll.map_err(|error| format!("Telegram runtime provider loop failed: {error:?}"))?;
+        if let Some((status, revision)) = process.pending_authorization_status_changed() {
+            let admission = process
+                .composition()
+                .configured_admission()
+                .cloned()
+                .ok_or_else(|| "Telegram runtime admission is unavailable".to_owned())?;
+            let occurred_at_unix_millis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?
+                .as_millis()
+                .try_into()
+                .map_err(|_| "Telegram runtime clock is unavailable".to_owned())?;
+            let mut dispatcher = TelegramBusyControlDispatcher;
+            match crate::client_realtime::publish_authorization_status_changed_v1(
+                &mut control_channel,
+                &mut dispatcher,
+                &admission.logical_human_owner_id,
+                admission.runtime_generation,
+                revision,
+                occurred_at_unix_millis,
+                &status,
+            ) {
+                Ok(()) => process.mark_authorization_status_published(revision),
+                Err(crate::client_realtime::TelegramAuthorizationRealtimeErrorV1::Unavailable) => {}
+                Err(
+                    crate::client_realtime::TelegramAuthorizationRealtimeErrorV1::InvalidStatus,
+                ) => {
+                    return Err("Telegram authorization realtime status is invalid".to_owned());
+                }
+            }
+        }
         if process.durable_restore_required() && process.composition().has_runtime() {
             let runtime = process
                 .composition_mut()

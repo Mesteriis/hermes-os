@@ -15,9 +15,10 @@ use hermes_runtime_protocol::v1::{
     VaultTargetScopeV1, capability_request_v1::Request,
 };
 use hermes_telegram_api::client_contract::{
-    TELEGRAM_CLIENT_CONTRACT_MAJOR, TELEGRAM_CLIENT_CONTRACT_REVISION,
-    TELEGRAM_CLIENT_DESCRIPTOR_SET_V1, TELEGRAM_MODULE_ID, TELEGRAM_OWNER_ID,
-    TelegramClientContractV1,
+    TELEGRAM_AUTHORIZATION_REALTIME_CAPABILITY_ID_V1,
+    TELEGRAM_AUTHORIZATION_STATUS_CHANGED_CONTRACT_NAME_V1, TELEGRAM_CLIENT_CONTRACT_MAJOR,
+    TELEGRAM_CLIENT_CONTRACT_REVISION, TELEGRAM_CLIENT_DESCRIPTOR_SET_V1, TELEGRAM_MODULE_ID,
+    TELEGRAM_OWNER_ID, TelegramClientContractV1,
 };
 use hermes_telegram_automation_api::contract::{
     TELEGRAM_AUTOMATION_CONTRACT_MAJOR, TELEGRAM_AUTOMATION_CONTRACT_REVISION,
@@ -68,6 +69,7 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
             TELEGRAM_API_HASH_PURPOSE_ID,
             VaultSecretClassV1::ProviderCredential,
         ),
+        telegram_authorization_realtime_capability_v1(),
         telegram_client_capability_v1(TelegramClientContractV1::Authorization),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Command),
         telegram_automation_client_capability_v1(TelegramAutomationContractV1::Query),
@@ -92,6 +94,27 @@ pub fn telegram_admission_capabilities_v1() -> Vec<CapabilityDescriptorV1> {
         ),
         telegram_storage_capability_v1(),
     ]
+}
+
+fn telegram_authorization_realtime_capability_v1() -> CapabilityDescriptorV1 {
+    CapabilityDescriptorV1 {
+        capability_id: TELEGRAM_AUTHORIZATION_REALTIME_CAPABILITY_ID_V1.to_owned(),
+        capability_revision: 1,
+        criticality: CapabilityCriticalityV1::Required as i32,
+        provides: vec![ProvidedSurfaceV1 {
+            kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+            contract: Some(ContractReferenceV1 {
+                owner: TELEGRAM_OWNER_ID.to_owned(),
+                name: TELEGRAM_AUTHORIZATION_STATUS_CHANGED_CONTRACT_NAME_V1.to_owned(),
+                major: TELEGRAM_CLIENT_CONTRACT_MAJOR,
+                revision: TELEGRAM_CLIENT_CONTRACT_REVISION,
+                schema_sha256: Sha256::digest(TELEGRAM_CLIENT_DESCRIPTOR_SET_V1).to_vec(),
+            }),
+            client_rpc_route: None,
+            client_blob_route: None,
+        }],
+        ..Default::default()
+    }
 }
 
 fn telegram_call_evidence_publish_capability_v1() -> CapabilityDescriptorV1 {
@@ -336,7 +359,7 @@ pub fn telegram_module_descriptor_v1(build_id: &str) -> ModuleDescriptorV1 {
     let settings_schema = telegram_settings_schema_bytes_v1();
     ModuleDescriptorV1 {
         descriptor_major: 1,
-        descriptor_revision: 5,
+        descriptor_revision: 6,
         module_id: TELEGRAM_MODULE_ID.to_owned(),
         owner_id: TELEGRAM_OWNER_ID.to_owned(),
         module_kind: ModuleKindV1::Integration as i32,
@@ -400,6 +423,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 TELEGRAM_API_HASH_PROVISIONING_CAPABILITY_ID,
+                "telegram.authorization.realtime.v1",
                 "telegram.authorization.v1",
                 "telegram.automation.command.v1",
                 "telegram.automation.query.v1",
@@ -432,14 +456,24 @@ mod tests {
             TelegramClientContractV1::ALL.len()
                 + TelegramAutomationContractV1::ALL.len()
                 + TelegramCallsContractV1::ALL.len()
+                + 1
         );
         assert!(descriptor.capabilities.iter().any(|capability| {
             capability.capability_id == TelegramCallsContractV1::Command.capability_id()
         }));
+        assert_eq!(
+            client_surfaces
+                .iter()
+                .filter(|surface| surface.kind == ProvidedSurfaceKindV1::ClientRealtime as i32)
+                .count(),
+            1
+        );
         assert!(client_surfaces.iter().all(|surface| {
-            surface.kind == ProvidedSurfaceKindV1::ClientRpc as i32
-                && surface.contract.is_some()
-                && surface.client_rpc_route.is_some()
+            surface.contract.is_some()
+                && ((surface.kind == ProvidedSurfaceKindV1::ClientRpc as i32
+                    && surface.client_rpc_route.is_some())
+                    || (surface.kind == ProvidedSurfaceKindV1::ClientRealtime as i32
+                        && surface.client_rpc_route.is_none()))
         }));
 
         let runtime = descriptor

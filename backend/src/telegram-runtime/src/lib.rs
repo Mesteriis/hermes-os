@@ -10,6 +10,7 @@ mod calls_backfill;
 pub mod calls_client_port;
 mod calls_execution;
 pub mod client_port;
+mod client_realtime;
 pub mod client_transport;
 pub mod communications_outbox;
 mod configuration_client_port;
@@ -1096,6 +1097,11 @@ impl TelegramRuntimeComposition {
         self.runtime
             .as_ref()
             .and_then(|runtime| runtime.admission.as_ref())
+    }
+
+    #[must_use]
+    pub fn configured_admission(&self) -> Option<&TelegramRuntimeAdmission> {
+        self.admission.as_ref()
     }
 
     pub fn begin_runtime_reconfiguration(

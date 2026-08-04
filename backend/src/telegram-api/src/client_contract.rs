@@ -6,6 +6,10 @@ pub const TELEGRAM_CLIENT_CONTRACT_MAJOR: u32 = 1;
 pub const TELEGRAM_CLIENT_CONTRACT_REVISION: u32 = 6;
 pub const TELEGRAM_MODULE_ID: &str = "hermes-telegram-runtime";
 pub const TELEGRAM_OWNER_ID: &str = "telegram";
+pub const TELEGRAM_AUTHORIZATION_REALTIME_CAPABILITY_ID_V1: &str =
+    "telegram.authorization.realtime.v1";
+pub const TELEGRAM_AUTHORIZATION_STATUS_CHANGED_CONTRACT_NAME_V1: &str =
+    "telegram.authorization.status_changed.v1";
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum TelegramClientContractV1 {
