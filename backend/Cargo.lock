@@ -3772,6 +3772,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-desktop-call-recording-persistence"
+version = "0.1.0"
+dependencies = [
+ "hermes-desktop-call-recording-core",
+ "hermes-storage-protocol",
+ "sha2 0.11.0",
+ "sqlx",
+]
+
+[[package]]
 name = "hermes-development-assembly"
 version = "0.1.0"
 dependencies = [

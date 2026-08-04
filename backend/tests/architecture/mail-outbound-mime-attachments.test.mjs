@@ -132,7 +132,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
 
   assert.equal(
     policy.implementation.currentSlice,
-    'desktop_call_recording_contract_core_v1',
+    'desktop_call_recording_persistence_v1',
   );
   assert.deepEqual(inventory.domains, [
     'communications',
@@ -184,6 +184,7 @@ test('Mail outbound attachments keep provider delivery contracts as separate int
       'hermes-mail-carddav',
       'hermes-desktop-call-recording-api',
       'hermes-desktop-call-recording-core',
+      'hermes-desktop-call-recording-persistence',
     ],
   );
   assert.deepEqual(

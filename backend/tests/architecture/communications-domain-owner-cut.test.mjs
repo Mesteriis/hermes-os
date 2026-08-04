@@ -58,7 +58,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
 
   assert.equal(
     policy.implementation.currentSlice,
-    'desktop_call_recording_contract_core_v1',
+    'desktop_call_recording_persistence_v1',
   );
   assert.deepEqual(policy.implementation.ownerInventory, {
     domains: ['communications', 'contacts', 'knowledge', 'review', 'tasks'],
@@ -322,6 +322,7 @@ test('Communications remains isolated after Knowledge owner admission', async ()
       'hermes-mail-carddav',
       'hermes-desktop-call-recording-api',
       'hermes-desktop-call-recording-core',
+      'hermes-desktop-call-recording-persistence',
     ],
     'Mail admission plus provider delivery contracts must remain exact integration build units',
   );

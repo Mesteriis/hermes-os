@@ -330,7 +330,7 @@ test('mail contacts sync agreement keeps integration workflow and domain separat
   assert.match(adr, /periodic polling[\s\S]*forbidden/i);
   assert.equal(
     policy.implementation.currentSlice,
-    'desktop_call_recording_contract_core_v1',
+    'desktop_call_recording_persistence_v1',
   );
   assert(policy.implementation.ownerInventory.domains.includes('contacts'));
   assert(
@@ -643,7 +643,7 @@ test('Mail runtime executes reverse sync through exact event Blob and provider b
   assert.match(main, /process_next_mail_address_book_upsert_v1/);
   assert.equal(
     policy.implementation.currentSlice,
-    'desktop_call_recording_contract_core_v1',
+    'desktop_call_recording_persistence_v1',
   );
   assert(
     policy.implementation.ownerInventory.businessCapabilities.includes(

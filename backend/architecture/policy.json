@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "desktop_call_recording_contract_core_v1",
+    "currentSlice": "desktop_call_recording_persistence_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1596,6 +1596,12 @@
         "role": "workflow",
         "owner": "call_transcription",
         "surface": "contract"
+      },
+      {
+        "name": "hermes-desktop-call-recording-persistence",
+        "role": "integration",
+        "owner": "desktop_call_recording",
+        "surface": "persistence"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5250,6 +5256,16 @@
       "hermes-desktop-call-recording-core": [
         {
           "name": "hermes-desktop-call-recording-api",
+          "kind": "normal"
+        }
+      ],
+      "hermes-desktop-call-recording-persistence": [
+        {
+          "name": "hermes-desktop-call-recording-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ],
@@ -13024,6 +13040,28 @@
           "features": []
         }
       ],
+      "hermes-desktop-call-recording-persistence": [
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "sqlx",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.9.0",
+          "defaultFeatures": false,
+          "features": [
+            "postgres",
+            "runtime-tokio",
+            "tls-rustls-ring"
+          ]
+        }
+      ],
       "hermes-call-transcription-ingress": [
         {
           "name": "prost",
@@ -14176,6 +14214,10 @@
         "customBuildAllowed": true
       },
       "hermes-desktop-call-recording-core": {
+        "primaryKind": "lib",
+        "customBuildAllowed": false
+      },
+      "hermes-desktop-call-recording-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
       },

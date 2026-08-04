@@ -130,7 +130,7 @@ pub fn validate_canonical_wav_v1(
             .map_err(|_| RecordingCoreErrorV1::InvalidWav)?,
     ) as usize;
     if declared_data == 0
-        || declared_data % 2 != 0
+        || !declared_data.is_multiple_of(2)
         || declared_data + WAV_HEADER_BYTES_V1 != bytes.len()
     {
         return Err(RecordingCoreErrorV1::InvalidWav);

@@ -69,3 +69,44 @@ test('recording ready event is target-owned and keeps audio outside durable enve
   }
   assert.doesNotMatch(proto, /audio_bytes|filesystem_path|provider_id|device_id|participant/);
 });
+
+test('recording persistence owns lifecycle leases and exact outbox without private capture bytes', async () => {
+  const [policySource, manifest, migration, repository] = await Promise.all([
+    read('backend/architecture/policy.json'),
+    read('backend/src/desktop-call-recording-persistence/Cargo.toml'),
+    read('backend/src/desktop-call-recording-persistence/migrations/0001_desktop_call_recording.sql'),
+    read('backend/src/desktop-call-recording-persistence/src/repository.rs'),
+  ]);
+  const policy = JSON.parse(policySource);
+  assert.deepEqual(
+    policy.implementation.productionPackages.find(
+      ({ name }) => name === 'hermes-desktop-call-recording-persistence',
+    ),
+    {
+      name: 'hermes-desktop-call-recording-persistence',
+      role: 'integration',
+      owner: 'desktop_call_recording',
+      surface: 'persistence',
+    },
+  );
+  assert.match(manifest, /hermes-desktop-call-recording-core/);
+  assert.doesNotMatch(manifest, /communications|call-transcription/);
+  for (const required of [
+    'hermes_data.desktop_call_recording_runs',
+    'hermes_data.desktop_call_recording_host_commands',
+    'hermes_data.desktop_call_recording_outbox',
+    'hermes_data.desktop_call_recording_realtime',
+  ]) {
+    assert.match(migration, new RegExp(required.replaceAll('.', '\\.')));
+  }
+  for (const source of [migration, repository]) {
+    assert.doesNotMatch(
+      source,
+      /audio_bytes|canonical_wav|filesystem_path|audio_input_label|consent_body|custody_transfer_source_proof/,
+    );
+  }
+  assert.match(repository, /FOR UPDATE SKIP LOCKED/);
+  assert.match(repository, /exact_envelope_bytes/);
+  assert.match(repository, /accept_or_replay/);
+  assert.match(repository, /recording_revision=\$1[\s\S]*run_state=4/);
+});
