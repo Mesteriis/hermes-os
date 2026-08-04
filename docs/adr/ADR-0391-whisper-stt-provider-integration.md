@@ -4,9 +4,11 @@
 
 Дата: 2026-08-04
 
-Состояние реализации: запланировано этим ADR. Наличие contract/process/runtime
-packages не переводит `whisper_stt_provider_v1` в `implemented` без pinned
-native release, model bytes, signed managed admission и real-audio conformance.
+Состояние реализации: реализовано. `whisper_stt_provider_v1` имеет отдельные
+contract/core/process/persistence/runtime/assembly units, pinned native release
+и model bytes, signed managed admission, real-audio conformance и restart/replay
+evidence. `speech_to_text_engine_v1` реализован отдельно и не импортирует
+Whisper implementation.
 
 Уточняет:
 

@@ -229,6 +229,8 @@ CARGO_TARGET_DIR="$cargo_target_dir" cargo +1.97.0 build --locked \
 	--package hermes-attachment-translation-assembly \
 	--package hermes-ollama-ai-runtime \
 	--package hermes-ollama-ai-assembly \
+	--package hermes-speech-to-text-runtime \
+	--package hermes-speech-to-text-assembly \
 	--package hermes-whisper-stt-runtime \
 	--package hermes-whisper-stt-assembly \
 	--package hermes-mail-runtime \
@@ -302,6 +304,7 @@ attachment_preview_assembly="$assembly_root/attachment-preview"
 attachment_preview_evidence_replay_assembly="$assembly_root/attachment-preview-evidence-replay"
 attachment_translation_assembly="$assembly_root/attachment-translation"
 ollama_ai_assembly="$assembly_root/ollama-ai"
+speech_to_text_assembly="$assembly_root/speech-to-text"
 whisper_stt_assembly="$assembly_root/whisper-stt"
 mail_assembly="$assembly_root/mail"
 telegram_assembly="$assembly_root/telegram"
@@ -419,6 +422,10 @@ zulip_assembly="$assembly_root/zulip"
 	--build-id "$build_id" \
 	--output-dir "$ollama_ai_assembly" \
 	--runtime "$cargo_target_dir/debug/hermes-ollama-ai-runtime"
+"$cargo_target_dir/debug/hermes-speech-to-text-assembly" \
+	--build-id "$build_id" \
+	--output-dir "$speech_to_text_assembly" \
+	--runtime "$cargo_target_dir/debug/hermes-speech-to-text-runtime"
 "$cargo_target_dir/debug/hermes-whisper-stt-assembly" \
 	--output "$whisper_stt_assembly" \
 	--build-id "$build_id" \
@@ -499,6 +506,7 @@ node "$backend_root/scripts/build-distribution-release.mjs" \
 	--artifact-fragment "$attachment_preview_evidence_replay_assembly/attachment_preview_evidence_replay.release-artifacts.json" \
 	--artifact-fragment "$attachment_translation_assembly/attachment_translation.release-artifacts.json" \
 	--artifact-fragment "$ollama_ai_assembly/ollama-ai.release-artifacts.json" \
+	--artifact-fragment "$speech_to_text_assembly/speech-to-text.release-artifacts.json" \
 	--artifact-fragment "$whisper_stt_assembly/whisper-stt.release-artifacts.json" \
 	--artifact-fragment "$mail_assembly/mail.release-artifacts.json" \
 	--artifact-fragment "$telegram_assembly/telegram.release-artifacts.json" \

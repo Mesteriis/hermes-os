@@ -253,10 +253,10 @@ impl VaultService {
                         eprintln!("developer_vault_recover_malformed_record");
                     }
                     let _ = self.store.delete_secret(&scope, now_unix_seconds);
-                } else if error.is_record_not_found() {
-                    if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
-                        eprintln!("developer_vault_missing_record");
-                    }
+                } else if error.is_record_not_found()
+                    && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some()
+                {
+                    eprintln!("developer_vault_missing_record");
                 }
                 if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
                     eprintln!("developer_vault_resolve_runtime_credential_error={error:?}");

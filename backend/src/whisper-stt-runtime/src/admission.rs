@@ -81,6 +81,7 @@ fn blob_capability() -> CapabilityDescriptorV1 {
                 max_bytes: 520 * 1024 * 1024,
                 custody_scope_id: "whisper_stt.private_content.v1".to_owned(),
                 allowed_operations: vec![
+                    BlobQuotaOperationV1::CustodyTransfer as i32,
                     BlobQuotaOperationV1::ReadRange as i32,
                     BlobQuotaOperationV1::Write as i32,
                 ],
@@ -147,5 +148,21 @@ mod tests {
         assert_eq!(descriptor.module_kind, ModuleKindV1::Integration as i32);
         assert_eq!(descriptor.owner_id, WHISPER_STT_OWNER_ID_V1);
         assert_eq!(descriptor.capabilities.len(), 4);
+        let blob = descriptor.capabilities[0].requests[0]
+            .request
+            .as_ref()
+            .and_then(|request| match request {
+                Request::BlobQuota(request) => Some(request),
+                _ => None,
+            })
+            .expect("Whisper Blob quota");
+        assert_eq!(
+            blob.allowed_operations,
+            vec![
+                BlobQuotaOperationV1::CustodyTransfer as i32,
+                BlobQuotaOperationV1::ReadRange as i32,
+                BlobQuotaOperationV1::Write as i32,
+            ]
+        );
     }
 }

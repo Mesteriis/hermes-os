@@ -4,18 +4,18 @@
 
 Дата: 2026-08-03
 
-Состояние реализации: запланировано этим ADR. `call_transcription_v1` остаётся
-`planned`, пока не реализованы и не доказаны все recording, STT provider,
-workflow, managed-runtime и client Blob gates из раздела «Проверка».
+Состояние реализации: реализовано частично. `call_transcription_v1` остаётся
+`planned`, пока не реализованы и не доказаны recording producer, workflow и
+client Blob gates из раздела «Проверка».
 Компилируемый workflow, который передаёт текст Communications в LLM или
 возвращает summary вместо transcript, не является реализацией этого ADR.
 
-По состоянию на 2026-08-04 реализованы contract/core/persistence и staged
-runtime/assembly units Speech-to-Text engine. Runtime использует exact managed
-request RPC, provider-neutral Blob redelegation и owner-local PostgreSQL, но
-`speech_to_text_engine_v1` остаётся `planned` до отдельного Whisper integration,
-signed managed admission и live recovery evidence. Наличие компилируемого
-runtime/assembly само по себе production gate не открывает.
+По состоянию на 2026-08-04 `speech_to_text_engine_v1` и
+`whisper_stt_provider_v1` реализованы и допущены отдельно. Доказаны exact managed
+request RPC, provider-neutral Blob custody chain, owner-local PostgreSQL, pinned
+native/model resources, signed managed admission, real-audio conformance и
+restart/replay. Это не открывает `desktop_call_recording_v1` или
+`call_transcription_v1`.
 
 Уточняет:
 

@@ -180,9 +180,16 @@ test('Whisper native release build pins source model toolchain and reproducibili
   );
 });
 
-test('development release composes the exact Whisper assembly fragment', async () => {
+test('development release composes the exact Speech-to-Text and Whisper assembly fragments', async () => {
   const release = await read('backend/scripts/materialize-dev-release.sh');
 
+  assert.match(release, /--package hermes-speech-to-text-runtime/);
+  assert.match(release, /--package hermes-speech-to-text-assembly/);
+  assert.match(release, /debug\/hermes-speech-to-text-assembly/);
+  assert.match(
+    release,
+    /--artifact-fragment "\$speech_to_text_assembly\/speech-to-text\.release-artifacts\.json"/,
+  );
   assert.match(release, /HERMES_DEV_WHISPER_STT_ROOT/);
   assert.match(release, /build-whisper-stt-macos\.sh/);
   assert.match(release, /--package hermes-whisper-stt-runtime/);
@@ -196,7 +203,45 @@ test('development release composes the exact Whisper assembly fragment', async (
   );
 });
 
-test('Whisper production gate remains closed until managed native conformance exists', async () => {
+test('Speech-to-Text routes managed Whisper through authenticated custody boundaries', async () => {
+  const [root, engineSetup, providerSetup, flow, blob, runner] = await Promise.all([
+    read('backend/tests/support/kernel-recovery/src/tests/managed_storage_vault_docker.rs'),
+    read('backend/tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/speech_to_text_managed_setup.rs'),
+    read('backend/tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whisper_stt_managed_setup.rs'),
+    read('backend/tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whisper_stt_managed_flow.rs'),
+    read('backend/tests/support/kernel-recovery/src/tests/managed_storage_vault_docker/whisper_stt_blob_fixture.rs'),
+    read('backend/scripts/test-authenticated-storage.mjs'),
+  ]);
+
+  assert.match(root, /mod whisper_stt_managed_flow/);
+  assert.match(root, /mod speech_to_text_managed_setup/);
+  assert.match(engineSetup, /ModuleRequestRouteHandlerV1/);
+  assert.match(engineSetup, /start_reserved_engine/);
+  assert.match(engineSetup, /restart_speech_to_text_runtime_v1/);
+  assert.match(providerSetup, /install_with_runtime_resources/);
+  assert.match(providerSetup, /SignedRuntimeResource::native_executable/);
+  assert.match(providerSetup, /SignedRuntimeResource::read_only_data/);
+  assert.match(providerSetup, /issue_managed/);
+  assert.match(providerSetup, /restart_whisper_stt_runtime_v1/);
+  assert.match(flow, /start_from_kernel/);
+  assert.match(flow, /SpeechTranscriptDocumentV1::decode/);
+  assert.match(flow, /validate_speech_transcript_document_v1/);
+  assert.match(flow, /restart_whisper_stt_runtime_v1/);
+  assert.match(flow, /restart_speech_to_text_runtime_v1/);
+  assert.match(flow, /speech_to_text_contract_reference_v1/);
+  assert.doesNotMatch(flow, /speech_to_text_provider_contract_reference_v1/);
+  assert.match(flow, /wrong_owner/);
+  assert.match(flow, /conflicting/);
+  assert.match(blob, /custody_target_owner_id: target\.owner_id/);
+  assert.match(blob, /custody_source_proof: blob\.custody_transfer_source_proof/);
+  assert.match(runner, /managed_speech_to_text_routes_whisper_private_blob_and_replays_after_restart/);
+  assert.match(runner, /HERMES_SPEECH_TO_TEXT_RUNTIME_BIN/);
+  assert.match(runner, /HERMES_WHISPER_STT_RUNNER/);
+  assert.match(runner, /HERMES_WHISPER_STT_MODEL/);
+  assert.match(runner, /HERMES_WHISPER_STT_TEST_WAV/);
+});
+
+test('Whisper provider and Speech-to-Text engine gates require completed managed conformance', async () => {
   const inventory = JSON.parse(
     await read('backend/architecture/communications-settings-reconstruction.json'),
   );
@@ -204,6 +249,8 @@ test('Whisper production gate remains closed until managed native conformance ex
   const engine = inventory.slices.find((slice) => slice.gate === 'speech_to_text_engine_v1');
   assert.equal(provider.role, 'integration');
   assert.equal(provider.owner, 'whisper_stt');
-  assert.equal(provider.state, 'planned');
-  assert.equal(engine.state, 'planned');
+  assert.equal(provider.state, 'implemented');
+  assert.equal(engine.role, 'engine');
+  assert.equal(engine.owner, 'speech_to_text');
+  assert.equal(engine.state, 'implemented');
 });

@@ -1,9 +1,10 @@
 use std::os::unix::net::UnixStream;
 
 use hermes_blob_client::{
-    BlobClientError, ManagedBlobCustodyDelegationRequestV1, ManagedBlobCustodyTargetV1,
+    BlobClientError, BlobDataClient, ManagedBlobCustodyDelegationRequestV1,
+    ManagedBlobCustodyTargetV1, ManagedBlobCustodyTransferRequestV1,
     ManagedBlobResolvedProviderCustodyDelegationRequestV1,
-    request_managed_blob_custody_delegation_v2,
+    request_managed_blob_custody_delegation_v2, request_managed_blob_custody_transfer_v2,
     request_managed_blob_resolved_provider_custody_delegation_v1,
 };
 use hermes_runtime_protocol::{
@@ -19,8 +20,8 @@ use hermes_runtime_protocol::{
     },
 };
 use hermes_speech_to_text_api::{
-    speech_to_text_provider_contract_reference_v1, validate_speech_to_text_request_v1,
-    validate_speech_to_text_result_v1,
+    seal_speech_to_text_request_v1, speech_to_text_provider_contract_reference_v1,
+    validate_speech_to_text_request_v1, validate_speech_to_text_result_v1,
     wire::{SpeechToTextRequestV1, SpeechToTextResultV1, SpeechToTextTerminalStatusV1},
 };
 use prost::Message;
@@ -36,6 +37,42 @@ pub struct ManagedSpeechToTextExecutionPortsV1<'a> {
     pub dispatcher: &'a mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
 }
 
+struct CustodyMaterializationV1<'a> {
+    source_reference_id: &'a [u8; 16],
+    declared_size: u64,
+    receipt_sha256: &'a [u8; 32],
+    custody_source_proof: &'a [u8],
+    evidence_id: &'a [u8; 16],
+    evidence_envelope_sha256: &'a [u8; 32],
+}
+
+impl ManagedSpeechToTextExecutionPortsV1<'_> {
+    fn materialize_custody(
+        &mut self,
+        request: CustodyMaterializationV1<'_>,
+    ) -> Result<[u8; 16], SpeechToTextPortErrorV1> {
+        let transfer = request_managed_blob_custody_transfer_v2(
+            self.control_channel,
+            self.dispatcher,
+            ManagedBlobCustodyTransferRequestV1 {
+                capability_id: SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1,
+                source_reference_id: request.source_reference_id,
+                declared_size: request.declared_size,
+                receipt_sha256: request.receipt_sha256,
+                custody_source_proof: request.custody_source_proof,
+                evidence_id: request.evidence_id,
+                evidence_envelope_sha256: request.evidence_envelope_sha256,
+            },
+        )
+        .map_err(blob_error)?;
+        let target_reference_id = id16(&transfer.grant.target_reference_id)?;
+        BlobDataClient::new(transfer.data_socket_path)
+            .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
+            .map_err(blob_error)?;
+        Ok(target_reference_id)
+    }
+}
+
 impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
     fn transcribe(
         &mut self,
@@ -44,6 +81,7 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
     ) -> Result<SpeechToTextResultV1, SpeechToTextPortErrorV1> {
         validate_speech_to_text_request_v1(&request)
             .map_err(|_| SpeechToTextPortErrorV1::Rejected)?;
+        let caller_request = request.clone();
         let request_id = id16(&request.request_id)?;
         let request_digest = id32(&request.request_digest)?;
         let source = request
@@ -51,6 +89,16 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
             .as_mut()
             .ok_or(SpeechToTextPortErrorV1::Rejected)?;
         let source_reference_id = id16(&source.reference_id)?;
+        let source_sha256 = id32(&source.sha256)?;
+        let predecessor_proof = source.custody_transfer_source_proof.clone();
+        let engine_reference_id = self.materialize_custody(CustodyMaterializationV1 {
+            source_reference_id: &source_reference_id,
+            declared_size: source.declared_bytes,
+            receipt_sha256: &source_sha256,
+            custody_source_proof: &predecessor_proof,
+            evidence_id: &request_id,
+            evidence_envelope_sha256: &request_digest,
+        })?;
         let provider_contract = speech_to_text_provider_contract_reference_v1();
         let audio_delegation_id =
             operation_id(b"speech-audio-provider", &request_id, &request_digest);
@@ -60,15 +108,19 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
             ManagedBlobResolvedProviderCustodyDelegationRequestV1 {
                 request_id: &audio_delegation_id,
                 capability_id: SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1,
-                current_reference_id: &source_reference_id,
-                predecessor_custody_source_proof: &source.custody_transfer_source_proof,
+                current_reference_id: &engine_reference_id,
+                predecessor_custody_source_proof: &predecessor_proof,
                 predecessor_evidence_id: &request_id,
                 predecessor_evidence_envelope_sha256: &request_digest,
                 target_request_contract: &provider_contract,
             },
         )
         .map_err(blob_error)?;
+        source.reference_id = engine_reference_id.to_vec();
         source.custody_transfer_source_proof = audio_delegation.custody_transfer_source_proof;
+        request = seal_speech_to_text_request_v1(request)
+            .map_err(|_| SpeechToTextPortErrorV1::Rejected)?;
+        let provider_request_digest = id32(&request.request_digest)?;
 
         let routed = ManagedRuntimeModuleRequestRequestV1 {
             request_id: request_id.to_vec(),
@@ -99,14 +151,20 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
         if response.request_id != request_id {
             return Err(SpeechToTextPortErrorV1::Unavailable);
         }
-        if !response.error_code.is_empty() {
-            return Err(SpeechToTextPortErrorV1::Rejected);
+        match response.error_code.as_str() {
+            "" => {}
+            "REJECTED" => return Err(SpeechToTextPortErrorV1::Rejected),
+            "UNAVAILABLE" => return Err(SpeechToTextPortErrorV1::Unavailable),
+            _ => return Err(SpeechToTextPortErrorV1::Unavailable),
         }
         let mut result = SpeechToTextResultV1::decode(response.response_payload.as_slice())
             .map_err(|_| SpeechToTextPortErrorV1::Rejected)?;
         validate_speech_to_text_result_v1(&request, &result)
             .map_err(|_| SpeechToTextPortErrorV1::Rejected)?;
         if result.terminal_status == SpeechToTextTerminalStatusV1::Rejected as i32 {
+            result.request_digest = caller_request.request_digest.clone();
+            validate_speech_to_text_result_v1(&caller_request, &result)
+                .map_err(|_| SpeechToTextPortErrorV1::Rejected)?;
             return Ok(result);
         }
 
@@ -114,7 +172,18 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
             .transcript
             .as_mut()
             .ok_or(SpeechToTextPortErrorV1::Rejected)?;
-        let transcript_reference_id = id16(&transcript.reference_id)?;
+        let provider_transcript_reference_id = id16(&transcript.reference_id)?;
+        let transcript_sha256 = id32(&transcript.sha256)?;
+        let predecessor_proof = transcript.custody_transfer_source_proof.clone();
+        let engine_transcript_reference_id =
+            self.materialize_custody(CustodyMaterializationV1 {
+                source_reference_id: &provider_transcript_reference_id,
+                declared_size: transcript.declared_bytes,
+                receipt_sha256: &transcript_sha256,
+                custody_source_proof: &predecessor_proof,
+                evidence_id: &request_id,
+                evidence_envelope_sha256: &provider_request_digest,
+            })?;
         let transcript_delegation_id =
             operation_id(b"speech-transcript-caller", &request_id, &request_digest);
         let transcript_delegation = request_managed_blob_custody_delegation_v2(
@@ -123,10 +192,10 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
             ManagedBlobCustodyDelegationRequestV1 {
                 request_id: &transcript_delegation_id,
                 capability_id: SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1,
-                current_reference_id: &transcript_reference_id,
-                predecessor_custody_source_proof: &transcript.custody_transfer_source_proof,
+                current_reference_id: &engine_transcript_reference_id,
+                predecessor_custody_source_proof: &predecessor_proof,
                 predecessor_evidence_id: &request_id,
-                predecessor_evidence_envelope_sha256: &request_digest,
+                predecessor_evidence_envelope_sha256: &provider_request_digest,
                 target: ManagedBlobCustodyTargetV1 {
                     owner_id: &response_target.owner_id,
                     module_id: &response_target.module_id,
@@ -135,9 +204,11 @@ impl SpeechToTextExecutionPortsV1 for ManagedSpeechToTextExecutionPortsV1<'_> {
             },
         )
         .map_err(blob_error)?;
+        transcript.reference_id = engine_transcript_reference_id.to_vec();
         transcript.custody_transfer_source_proof =
             transcript_delegation.custody_transfer_source_proof;
-        validate_speech_to_text_result_v1(&request, &result)
+        result.request_digest = caller_request.request_digest.clone();
+        validate_speech_to_text_result_v1(&caller_request, &result)
             .map_err(|_| SpeechToTextPortErrorV1::Rejected)?;
         Ok(result)
     }

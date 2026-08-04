@@ -780,3 +780,9 @@ canonical transcript является private Blob document, whisper.cpp executa
 model приходят только как pinned managed artifacts, а process/runtime/storage и
 assembly остаются отдельными build units без Communications или workflow
 dependencies.
+
+ADR-0392 делает original-write Blob custody transfer replay-stable: opaque
+target reference выводится из подписанных content/evidence/source/target
+semantics, но не из volatile proof time/signature/runtime-fence bytes. Live
+authority продолжает проверяться на каждом transfer, а direct cross-owner read
+и persistence custody proofs остаются запрещены.

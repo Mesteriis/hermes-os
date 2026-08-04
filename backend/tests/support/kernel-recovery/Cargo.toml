@@ -100,6 +100,12 @@ hermes-ai-inference-runtime = { path = "../../../src/ai-inference-runtime" }
 hermes-ollama-ai-api = { path = "../../../src/ollama-ai-api" }
 hermes-ollama-ai-persistence = { path = "../../../src/ollama-ai-persistence" }
 hermes-ollama-ai-runtime = { path = "../../../src/ollama-ai-runtime" }
+hermes-speech-to-text-api = { path = "../../../src/speech-to-text-api" }
+hermes-speech-to-text-persistence = { path = "../../../src/speech-to-text-persistence" }
+hermes-speech-to-text-runtime = { path = "../../../src/speech-to-text-runtime" }
+hermes-speech-transcript-artifact = { path = "../../../src/speech-transcript-artifact" }
+hermes-whisper-stt-persistence = { path = "../../../src/whisper-stt-persistence" }
+hermes-whisper-stt-runtime = { path = "../../../src/whisper-stt-runtime" }
 hermes-review-attention-api = { path = "../../../src/review-attention-api" }
 hermes-review-attention-persistence = { path = "../../../src/review-attention-persistence" }
 hermes-review-attention-runtime = { path = "../../../src/review-attention-runtime" }

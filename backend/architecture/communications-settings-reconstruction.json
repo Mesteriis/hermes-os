@@ -816,7 +816,7 @@
       "gate": "speech_to_text_engine_v1",
       "role": "engine",
       "owner": "speech_to_text",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "blob_v1",
         "capability_routed_module_request_rpc_v1"
@@ -826,7 +826,7 @@
       "gate": "whisper_stt_provider_v1",
       "role": "integration",
       "owner": "whisper_stt",
-      "state": "planned",
+      "state": "implemented",
       "dependsOn": [
         "speech_to_text_engine_v1",
         "owner_module_settings_gateway_v1"

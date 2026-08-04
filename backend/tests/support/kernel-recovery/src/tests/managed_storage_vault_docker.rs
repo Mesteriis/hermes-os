@@ -258,12 +258,20 @@ mod ollama_ai_managed_setup;
 mod review_attention_managed_flow;
 #[path = "managed_storage_vault_docker/review_attention_managed_setup.rs"]
 mod review_attention_managed_setup;
+#[path = "managed_storage_vault_docker/speech_to_text_managed_setup.rs"]
+mod speech_to_text_managed_setup;
 #[path = "managed_storage_vault_docker/task_candidate_blob_negative.rs"]
 mod task_candidate_blob_negative;
 #[path = "managed_storage_vault_docker/task_candidate_gateway_flow.rs"]
 mod task_candidate_gateway_flow;
 #[path = "managed_storage_vault_docker/task_candidate_managed_flow.rs"]
 mod task_candidate_managed_flow;
+#[path = "managed_storage_vault_docker/whisper_stt_blob_fixture.rs"]
+mod whisper_stt_blob_fixture;
+#[path = "managed_storage_vault_docker/whisper_stt_managed_flow.rs"]
+mod whisper_stt_managed_flow;
+#[path = "managed_storage_vault_docker/whisper_stt_managed_setup.rs"]
+mod whisper_stt_managed_setup;
 use contacts_managed_setup::*;
 #[path = "managed_storage_vault_docker/task_candidate_managed_setup.rs"]
 mod task_candidate_managed_setup;
@@ -284,10 +292,13 @@ use note_candidate_managed_setup::*;
 use note_candidate_persistence_flow::*;
 use ollama_ai_managed_setup::*;
 use review_attention_managed_setup::*;
+use speech_to_text_managed_setup::*;
 use task_candidate_blob_negative::*;
 use task_candidate_gateway_flow::*;
 use task_candidate_managed_setup::*;
 use task_candidate_persistence_flow::*;
+use whisper_stt_blob_fixture::*;
+use whisper_stt_managed_setup::*;
 #[path = "managed_storage_vault_docker/call_evidence_managed_flow.rs"]
 mod call_evidence_managed_flow;
 #[path = "managed_storage_vault_docker/telegram_managed_flow.rs"]

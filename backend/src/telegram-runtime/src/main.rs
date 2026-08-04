@@ -96,14 +96,13 @@ where
             }
             "Telegram runtime admission was rejected".to_owned()
         })?;
-    process::serve_admitted_provider_loop(admitted, &runtime).map_err(|error| {
+    process::serve_admitted_provider_loop(admitted, &runtime).inspect_err(|error| {
         if std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some() {
             eprintln!(
                 "developer_telegram_provider_loop_error={}",
-                provider_loop_error_stage(&error)
+                provider_loop_error_stage(error)
             );
         }
-        error
     })
 }
 

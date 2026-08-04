@@ -1,7 +1,8 @@
 use std::{os::unix::net::UnixStream, time::Duration};
 
 use hermes_blob_client::{
-    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobSessionRequestV1,
+    BlobDataClient, ManagedBlobCustodyTargetV1, ManagedBlobCustodyTransferRequestV1,
+    ManagedBlobSessionRequestV1, request_managed_blob_custody_transfer_v2,
     request_managed_blob_session_v2,
 };
 use hermes_runtime_protocol::{
@@ -43,11 +44,14 @@ impl WhisperSttExecutionPortV1 for ManagedWhisperSttExecutionPortV1<'_> {
             .ok_or(WhisperSttPortErrorV1::UnsupportedAudio)?;
         let reference_id = id16(&source.reference_id)?;
         let source_sha256 = id32(&source.sha256)?;
-        let audio = read_exact(
+        let audio = materialize_and_read_exact(
             self.channel,
             &reference_id,
             source.declared_bytes,
             &source_sha256,
+            &source.custody_transfer_source_proof,
+            &id16(&plan.request.request_id)?,
+            &id32(&plan.request.request_digest)?,
         )?;
         let outcome = execute_whisper_stt_process_v1(self.process, plan, audio.as_slice())
             .map_err(process_error)?;
@@ -77,41 +81,41 @@ impl WhisperSttExecutionPortV1 for ManagedWhisperSttExecutionPortV1<'_> {
     }
 }
 
-fn read_exact(
+fn materialize_and_read_exact(
     channel: &mut ManagedControlChannelV2<UnixStream>,
-    reference_id: &[u8; 16],
+    source_reference_id: &[u8; 16],
     declared_size: u64,
     sha256: &[u8; 32],
+    custody_source_proof: &[u8],
+    evidence_id: &[u8; 16],
+    evidence_envelope_sha256: &[u8; 32],
 ) -> Result<Zeroizing<Vec<u8>>, WhisperSttPortErrorV1> {
     blocking(channel, |channel| {
         let mut dispatcher = RejectManagedControlRequestsV2;
-        let session = request_managed_blob_session_v2(
+        let transfer = request_managed_blob_custody_transfer_v2(
             channel,
             &mut dispatcher,
-            ManagedBlobSessionRequestV1 {
+            ManagedBlobCustodyTransferRequestV1 {
                 capability_id: WHISPER_STT_BLOB_CAPABILITY_ID_V1,
-                operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
-                reference_id,
+                source_reference_id,
                 declared_size,
-                backup_class: 1,
-                receipt_sha256: Some(sha256),
-                custody_target: None,
+                receipt_sha256: sha256,
+                custody_source_proof,
+                evidence_id,
+                evidence_envelope_sha256,
             },
         )
         .map_err(|_| WhisperSttPortErrorV1::Unavailable)?;
-        let bytes = Zeroizing::new(
-            BlobDataClient::new(session.data_socket_path)
-                .and_then(|client| {
-                    client.read_range(session.grant, session.channel_binding, 0, declared_size)
-                })
-                .map_err(|_| WhisperSttPortErrorV1::Unavailable)?,
-        );
-        if bytes.len() != usize::try_from(declared_size).unwrap_or(usize::MAX)
-            || Sha256::digest(bytes.as_slice()).as_slice() != sha256
-        {
-            return Err(WhisperSttPortErrorV1::UnsupportedAudio);
-        }
-        Ok(bytes)
+        let reference_id: [u8; 16] = transfer
+            .grant
+            .target_reference_id
+            .as_slice()
+            .try_into()
+            .map_err(|_| WhisperSttPortErrorV1::Unavailable)?;
+        BlobDataClient::new(transfer.data_socket_path)
+            .and_then(|client| client.custody_transfer(transfer.grant, transfer.channel_binding))
+            .map_err(|_| WhisperSttPortErrorV1::Unavailable)?;
+        read_owned_exact(channel, &reference_id, declared_size, sha256)
     })
 }
 
@@ -151,13 +155,49 @@ fn write_exact(
             client.write(session.grant, session.channel_binding, bytes.to_vec())
         });
         if write.is_err() {
-            let existing = read_exact(channel, reference_id, bytes.len() as u64, &sha256)?;
+            let existing = read_owned_exact(channel, reference_id, bytes.len() as u64, &sha256)?;
             if existing.as_slice() != bytes {
                 return Err(WhisperSttPortErrorV1::Uncertain);
             }
         }
         Ok(session.custody_transfer_source_proof)
     })
+}
+
+fn read_owned_exact(
+    channel: &mut ManagedControlChannelV2<UnixStream>,
+    reference_id: &[u8; 16],
+    declared_size: u64,
+    sha256: &[u8; 32],
+) -> Result<Zeroizing<Vec<u8>>, WhisperSttPortErrorV1> {
+    let mut dispatcher = RejectManagedControlRequestsV2;
+    let session = request_managed_blob_session_v2(
+        channel,
+        &mut dispatcher,
+        ManagedBlobSessionRequestV1 {
+            capability_id: WHISPER_STT_BLOB_CAPABILITY_ID_V1,
+            operation: BlobDataOperationV1::BlobDataOperationReadRangeV1,
+            reference_id,
+            declared_size,
+            backup_class: 1,
+            receipt_sha256: Some(sha256),
+            custody_target: None,
+        },
+    )
+    .map_err(|_| WhisperSttPortErrorV1::Unavailable)?;
+    let bytes = Zeroizing::new(
+        BlobDataClient::new(session.data_socket_path)
+            .and_then(|client| {
+                client.read_range(session.grant, session.channel_binding, 0, declared_size)
+            })
+            .map_err(|_| WhisperSttPortErrorV1::Unavailable)?,
+    );
+    if bytes.len() != usize::try_from(declared_size).unwrap_or(usize::MAX)
+        || Sha256::digest(bytes.as_slice()).as_slice() != sha256
+    {
+        return Err(WhisperSttPortErrorV1::UnsupportedAudio);
+    }
+    Ok(bytes)
 }
 
 fn transcript_reference_id(plan: &WhisperSttExecutionPlanV1) -> [u8; 16] {

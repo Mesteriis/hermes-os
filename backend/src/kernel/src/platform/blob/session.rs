@@ -242,7 +242,6 @@ impl ManagedRuntimeBlobSessionHandler for BlobSessionHandlerV1 {
         .map_err(|_| custody_delegation_denied())?;
         let expected_reference = transfer_target_reference(
             &predecessor,
-            &request.predecessor_custody_source_proof,
             &request.predecessor_evidence_id,
             &request.predecessor_evidence_envelope_sha256,
         );
@@ -361,7 +360,6 @@ impl BlobSessionHandlerV1 {
             .map_err(|_| "managed runtime Blob custody transfer is unavailable".to_owned())?;
         let target_reference_id = transfer_target_reference(
             &source,
-            &request.custody_source_proof,
             &request.evidence_id,
             &request.evidence_envelope_sha256,
         );
@@ -484,10 +482,22 @@ fn resolve_delegation_target(
             expectation,
             contract,
         )?;
+        let mut targets = catalog::resolve(store)?.into_iter().filter(|entry| {
+            entry.registration_id() == provider.registration.registration_id()
+                && entry.module_id() == provider.registration.module_id()
+                && entry.grant_epoch() == provider.registration.grant_epoch()
+                && entry.request().allows(ModuleBlobOperationV1::ReadRange)
+        });
+        let target = targets
+            .next()
+            .ok_or_else(|| "managed runtime Blob provider target is unavailable".to_owned())?;
+        if targets.next().is_some() {
+            return Err("managed runtime Blob provider target is ambiguous".to_owned());
+        }
         return Ok(ResolvedCustodyTargetV1 {
-            owner_id: provider.registration.owner_id().to_owned(),
-            module_id: provider.registration.module_id().to_owned(),
-            capability_id: provider.route.capability_id().to_owned(),
+            owner_id: target.request().owner_id().to_owned(),
+            module_id: target.module_id().to_owned(),
+            capability_id: target.capability_id().to_owned(),
         });
     }
     Ok(ResolvedCustodyTargetV1 {
@@ -547,7 +557,6 @@ pub(super) fn verify_custody_source_proof(
 
 fn transfer_target_reference(
     source: &BlobCustodySourceProofV1,
-    source_proof: &[u8],
     evidence_id: &[u8],
     envelope_hash: &[u8],
 ) -> [u8; 16] {
@@ -566,8 +575,21 @@ fn transfer_target_reference(
         digest.update(source.target_capability_id.as_bytes());
         digest.update([0]);
     } else {
-        digest.update(b"hermes.blob-custody-target-reference.v1\0");
-        digest.update(source_proof);
+        digest.update(b"hermes.blob-custody-target-reference.v3\0");
+        update_semantic_reference_field(&mut digest, &source.proof_kind.to_be_bytes());
+        update_semantic_reference_field(&mut digest, source.kernel_instance_id.as_bytes());
+        update_semantic_reference_field(&mut digest, source.owner_id.as_bytes());
+        update_semantic_reference_field(&mut digest, source.registration_id.as_bytes());
+        update_semantic_reference_field(&mut digest, source.capability_id.as_bytes());
+        update_semantic_reference_field(&mut digest, &source.reference_id);
+        update_semantic_reference_field(&mut digest, &source.declared_size.to_be_bytes());
+        update_semantic_reference_field(&mut digest, &source.receipt_sha256);
+        update_semantic_reference_field(&mut digest, &source.key_revision.to_be_bytes());
+        update_semantic_reference_field(&mut digest, &source.backup_class.to_be_bytes());
+        update_semantic_reference_field(&mut digest, source.custody_scope_id.as_bytes());
+        update_semantic_reference_field(&mut digest, source.target_owner_id.as_bytes());
+        update_semantic_reference_field(&mut digest, source.target_module_id.as_bytes());
+        update_semantic_reference_field(&mut digest, source.target_capability_id.as_bytes());
     }
     digest.update(evidence_id);
     digest.update(envelope_hash);
@@ -578,6 +600,11 @@ fn transfer_target_reference(
         reference_id[0] = 1;
     }
     reference_id
+}
+
+fn update_semantic_reference_field(digest: &mut Sha256, value: &[u8]) {
+    digest.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_be_bytes());
+    digest.update(value);
 }
 
 fn issue_custody_source_proof(
@@ -916,6 +943,7 @@ mod tests {
             ..Default::default()
         };
         let first_bytes = first.encode_to_vec();
+        let original = first.clone();
         first.issued_at_unix_ms = 200;
         first.kernel_authorization_signature_raw = vec![13; 64];
         let second_bytes = first.encode_to_vec();
@@ -924,21 +952,56 @@ mod tests {
         let evidence_id = [14; 16];
         let envelope_sha256 = [15; 32];
         assert_eq!(
-            transfer_target_reference(&first, &first_bytes, &evidence_id, &envelope_sha256),
-            transfer_target_reference(&first, &second_bytes, &evidence_id, &envelope_sha256),
+            transfer_target_reference(&original, &evidence_id, &envelope_sha256),
+            transfer_target_reference(&first, &evidence_id, &envelope_sha256),
         );
     }
 
     #[test]
-    fn original_write_reference_remains_bound_to_exact_proof_bytes() {
-        let source = BlobCustodySourceProofV1 {
+    fn refreshed_original_write_proof_keeps_one_semantic_target_reference() {
+        let mut source = BlobCustodySourceProofV1 {
             proof_kind: BlobCustodySourceProofKindV1::BlobCustodySourceProofKindOriginalWriteV1
                 as i32,
+            kernel_instance_id: "kernel-1".to_owned(),
+            owner_id: "mail".to_owned(),
+            registration_id: "mail-registration".to_owned(),
+            capability_id: "mail.blob.v1".to_owned(),
+            runtime_instance_id: "mail-runtime-1".to_owned(),
+            runtime_generation: 1,
+            grant_epoch: 2,
+            key_revision: 1,
+            reference_id: vec![1; 16],
+            declared_size: 42,
+            receipt_sha256: vec![2; 32],
+            issued_at_unix_ms: 100,
+            expires_at_unix_ms: 200,
+            kernel_authorization_signature_raw: vec![3; 64],
+            backup_class: 1,
+            target_owner_id: "speech_to_text".to_owned(),
+            target_module_id: "hermes-speech-to-text-runtime".to_owned(),
+            target_capability_id: "speech_to_text.blob.v1".to_owned(),
+            custody_scope_id: "mail.private_content.v1".to_owned(),
             ..Default::default()
         };
+        let first = source.encode_to_vec();
+        let original = source.clone();
+        source.runtime_instance_id = "mail-runtime-2".to_owned();
+        source.runtime_generation = 2;
+        source.grant_epoch = 3;
+        source.issued_at_unix_ms = 300;
+        source.expires_at_unix_ms = 400;
+        source.kernel_authorization_signature_raw = vec![4; 64];
+        let refreshed = source.encode_to_vec();
+        assert_ne!(first, refreshed);
+        assert_eq!(
+            transfer_target_reference(&original, &[5; 16], &[6; 32]),
+            transfer_target_reference(&source, &[5; 16], &[6; 32]),
+        );
+        let stable = transfer_target_reference(&source, &[5; 16], &[6; 32]);
+        source.receipt_sha256[0] ^= 1;
         assert_ne!(
-            transfer_target_reference(&source, &[1], &[2; 16], &[3; 32]),
-            transfer_target_reference(&source, &[4], &[2; 16], &[3; 32]),
+            stable,
+            transfer_target_reference(&source, &[5; 16], &[6; 32])
         );
     }
 
@@ -986,12 +1049,8 @@ mod tests {
         .expect("verified predecessor");
         let evidence_id = [3; 16];
         let evidence_sha256 = [4; 32];
-        let current_reference = transfer_target_reference(
-            &predecessor,
-            &predecessor_bytes,
-            &evidence_id,
-            &evidence_sha256,
-        );
+        let current_reference =
+            transfer_target_reference(&predecessor, &evidence_id, &evidence_sha256);
         let current_grant = BlobDataSessionGrantV1 {
             major: 1,
             kernel_instance_id: "kernel-1".to_owned(),

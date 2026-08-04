@@ -486,6 +486,7 @@ async function run_managed_process_conformance(secrets) {
   const tdjsonFixture = await compile_tdjson_fixture(secrets);
   const tgcallsFixture = await compile_tgcalls_fixture(secrets);
   const textExtractionOcr = await prepare_attachment_text_extraction_ocr();
+  const whisperStt = await prepare_whisper_stt(secrets);
   await run('cargo', [
     `+${toolchain}`,
     '--config',
@@ -559,6 +560,10 @@ async function run_managed_process_conformance(secrets) {
     '-p',
     'hermes-ollama-ai-runtime',
     '-p',
+    'hermes-speech-to-text-runtime',
+    '-p',
+    'hermes-whisper-stt-runtime',
+    '-p',
     'hermes-mail-runtime',
     '-p',
     'hermes-telegram-runtime',
@@ -600,6 +605,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_recipient_suggestion_reaches_gateway_sse_and_replays_after_restart',
     'managed_ai_inference_routes_to_ollama_and_replays_after_restart',
     'managed_ollama_ai_runtime_replays_provider_unavailable_without_second_http_attempt',
+    'managed_speech_to_text_routes_whisper_private_blob_and_replays_after_restart',
     'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',
     'managed_mail_credential_rotation_quiesces_until_settings_successor',
     'managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event',
@@ -668,6 +674,11 @@ async function run_managed_process_conformance(secrets) {
       HERMES_KNOWLEDGE_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-knowledge-runtime`,
       HERMES_AI_INFERENCE_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-ai-inference-runtime`,
       HERMES_OLLAMA_AI_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-ollama-ai-runtime`,
+      HERMES_SPEECH_TO_TEXT_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-speech-to-text-runtime`,
+      HERMES_WHISPER_STT_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-whisper-stt-runtime`,
+      HERMES_WHISPER_STT_RUNNER: whisperStt.runner,
+      HERMES_WHISPER_STT_MODEL: whisperStt.model,
+      HERMES_WHISPER_STT_TEST_WAV: whisperStt.testWav,
       HERMES_MAIL_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-mail-runtime`,
       HERMES_TELEGRAM_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-telegram-runtime`,
       HERMES_ZULIP_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-zulip-runtime`,
@@ -701,6 +712,66 @@ async function prepare_attachment_text_extraction_ocr() {
     ]);
   }
   await Promise.all(Object.values(resources).map((path) => access(path)));
+  return resources;
+}
+
+async function prepare_whisper_stt(secrets) {
+  const root = process.env.HERMES_TEST_WHISPER_STT_ROOT
+    || join(process.cwd(), '..', '.local', 'dev-native', 'whisper-stt');
+  const resources = {
+    runner: join(root, 'whisper-cli'),
+    model: join(root, 'ggml-base.bin'),
+    testWav: join(secrets.directory, 'whisper-stt-test.wav'),
+  };
+  try {
+    await Promise.all([access(resources.runner), access(resources.model)]);
+  } catch {
+    await run('./scripts/build-whisper-stt-macos.sh', [
+      '--output-dir',
+      root,
+    ]);
+  }
+  await Promise.all([access(resources.runner), access(resources.model)]);
+  const source = join(secrets.directory, 'whisper-stt-test.aiff');
+  await run('/usr/bin/say', [
+    '-v',
+    'Samantha',
+    '-r',
+    '120',
+    '-o',
+    source,
+    'Hermes clean room transcription. Hermes managed speech engine. Hermes private audio evidence.',
+  ]);
+  await run('/usr/bin/afconvert', [
+    '-f',
+    'WAVE',
+    '-d',
+    'LEI16@16000',
+    '-c',
+    '1',
+    source,
+    resources.testWav,
+  ]);
+  await access(resources.testWav);
+  const preflightOutput = join(secrets.directory, 'whisper-stt-preflight');
+  await run(resources.runner, [
+    '--model',
+    resources.model,
+    '--file',
+    resources.testWav,
+    '--threads',
+    '4',
+    '--language',
+    'en',
+    '--output-json',
+    '--output-file',
+    preflightOutput,
+    '--no-prints',
+  ], { env: {} });
+  const preflight = JSON.parse(await readFile(`${preflightOutput}.json`, 'utf8'));
+  if (!Array.isArray(preflight.transcription) || preflight.transcription.length === 0) {
+    throw new Error('synthetic Whisper STT fixture produced no transcription');
+  }
   return resources;
 }
 
