@@ -51,6 +51,13 @@ const attachmentPreviewEvidenceReplayProtoRoot = join(
   'attachment-preview-evidence-replay-api',
   'proto'
 )
+const callTranscriptionProtoRoot = join(
+  repoRoot,
+  'backend',
+  'src',
+  'call-transcription-api',
+  'proto'
+)
 const mailProtoRoot = join(repoRoot, 'backend', 'src', 'mail-api', 'proto')
 const mailContactsSyncProtoRoot = join(
   repoRoot,
@@ -134,6 +141,13 @@ const protoFiles = [
     'v1',
     'replay.proto'
   ),
+  join(
+    callTranscriptionProtoRoot,
+    'hermes',
+    'call_transcription',
+    'v1',
+    'transcription.proto'
+  ),
   join(mailProtoRoot, 'hermes', 'mail', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'account', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'account_lifecycle', 'v1', 'client.proto'),
@@ -176,6 +190,7 @@ const result = spawnSync(
     `-I${communicationsExportProtoRoot}`,
     `-I${attachmentPreviewProtoRoot}`,
     `-I${attachmentPreviewEvidenceReplayProtoRoot}`,
+    `-I${callTranscriptionProtoRoot}`,
     `-I${mailProtoRoot}`,
     `-I${mailContactsSyncProtoRoot}`,
     `-I${telegramProtoRoot}`,

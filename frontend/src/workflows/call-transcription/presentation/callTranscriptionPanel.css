@@ -1,0 +1,68 @@
+.call-transcription {
+	display: grid;
+	gap: var(--h-space-4);
+	margin: var(--h-space-4);
+	padding: var(--h-space-5);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-lg);
+	background: var(--h-color-surface);
+}
+
+.call-transcription > header {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: var(--h-space-3);
+}
+
+.call-transcription h2,
+.call-transcription p,
+.call-transcription pre { margin: 0; }
+
+.call-transcription header span,
+.call-transcription__status,
+.call-transcription__artifact > p { color: var(--h-color-text-muted); }
+
+.call-transcription__skeleton {
+	display: grid;
+	gap: var(--h-space-2);
+	padding: var(--h-space-4);
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface-muted);
+}
+
+.call-transcription__skeleton span {
+	display: block;
+	height: .75rem;
+	border-radius: var(--h-radius-sm);
+	background: var(--h-color-border);
+}
+
+.call-transcription__skeleton span:nth-child(2) { width: 84%; }
+.call-transcription__skeleton span:nth-child(3) { width: 58%; }
+
+.call-transcription__artifact {
+	display: grid;
+	gap: var(--h-space-2);
+}
+
+.call-transcription__artifact pre {
+	max-height: 32rem;
+	overflow: auto;
+	padding: var(--h-space-4);
+	white-space: pre-wrap;
+	word-break: break-word;
+	border-radius: var(--h-radius-md);
+	background: var(--h-color-surface-muted);
+}
+
+.call-transcription button {
+	justify-self: start;
+	min-height: 2.5rem;
+	padding: 0 var(--h-space-3);
+	border: 1px solid var(--h-color-border);
+	border-radius: var(--h-radius-md);
+	color: var(--h-color-text);
+	background: var(--h-color-surface-muted);
+	cursor: pointer;
+}

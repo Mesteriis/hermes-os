@@ -15,6 +15,7 @@ import MailOperationalRoute from '../../integrations/mail/views/MailOperationalR
 import ZulipOperationalRoute from '../../integrations/zulip/views/ZulipOperationalRoute.vue'
 import CommunicationsEvidenceExportWorkflow from '../../workflows/communications-export/CommunicationsEvidenceExportWorkflow.vue'
 import AttachmentPreviewWorkflow from '../../workflows/attachment-preview/AttachmentPreviewWorkflow.vue'
+import CallTranscriptionWorkflow from '../../workflows/call-transcription/CallTranscriptionWorkflow.vue'
 import {
 	providerAccountIdFromRoute,
 	providerAccountNavigationLevel,
@@ -64,6 +65,9 @@ const attachmentPreviewAvailable = computed(() =>
 )
 const attachmentPreviewEvidenceReplayAvailable = computed(() =>
 	hasClientModuleCapability(bootstrap.value, 'attachment-preview-evidence-replay.command.v1'),
+)
+const callTranscriptionAvailable = computed(() =>
+	hasClientModuleCapability(bootstrap.value, 'call_transcription.v1'),
 )
 const currentCanonicalMessageId = ref<Uint8Array>()
 const currentAttachmentAnchorId = ref<Uint8Array>()
@@ -228,6 +232,7 @@ watch([currentTheme, currentThemeFamily, currentThemeMode], ([theme, family, mod
 						:can-export="communicationsExportAvailable"
 						:candidate-message-id="currentCanonicalMessageId"
 					/>
+					<CallTranscriptionWorkflow :can-transcribe="callTranscriptionAvailable" />
 				</template>
 				<MailOperationalRoute
 					v-else-if="selectedRouteId === 'communications-mail'"
