@@ -791,3 +791,8 @@ ADR-0393 переводит terminal/progress status Communications evidence exp
 frontend polling на существующий owner-authenticated shared Gateway SSE:
 workflow сохраняет owner-local replay transitions, frontend использует один
 общий hub, а query остаётся только initial/manual recovery snapshot.
+
+ADR-0394 фиксирует первый desktop call recording producer как отдельную
+integration с owner-local consent receipt и Blob custody. Tauri остаётся
+visible OS-capture adapter за fenced host bridge, Kernel не интерпретирует
+аудио/consent, а transcription получает только target-owned durable event.
