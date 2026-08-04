@@ -147,6 +147,7 @@ fn blob_capability() -> CapabilityDescriptorV1 {
         capability_revision: 1,
         criticality: CapabilityCriticalityV1::Required as i32,
         requests: vec![blob_quota(vec![
+            BlobQuotaOperationV1::Write as i32,
             BlobQuotaOperationV1::ReadRange as i32,
             BlobQuotaOperationV1::CustodyTransfer as i32,
             BlobQuotaOperationV1::ReleaseCustody as i32,

@@ -58,6 +58,13 @@ const callTranscriptionProtoRoot = join(
   'call-transcription-api',
   'proto'
 )
+const speechTranscriptProtoRoot = join(
+  repoRoot,
+  'backend',
+  'src',
+  'speech-transcript-artifact',
+  'proto'
+)
 const mailProtoRoot = join(repoRoot, 'backend', 'src', 'mail-api', 'proto')
 const mailContactsSyncProtoRoot = join(
   repoRoot,
@@ -148,6 +155,7 @@ const protoFiles = [
     'v1',
     'transcription.proto'
   ),
+  join(speechTranscriptProtoRoot, 'hermes', 'speech_transcript', 'v1', 'transcript.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'account', 'v1', 'client.proto'),
   join(mailProtoRoot, 'hermes', 'mail', 'account_lifecycle', 'v1', 'client.proto'),
@@ -191,6 +199,7 @@ const result = spawnSync(
     `-I${attachmentPreviewProtoRoot}`,
     `-I${attachmentPreviewEvidenceReplayProtoRoot}`,
     `-I${callTranscriptionProtoRoot}`,
+    `-I${speechTranscriptProtoRoot}`,
     `-I${mailProtoRoot}`,
     `-I${mailContactsSyncProtoRoot}`,
     `-I${telegramProtoRoot}`,

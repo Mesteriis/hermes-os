@@ -34,6 +34,17 @@ message GetDesktopCallRecordingResponseV1 {
   DesktopRecordingStateV1 state = 3;
   uint64 duration_millis = 4;
   string public_error_code = 5;
+  optional RecordingTranscriptionAuthorityV1 transcription_authority = 6;
+}
+
+message RecordingTranscriptionAuthorityV1 {
+  bytes operation_id = 1;
+  bytes call_evidence_id = 2;
+  uint64 call_evidence_revision = 3;
+  bytes recording_evidence_id = 4;
+  uint64 recording_revision = 5;
+  bytes consent_receipt_id = 6;
+  uint32 consent_policy_revision = 7;
 }
 
 message DesktopCallRecordingStatusChangedV1 {

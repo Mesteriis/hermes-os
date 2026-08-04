@@ -14,7 +14,7 @@ use hermes_runtime_protocol::managed_control::{
 use crate::{
     blob::{
         CallTranscriptionBlobErrorV1, RecordingCustodyReceiptV1, TranscriptCustodyReceiptV1,
-        fresh_stt_source_proof_v1, release_recording_custody_v1, verify_transcript_custody_v1,
+        fresh_source_cleanup_proof_v1, release_recording_custody_v1, verify_transcript_custody_v1,
     },
     stt::{CallTranscriptionSttErrorV1, artifact_id_v1, execute_stt_job_v1},
 };
@@ -198,8 +198,9 @@ async fn recover_source_cleanup(
         reference_id: persisted.source.audio_reference_id,
         declared_bytes: persisted.source.declared_bytes,
         receipt_sha256: persisted.source_receipt_sha256,
+        custody_transfer_source_proof: Vec::new(),
     };
-    let proof = fresh_stt_source_proof_v1(channel, dispatcher, &source)
+    let proof = fresh_source_cleanup_proof_v1(channel, dispatcher, &source)
         .map_err(CallTranscriptionRecoveryErrorV1::Blob)?;
     release_recording_custody_v1(
         channel,

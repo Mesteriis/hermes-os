@@ -8485,7 +8485,7 @@ function expectedSlice(currentSlice) {
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
-  if (currentSlice === 'call_transcription_release_assembly_v1') {
+  if (currentSlice === 'call_transcription_managed_conformance_v1') {
     return {
       profile: FIRST_OWNER_PROFILE,
       ownerInventory: CALL_TRANSCRIPTION_RUNTIME_INVENTORY,

@@ -107,6 +107,9 @@ hermes-speech-transcript-artifact = { path = "../../../src/speech-transcript-art
 hermes-whisper-stt-persistence = { path = "../../../src/whisper-stt-persistence" }
 hermes-whisper-stt-runtime = { path = "../../../src/whisper-stt-runtime" }
 hermes-call-transcription-ingress = { path = "../../../src/call-transcription-ingress" }
+hermes-call-transcription-api = { path = "../../../src/call-transcription-api" }
+hermes-call-transcription-persistence = { path = "../../../src/call-transcription-persistence" }
+hermes-call-transcription-runtime = { path = "../../../src/call-transcription-runtime" }
 hermes-desktop-call-recording-api = { path = "../../../src/desktop-call-recording-api" }
 hermes-desktop-call-recording-persistence = { path = "../../../src/desktop-call-recording-persistence" }
 hermes-desktop-call-recording-runtime = { path = "../../../src/desktop-call-recording-runtime" }

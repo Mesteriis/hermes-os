@@ -81,7 +81,7 @@ pub async fn apply_recording_ready_v1(
         stt_request_id,
         &source,
         run.draft.requested_language,
-        &ready.custody_source_proof,
+        &custody.custody_transfer_source_proof,
     )
     .map_err(|_| CallTranscriptionIngressErrorV1::InvalidPayload)?;
     let stt_request_digest = id32(&request.request_digest)?;

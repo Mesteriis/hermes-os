@@ -4,6 +4,7 @@ use hermes_runtime_protocol::v1::{
     ProvidedSurfaceV1, RuntimeBudgetRequestV1, SettingsSchemaRefV1, SettingsSchemaV1,
     StorageNamespaceRequestV1, capability_request_v1::Request,
 };
+pub use hermes_speech_to_text_api::SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1;
 use hermes_speech_to_text_api::{
     SPEECH_TO_TEXT_CAPABILITY_ID_V1, SPEECH_TO_TEXT_MAX_AUDIO_BYTES_V1,
     SPEECH_TO_TEXT_MAX_TRANSCRIPT_BYTES_V1, SPEECH_TO_TEXT_MODULE_ID_V1, SPEECH_TO_TEXT_OWNER_V1,
@@ -12,7 +13,6 @@ use hermes_speech_to_text_api::{
 use prost::Message;
 use sha2::{Digest, Sha256};
 
-pub const SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1: &str = "speech_to_text.blob.v1";
 pub const SPEECH_TO_TEXT_PROVIDER_CAPABILITY_ID_V1: &str = "speech_to_text.provider.v1";
 pub const SPEECH_TO_TEXT_STORAGE_CAPABILITY_ID_V1: &str = "speech_to_text.storage.v1";
 pub const SPEECH_TO_TEXT_STORAGE_CONNECTION_BUDGET_V1: u32 = 4;

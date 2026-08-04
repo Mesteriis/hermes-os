@@ -4,14 +4,16 @@
 
 Дата: 2026-08-03
 
-Состояние реализации: реализовано частично. `call_transcription_v1` остаётся
-`planned`: recording producer уже доказан отдельно, а workflow имеет exact
-ingress, generated client API, pure lifecycle core, owner-local persistence и
-managed runtime с atomic inbox/outbox, fenced jobs/recovery, exact recording
-event subscriptions, public STT request RPC, metadata-only replayable SSE и
-actor/session-bound one-use Blob tickets и отдельную unsigned release assembly.
-Gateway/browser client composition и live conformance из раздела «Проверка»
-ещё не завершены.
+Состояние реализации: managed/browser contour реализован.
+`call_transcription_v1` пока остаётся `planned` только до полного
+`make pre-push`: workflow имеет exact ingress, generated client API, pure
+lifecycle core, owner-local persistence, signed managed runtime/release,
+atomic inbox/outbox, fenced jobs/recovery, exact recording event subscriptions,
+public STT request RPC, metadata-only replayable SSE, actor/session-bound
+one-use Blob tickets и replay-safe source custody без proof persistence.
+Live conformance доказывает real recording WAV, NATS outage/reconnect,
+Speech-to-Text/Whisper, exact transcript ClientBlob, wrong actor, Blob outage и
+workflow restart.
 Компилируемый workflow, который передаёт текст Communications в LLM или
 возвращает summary вместо transcript, не является реализацией этого ADR.
 
@@ -259,6 +261,11 @@ Forbidden:
 - provider-name switch in domain/workflow/engine core;
 - transcript or audio through durable event, client query, SSE or logs;
 - fixture STT as production evidence.
+
+Successful transcript reads return the exact STT-owned
+`SpeechTranscriptDocumentV1` protobuf bytes through the actor/session-bound
+ClientBlob route. The app decodes that generated artifact contract and never
+interprets the Blob as an untyped UTF-8 response.
 
 ## Проверка
 

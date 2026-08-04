@@ -13,6 +13,11 @@ import {
 	StartCallTranscriptionResponseV1Schema,
 } from '../../../gen/hermes/call_transcription/v1/transcription_pb'
 import {
+	SpeechTranscriptCompletenessV1,
+	SpeechTranscriptDocumentV1Schema,
+	SpeechTranscriptLanguageV1,
+} from '../../../gen/hermes/speech_transcript/v1/transcript_pb'
+import {
 	ClientRealtimeEventV1Schema,
 	ClientRealtimeStreamStateKindV1,
 	ClientRealtimeStreamStateV1Schema,
@@ -55,6 +60,18 @@ function artifact() {
 }
 
 function ports() {
+	const documentBytes = toBinary(SpeechTranscriptDocumentV1Schema, create(
+		SpeechTranscriptDocumentV1Schema,
+		{
+			protocolMajor: 1,
+			requestId: id(10),
+			detectedLanguage: SpeechTranscriptLanguageV1.ENGLISH,
+			durationMillis: 1_000n,
+			segments: [{ index: 0, startMillis: 0n, endMillis: 1_000n, contentUtf8: new Uint8Array([65, 66, 67]) }],
+			completeness: SpeechTranscriptCompletenessV1.COMPLETE,
+			confidenceBasisPoints: 9_000,
+		},
+	))
 	return {
 		start: vi.fn(async () => create(StartCallTranscriptionResponseV1Schema, {
 			runId,
@@ -75,9 +92,9 @@ function ports() {
 			runId,
 			opaqueReadTicket: new Uint8Array(32).fill(7),
 			expiresAtUnixSeconds: 100n,
-			transcriptSizeBytes: 3n,
+			transcriptSizeBytes: BigInt(documentBytes.byteLength),
 		})),
-		readBlob: vi.fn(async () => new Response(new Uint8Array([65, 66, 67]), {
+		readBlob: vi.fn(async () => new Response(documentBytes, {
 			status: 200,
 			headers: {
 				'cache-control': 'no-store',
@@ -138,9 +155,11 @@ describe('call transcription browser adapter', () => {
 
 	it('reads transcript bytes only through a fresh one-use client_blob ticket', async () => {
 		const adapter = ports()
-		await expect(readCallTranscript(runId, undefined, adapter)).resolves.toEqual(
-			new Uint8Array([65, 66, 67]),
-		)
+		await expect(readCallTranscript(runId, artifact(), undefined, adapter)).resolves.toMatchObject({
+			text: 'ABC',
+			detectedLanguage: CallTranscriptionLanguageV1.CALL_TRANSCRIPTION_LANGUAGE_ENGLISH,
+			segmentCount: 1,
+		})
 		expect(adapter.readBlob).toHaveBeenCalledWith(
 			'/api/blobs/call-transcription/v1/transcript',
 			expect.objectContaining({ method: 'POST', body: expect.any(Uint8Array) }),
@@ -150,7 +169,7 @@ describe('call transcription browser adapter', () => {
 	it('fails closed on stale tickets, response length drift and invalid source authority', async () => {
 		const stale = ports()
 		stale.nowUnixSeconds.mockReturnValue(101n)
-		await expect(readCallTranscript(runId, undefined, stale)).rejects.toThrow('ticket')
+		await expect(readCallTranscript(runId, artifact(), undefined, stale)).rejects.toThrow('ticket')
 
 		const truncated = ports()
 		truncated.readBlob.mockResolvedValue(new Response(new Uint8Array([65]), {
@@ -160,7 +179,7 @@ describe('call transcription browser adapter', () => {
 				'content-type': 'application/octet-stream',
 			},
 		}))
-		await expect(readCallTranscript(runId, undefined, truncated)).rejects.toThrow('length')
+		await expect(readCallTranscript(runId, artifact(), undefined, truncated)).rejects.toThrow('length')
 
 		const invalid = source()
 		invalid.consentPolicyRevision = 0

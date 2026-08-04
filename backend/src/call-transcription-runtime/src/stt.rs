@@ -37,7 +37,7 @@ use crate::{
     admission::BLOB_CAPABILITY_ID_V1,
     blob::{
         CallTranscriptionBlobErrorV1, RecordingCustodyReceiptV1, accept_transcript_custody_v1,
-        fresh_stt_source_proof_v1, release_recording_custody_v1,
+        fresh_source_cleanup_proof_v1, fresh_stt_source_proof_v1, release_recording_custody_v1,
     },
 };
 
@@ -101,6 +101,7 @@ pub async fn execute_stt_job_v1(
         reference_id: job.recording_source.source.audio_reference_id,
         declared_bytes: job.recording_source.source.declared_bytes,
         receipt_sha256: job.recording_source.source_receipt_sha256,
+        custody_transfer_source_proof: Vec::new(),
     };
     let fresh_proof = fresh_stt_source_proof_v1(channel, dispatcher, &source)
         .map_err(CallTranscriptionSttErrorV1::Blob)?;
@@ -181,7 +182,6 @@ pub async fn execute_stt_job_v1(
                 dispatcher,
                 job,
                 &source,
-                &fresh_proof,
                 true,
                 occurred_at_unix_millis,
             )
@@ -209,7 +209,6 @@ pub async fn execute_stt_job_v1(
                 dispatcher,
                 job,
                 &source,
-                &fresh_proof,
                 false,
                 occurred_at_unix_millis,
             )
@@ -277,16 +276,17 @@ async fn cleanup_source(
     dispatcher: &mut dyn ManagedControlRequestDispatcherV2<UnixStream>,
     job: &ClaimedCallTranscriptionJobV1,
     source: &RecordingCustodyReceiptV1,
-    fresh_proof: &[u8],
     accepted: bool,
     occurred_at_unix_millis: i64,
 ) -> Result<(), CallTranscriptionSttErrorV1> {
+    let cleanup_proof = fresh_source_cleanup_proof_v1(channel, dispatcher, source)
+        .map_err(CallTranscriptionSttErrorV1::Blob)?;
     release_recording_custody_v1(
         channel,
         dispatcher,
         job.run_id,
         source,
-        fresh_proof,
+        &cleanup_proof,
         accepted,
     )
     .map_err(CallTranscriptionSttErrorV1::Blob)?;

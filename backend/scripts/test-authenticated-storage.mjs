@@ -566,6 +566,8 @@ async function run_managed_process_conformance(secrets) {
     '-p',
     'hermes-desktop-call-recording-runtime',
     '-p',
+    'hermes-call-transcription-runtime',
+    '-p',
     'hermes-mail-runtime',
     '-p',
     'hermes-telegram-runtime',
@@ -609,6 +611,7 @@ async function run_managed_process_conformance(secrets) {
     'managed_ollama_ai_runtime_replays_provider_unavailable_without_second_http_attempt',
     'managed_speech_to_text_routes_whisper_private_blob_and_replays_after_restart',
     'managed_desktop_recording_reaches_blob_event_gateway_sse_and_restart',
+    'managed_call_transcription_reaches_recording_stt_gateway_blob_and_restarts',
     'managed_mail_runtime_uses_kernel_leases_and_route_specific_admission',
     'managed_mail_credential_rotation_quiesces_until_settings_successor',
     'managed_mail_runtime_accepts_then_completes_smtp_delivery_and_replays_event',
@@ -680,6 +683,7 @@ async function run_managed_process_conformance(secrets) {
       HERMES_SPEECH_TO_TEXT_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-speech-to-text-runtime`,
       HERMES_WHISPER_STT_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-whisper-stt-runtime`,
       HERMES_DESKTOP_CALL_RECORDING_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-desktop-call-recording-runtime`,
+      HERMES_CALL_TRANSCRIPTION_RUNTIME_BIN: `${process.cwd()}/target/debug/hermes-call-transcription-runtime`,
       HERMES_WHISPER_STT_RUNNER: whisperStt.runner,
       HERMES_WHISPER_STT_MODEL: whisperStt.model,
       HERMES_WHISPER_STT_TEST_WAV: whisperStt.testWav,
@@ -756,6 +760,7 @@ async function prepare_whisper_stt(secrets) {
     source,
     resources.testWav,
   ]);
+  await canonicalize_whisper_test_wav(resources.testWav);
   await access(resources.testWav);
   const preflightOutput = join(secrets.directory, 'whisper-stt-preflight');
   await run(resources.runner, [
@@ -777,6 +782,47 @@ async function prepare_whisper_stt(secrets) {
     throw new Error('synthetic Whisper STT fixture produced no transcription');
   }
   return resources;
+}
+
+async function canonicalize_whisper_test_wav(path) {
+  const source = await readFile(path);
+  if (source.length < 44 || source.toString('ascii', 0, 4) !== 'RIFF'
+      || source.toString('ascii', 8, 12) !== 'WAVE') {
+    throw new Error('Whisper test fixture is not a RIFF/WAVE file');
+  }
+  let format;
+  let samples;
+  for (let offset = 12; offset + 8 <= source.length;) {
+    const kind = source.toString('ascii', offset, offset + 4);
+    const size = source.readUInt32LE(offset + 4);
+    const start = offset + 8;
+    const end = start + size;
+    if (end > source.length) throw new Error(`truncated WAV ${kind} chunk`);
+    if (kind === 'fmt ') format = source.subarray(start, end);
+    if (kind === 'data') samples = source.subarray(start, end);
+    offset = end + (size % 2);
+  }
+  if (!format || format.length < 16 || !samples || samples.length === 0
+      || format.readUInt16LE(0) !== 1 || format.readUInt16LE(2) !== 1
+      || format.readUInt32LE(4) !== 16_000 || format.readUInt16LE(14) !== 16
+      || samples.length % 2 !== 0) {
+    throw new Error('Whisper test fixture is not PCM S16LE mono 16000 Hz');
+  }
+  const canonical = Buffer.alloc(44 + samples.length);
+  canonical.write('RIFF', 0, 'ascii');
+  canonical.writeUInt32LE(36 + samples.length, 4);
+  canonical.write('WAVEfmt ', 8, 'ascii');
+  canonical.writeUInt32LE(16, 16);
+  canonical.writeUInt16LE(1, 20);
+  canonical.writeUInt16LE(1, 22);
+  canonical.writeUInt32LE(16_000, 24);
+  canonical.writeUInt32LE(32_000, 28);
+  canonical.writeUInt16LE(2, 32);
+  canonical.writeUInt16LE(16, 34);
+  canonical.write('data', 36, 'ascii');
+  canonical.writeUInt32LE(samples.length, 40);
+  samples.copy(canonical, 44);
+  await writeFile(path, canonical, { mode: 0o600 });
 }
 
 async function compile_tdjson_fixture(secrets) {

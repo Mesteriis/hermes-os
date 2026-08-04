@@ -7,9 +7,15 @@ import {
 	CallTranscriptionStateV1,
 	CallTranscriptionStatusChangedV1Schema,
 	ReadCallTranscriptRequestV1Schema,
+	type CallTranscriptionArtifactV1,
 	type CallTranscriptionStatusChangedV1,
 	type GetCallTranscriptionResponseV1,
 } from '../../../gen/hermes/call_transcription/v1/transcription_pb'
+import {
+	SpeechTranscriptCompletenessV1,
+	SpeechTranscriptDocumentV1Schema,
+	SpeechTranscriptLanguageV1,
+} from '../../../gen/hermes/speech_transcript/v1/transcript_pb'
 import {
 	ClientRealtimeStreamStateKindV1,
 	type ClientRealtimeEventV1,
@@ -34,6 +40,16 @@ const MAX_DURATION_MILLIS = 4n * 60n * 60n * 1_000n
 const MAX_SEGMENTS = 100_000
 const MAX_CONFIDENCE_BASIS_POINTS = 10_000
 const MAX_BUFFERED_STATUSES = 64
+const MAX_SEGMENT_BYTES = 64 * 1024
+
+export type CallTranscriptDocumentV1 = {
+	text: string
+	detectedLanguage: CallTranscriptionLanguageV1
+	durationMillis: bigint
+	segmentCount: number
+	completeness: CallTranscriptionCompletenessV1
+	confidenceBasisPoints: number
+}
 
 export type CallTranscriptionSourceV1 = {
 	operationId: Uint8Array
@@ -120,9 +136,10 @@ export async function getCallTranscriptionStatus(
 
 export async function readCallTranscript(
 	runId: Uint8Array,
+	expected: CallTranscriptionArtifactV1,
 	signal?: AbortSignal,
 	ports: CallTranscriptionPorts = defaultPorts(),
-): Promise<Uint8Array> {
+): Promise<CallTranscriptDocumentV1> {
 	validateId(runId, 'Call transcription')
 	const ticket = await ports.issueRead(copy(runId), signal)
 	const declaredSize = Number(ticket.transcriptSizeBytes)
@@ -161,7 +178,79 @@ export async function readCallTranscript(
 	if (bytes.byteLength !== declaredSize || bytes.byteLength > MAX_TRANSCRIPT_BYTES) {
 		throw new Error('Call transcript length is invalid')
 	}
-	return bytes
+	return decodeTranscriptDocument(bytes, expected)
+}
+
+function decodeTranscriptDocument(
+	bytes: Uint8Array,
+	expected: CallTranscriptionArtifactV1,
+): CallTranscriptDocumentV1 {
+	const document = fromBinary(SpeechTranscriptDocumentV1Schema, bytes)
+	const detectedLanguage = transcriptLanguage(document.detectedLanguage)
+	const completeness = transcriptCompleteness(document.completeness)
+	if (
+		document.protocolMajor !== 1
+		|| !validId(document.requestId)
+		|| document.durationMillis !== expected.durationMillis
+		|| document.segments.length !== expected.segmentCount
+		|| detectedLanguage !== expected.detectedLanguage
+		|| completeness !== expected.completeness
+		|| document.confidenceBasisPoints !== expected.confidenceBasisPoints
+		|| document.segments.length < 1
+		|| document.segments.length > MAX_SEGMENTS
+	) throw new Error('Call transcript document metadata is invalid')
+	const decoder = new TextDecoder('utf-8', { fatal: true })
+	let previousEnd = 0n
+	const lines = document.segments.map((segment, index) => {
+		if (
+			segment.index !== index
+			|| segment.startMillis < previousEnd
+			|| segment.endMillis <= segment.startMillis
+			|| segment.endMillis > document.durationMillis
+			|| segment.contentUtf8.byteLength < 1
+			|| segment.contentUtf8.byteLength > MAX_SEGMENT_BYTES
+		) throw new Error('Call transcript segment is invalid')
+		previousEnd = segment.endMillis
+		const text = decoder.decode(segment.contentUtf8)
+		if (!text.trim()) throw new Error('Call transcript segment is invalid')
+		return text
+	})
+	return {
+		text: lines.join('\n'),
+		detectedLanguage,
+		durationMillis: document.durationMillis,
+		segmentCount: document.segments.length,
+		completeness,
+		confidenceBasisPoints: document.confidenceBasisPoints,
+	}
+}
+
+function transcriptLanguage(value: SpeechTranscriptLanguageV1): CallTranscriptionLanguageV1 {
+	if (value === SpeechTranscriptLanguageV1.AUTO) {
+		return CallTranscriptionLanguageV1.CALL_TRANSCRIPTION_LANGUAGE_AUTO
+	}
+	if (value === SpeechTranscriptLanguageV1.ENGLISH) {
+		return CallTranscriptionLanguageV1.CALL_TRANSCRIPTION_LANGUAGE_ENGLISH
+	}
+	if (value === SpeechTranscriptLanguageV1.RUSSIAN) {
+		return CallTranscriptionLanguageV1.CALL_TRANSCRIPTION_LANGUAGE_RUSSIAN
+	}
+	if (value === SpeechTranscriptLanguageV1.SPANISH) {
+		return CallTranscriptionLanguageV1.CALL_TRANSCRIPTION_LANGUAGE_SPANISH
+	}
+	throw new Error('Call transcript language is invalid')
+}
+
+function transcriptCompleteness(
+	value: SpeechTranscriptCompletenessV1,
+): CallTranscriptionCompletenessV1 {
+	if (value === SpeechTranscriptCompletenessV1.COMPLETE) {
+		return CallTranscriptionCompletenessV1.CALL_TRANSCRIPTION_COMPLETENESS_COMPLETE
+	}
+	if (value === SpeechTranscriptCompletenessV1.PARTIAL) {
+		return CallTranscriptionCompletenessV1.CALL_TRANSCRIPTION_COMPLETENESS_PARTIAL
+	}
+	throw new Error('Call transcript completeness is invalid')
 }
 
 export function openCallTranscriptionRealtime(

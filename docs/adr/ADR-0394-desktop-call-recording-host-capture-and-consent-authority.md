@@ -149,8 +149,10 @@ Start возвращает receipt accepted/pending, но не означает,
 recovery snapshot, periodic polling запрещён.
 
 Client response/SSE содержит только operation/recording IDs, sanitized state,
-revision, bounded duration and public error code. Audio, Blob reference/proof,
-consent body, device identity, audio input label and filesystem path запрещены.
+revision, bounded duration and public error code. ADR-0396 дополнительно
+разрешает только terminal `Get` выдавать typed opaque transcription authority;
+SSE её не содержит. Audio, Blob reference/proof, consent body, device identity,
+audio input label and filesystem path запрещены.
 
 ## SRP и запрещённые зависимости
 

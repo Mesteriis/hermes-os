@@ -4,8 +4,9 @@ use hermes_desktop_call_recording_api::{
     wire::{
         DesktopCallRecordingStatusChangedV1, DesktopRecordingStateV1,
         GetDesktopCallRecordingRequestV1, GetDesktopCallRecordingResponseV1,
-        StartDesktopCallRecordingRequestV1, StartDesktopCallRecordingResponseV1,
-        StopDesktopCallRecordingRequestV1, StopDesktopCallRecordingResponseV1,
+        RecordingTranscriptionAuthorityV1, StartDesktopCallRecordingRequestV1,
+        StartDesktopCallRecordingResponseV1, StopDesktopCallRecordingRequestV1,
+        StopDesktopCallRecordingResponseV1,
     },
 };
 use hermes_desktop_call_recording_core::{
@@ -162,14 +163,33 @@ async fn get(
         .await
         .map_err(persistence_error)?
         .ok_or(DesktopRecordingClientPortErrorV1::NotFound)?;
+    let transcription_authority = transcription_authority(&run);
     Ok(GetDesktopCallRecordingResponseV1 {
         recording_evidence_id: recording_id.to_vec(),
         recording_revision: run.recording_revision,
         state: wire_state(run.state) as i32,
         duration_millis: run.source_duration_millis.unwrap_or(0),
         public_error_code: run.public_error_code.unwrap_or_default(),
+        transcription_authority,
     }
     .encode_to_vec())
+}
+
+fn transcription_authority(
+    run: &hermes_desktop_call_recording_persistence::PersistedRecordingRunV1,
+) -> Option<RecordingTranscriptionAuthorityV1> {
+    if run.state != RecordingStateV1::Ready {
+        return None;
+    }
+    Some(RecordingTranscriptionAuthorityV1 {
+        operation_id: run.operation_id.to_vec(),
+        call_evidence_id: run.call_evidence_id.to_vec(),
+        call_evidence_revision: run.call_evidence_revision,
+        recording_evidence_id: run.recording_evidence_id.to_vec(),
+        recording_revision: run.recording_revision,
+        consent_receipt_id: run.consent_receipt_id?.to_vec(),
+        consent_policy_revision: run.consent_policy_revision,
+    })
 }
 
 #[must_use]
@@ -304,6 +324,8 @@ fn response(request_id: u64, payload: Vec<u8>, error_code: &str) -> ModuleClient
 
 #[cfg(test)]
 mod tests {
+    use hermes_desktop_call_recording_persistence::PersistedRecordingRunV1;
+
     use super::*;
 
     #[test]
@@ -328,5 +350,45 @@ mod tests {
             derived_id(b"recording", "owner-1", [7; 16]),
             derived_id(b"recording", "owner-2", [7; 16])
         );
+    }
+
+    #[test]
+    fn transcription_authority_exists_only_for_ready_persisted_evidence() {
+        let mut run = persisted_run(RecordingStateV1::Capturing);
+        assert!(transcription_authority(&run).is_none());
+        run.state = RecordingStateV1::Ready;
+        let authority = transcription_authority(&run).expect("ready authority");
+        assert_eq!(authority.operation_id, vec![1; 16]);
+        assert_eq!(authority.call_evidence_id, vec![2; 16]);
+        assert_eq!(authority.recording_evidence_id, vec![3; 16]);
+        assert_eq!(authority.consent_receipt_id, vec![4; 16]);
+        run.consent_receipt_id = None;
+        assert!(transcription_authority(&run).is_none());
+    }
+
+    fn persisted_run(state: RecordingStateV1) -> PersistedRecordingRunV1 {
+        PersistedRecordingRunV1 {
+            logical_owner_id: "owner-1".to_owned(),
+            operation_id: [1; 16],
+            request_sha256: [5; 32],
+            call_evidence_id: [2; 16],
+            call_evidence_revision: 7,
+            recording_evidence_id: [3; 16],
+            recording_revision: 4,
+            state,
+            device_actor_sha256: [6; 32],
+            challenge_id: [7; 16],
+            challenge_expires_at_unix_ms: 1,
+            maximum_duration_millis: 10_000,
+            consent_policy_revision: 3,
+            started_at_unix_ms: Some(1),
+            ended_at_unix_ms: Some(2),
+            consent_receipt_id: Some([4; 16]),
+            source_reference_id: Some([8; 16]),
+            source_declared_bytes: Some(44),
+            source_duration_millis: Some(10),
+            source_sha256: Some([9; 32]),
+            public_error_code: None,
+        }
     }
 }

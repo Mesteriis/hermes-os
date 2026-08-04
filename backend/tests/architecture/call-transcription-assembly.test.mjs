@@ -18,7 +18,7 @@ test('call transcription assembly emits only unsigned workflow release inputs', 
     policy.implementation.productionPackages.map((descriptor) => [descriptor.name, descriptor]),
   );
 
-  assert.equal(policy.implementation.currentSlice, 'call_transcription_release_assembly_v1');
+  assert.equal(policy.implementation.currentSlice, 'call_transcription_managed_conformance_v1');
   assert.deepEqual(packages.get('hermes-call-transcription-assembly'), {
     name: 'hermes-call-transcription-assembly',
     role: 'workflow',

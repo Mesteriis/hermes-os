@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "call_transcription_release_assembly_v1",
+    "currentSlice": "call_transcription_managed_conformance_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {

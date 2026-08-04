@@ -278,7 +278,7 @@ fn whisper_stt_settings_snapshot_v1() -> SettingsSnapshotV1 {
         values: vec![
             setting_entry_v1("whisper_stt.allowed_languages_mask", 14),
             setting_entry_v1("whisper_stt.maximum_source_bytes", 16 * 1024 * 1024),
-            setting_entry_v1("whisper_stt.maximum_transcript_bytes", 64 * 1024),
+            setting_entry_v1("whisper_stt.maximum_transcript_bytes", 4 * 1024 * 1024),
             setting_entry_v1("whisper_stt.thread_count", 4),
             setting_entry_v1("whisper_stt.timeout_millis", 30_000),
         ],
@@ -305,7 +305,7 @@ fn whisper_stt_storage_binding_v1(
         .expect("active Whisper STT Storage binding")
 }
 
-fn whisper_stt_release_artifact_v1() -> SignedRuntimeArtifact {
+pub(super) fn whisper_stt_release_artifact_v1() -> SignedRuntimeArtifact {
     SignedRuntimeArtifact::new(
         WHISPER_STT_RELEASE_ARTIFACT_ID_V1,
         whisper_stt_binary(),
@@ -314,7 +314,7 @@ fn whisper_stt_release_artifact_v1() -> SignedRuntimeArtifact {
     .with_settings_schema(whisper_stt_settings_schema_bytes_v1())
 }
 
-fn whisper_stt_runtime_resources_v1() -> [SignedRuntimeResource; 2] {
+pub(super) fn whisper_stt_runtime_resources_v1() -> [SignedRuntimeResource; 2] {
     [
         SignedRuntimeResource::read_only_data(
             WHISPER_STT_MODEL_ARTIFACT_ID_V1,

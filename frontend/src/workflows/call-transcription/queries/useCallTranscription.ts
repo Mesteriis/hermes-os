@@ -186,9 +186,9 @@ export function useCallTranscription(
 		currentGeneration: number,
 		signal: AbortSignal,
 	): Promise<void> {
-		const bytes = await readCallTranscript(runId, signal)
+		const document = await readCallTranscript(runId, artifact, signal)
 		if (currentGeneration !== generation) return
-		transcriptText.value = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+		transcriptText.value = document.text
 		detectedLanguage.value = languageLabel(artifact.detectedLanguage)
 		durationLabel.value = duration(artifact.durationMillis)
 		setTerminal('ready', 'Transcript is ready from a fresh one-use authenticated read.')

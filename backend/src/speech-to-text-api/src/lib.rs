@@ -14,6 +14,7 @@ pub const PACKAGE: &str = "hermes-speech-to-text-api";
 pub const SPEECH_TO_TEXT_OWNER_V1: &str = "speech_to_text";
 pub const SPEECH_TO_TEXT_MODULE_ID_V1: &str = "hermes-speech-to-text-runtime";
 pub const SPEECH_TO_TEXT_CAPABILITY_ID_V1: &str = "speech_to_text.transcribe.v1";
+pub const SPEECH_TO_TEXT_BLOB_CAPABILITY_ID_V1: &str = "speech_to_text.blob.v1";
 pub const SPEECH_TO_TEXT_CONTRACT_NAME_V1: &str = "speech_to_text.transcribe";
 pub const SPEECH_TO_TEXT_PROVIDER_CONTRACT_NAME_V1: &str = "speech_to_text.provider_transcribe";
 pub const SPEECH_TO_TEXT_CONTRACT_MAJOR_V1: u32 = 1;

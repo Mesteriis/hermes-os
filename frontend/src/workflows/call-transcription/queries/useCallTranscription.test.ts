@@ -76,7 +76,14 @@ describe('useCallTranscription', () => {
 				stateRevision: 2n,
 			})
 		})
-		vi.mocked(readCallTranscript).mockResolvedValue(new TextEncoder().encode('verified transcript'))
+		vi.mocked(readCallTranscript).mockResolvedValue({
+			text: 'verified transcript',
+			detectedLanguage: CallTranscriptionLanguageV1.CALL_TRANSCRIPTION_LANGUAGE_ENGLISH,
+			durationMillis: 61_000n,
+			segmentCount: 2,
+			completeness: CallTranscriptionCompletenessV1.CALL_TRANSCRIPTION_COMPLETENESS_COMPLETE,
+			confidenceBasisPoints: 9_000,
+		})
 		const selected = ref<CallTranscriptionSourceV1>(source())
 		const workflow = useCallTranscription(() => true, () => selected.value)
 
@@ -93,7 +100,7 @@ describe('useCallTranscription', () => {
 		}))
 		await vi.waitFor(() => expect(workflow.model.value.status).toBe('ready'))
 		expect(workflow.model.value.transcriptText).toBe('verified transcript')
-		expect(readCallTranscript).toHaveBeenCalledWith(runId, expect.any(AbortSignal))
+		expect(readCallTranscript).toHaveBeenCalledWith(runId, artifact(), expect.any(AbortSignal))
 		expect(close).toHaveBeenCalledOnce()
 	})
 })
