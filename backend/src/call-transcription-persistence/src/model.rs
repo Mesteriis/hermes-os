@@ -136,6 +136,18 @@ pub struct MaterializeTranscriptV1 {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RebindTranscriptMaterializationV1 {
+    pub run_id: [u8; 16],
+    pub job_id: [u8; 16],
+    pub transcript_reference_id: [u8; 16],
+    pub transcript_receipt_sha256: [u8; 32],
+    pub stt_result_receipt_sha256: [u8; 32],
+    pub runtime_generation: u64,
+    pub grant_epoch: u64,
+    pub rebound_at_unix_millis: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CompleteSourceCleanupV1 {
     pub run_id: [u8; 16],
     pub source_reference_id: [u8; 16],

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "call_transcription_persistence_v1",
+    "currentSlice": "call_transcription_runtime_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1632,6 +1632,12 @@
         "role": "workflow",
         "owner": "call_transcription",
         "surface": "persistence"
+      },
+      {
+        "name": "hermes-call-transcription-runtime",
+        "role": "workflow",
+        "owner": "call_transcription",
+        "surface": "runtime"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5392,6 +5398,52 @@
         },
         {
           "name": "hermes-storage-protocol",
+          "kind": "normal"
+        }
+      ],
+      "hermes-call-transcription-runtime": [
+        {
+          "name": "hermes-blob-client",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-core",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-ingress",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-jetstream",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-events-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-speech-to-text-api",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-vault",
           "kind": "normal"
         }
       ]
@@ -13379,6 +13431,59 @@
             "tls-rustls-ring"
           ]
         }
+      ],
+      "hermes-call-transcription-runtime": [
+        {
+          "name": "getrandom",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.4.3",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "libc",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.2.186",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "sha2",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.11.0",
+          "defaultFeatures": false,
+          "features": []
+        },
+        {
+          "name": "tokio",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.52.4",
+          "defaultFeatures": false,
+          "features": [
+            "rt-multi-thread",
+            "time"
+          ]
+        },
+        {
+          "name": "zeroize",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.9.0",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -14520,6 +14625,10 @@
       "hermes-call-transcription-persistence": {
         "primaryKind": "lib",
         "customBuildAllowed": false
+      },
+      "hermes-call-transcription-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
       }
     },
     "developmentProfile": {
@@ -14625,7 +14734,11 @@
         "attachment_translation.source_rejected.v1",
         "attachment_translation.source_requested.v1",
         "attachment_translation.storage.v1",
+        "call_transcription.blob.v1",
+        "call_transcription.recording_ready.v1",
+        "call_transcription.recording_rejected.v1",
         "call_transcription.storage.v1",
+        "call_transcription.stt.v1",
         "call_transcription.v1",
         "communication.cross_channel_forward.v1",
         "communication.explanation.v1",

@@ -7,7 +7,8 @@ use sqlx::{Postgres, Row, Transaction};
 use crate::{
     CallTranscriptionJobLeaseV1, CallTranscriptionPersistenceErrorV1,
     CallTranscriptionPersistenceV1, ClaimedCallTranscriptionJobV1, CompleteSourceCleanupV1,
-    MaterializeTranscriptV1, PersistSttResultV1, call_transcription_job_id_v1,
+    MaterializeTranscriptV1, PersistSttResultV1, RebindTranscriptMaterializationV1,
+    call_transcription_job_id_v1,
     model::{
         CALL_TRANSCRIPTION_MAX_ATTEMPTS_V1, CALL_TRANSCRIPTION_MAX_LEASE_MILLIS_V1, valid_id16,
         valid_outbox, valid_owner, valid_sha256, valid_timestamp_millis, valid_worker,
@@ -377,6 +378,78 @@ impl CallTranscriptionPersistenceV1 {
             input.occurred_at_unix_millis,
         )
         .await?;
+        transaction.commit().await.map_err(storage_error)
+    }
+
+    pub async fn rebind_transcript_materialization(
+        &self,
+        logical_owner_id: &str,
+        input: RebindTranscriptMaterializationV1,
+    ) -> Result<(), CallTranscriptionPersistenceErrorV1> {
+        if !valid_owner(logical_owner_id)
+            || !valid_id16(&input.run_id)
+            || !valid_id16(&input.job_id)
+            || !valid_id16(&input.transcript_reference_id)
+            || !valid_sha256(&input.transcript_receipt_sha256)
+            || !valid_sha256(&input.stt_result_receipt_sha256)
+            || input.runtime_generation == 0
+            || input.grant_epoch == 0
+            || !valid_timestamp_millis(input.rebound_at_unix_millis)
+        {
+            return Err(CallTranscriptionPersistenceErrorV1::InvalidInput);
+        }
+        let mut transaction = self.pool.begin().await.map_err(storage_error)?;
+        let row = sqlx::query(
+            "SELECT j.run_id,j.result_receipt_sha256,r.state,
+             r.pending_transcript_reference_id,r.pending_transcript_sha256,
+             r.stt_result_receipt_sha256
+             FROM hermes_data.call_transcription_jobs j
+             JOIN hermes_data.call_transcription_runs r
+               ON r.logical_owner_id=j.logical_owner_id AND r.run_id=j.run_id
+             WHERE j.logical_owner_id=$1 AND j.job_id=$2 AND j.state=3
+             FOR UPDATE OF j,r",
+        )
+        .bind(logical_owner_id)
+        .bind(input.job_id.as_slice())
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(storage_error)?
+        .ok_or(CallTranscriptionPersistenceErrorV1::StaleFence)?;
+        let exact = id16(row.try_get("run_id").map_err(row_error)?)? == input.run_id
+            && row.try_get::<i16, _>("state").map_err(row_error)?
+                == state_code(CallTranscriptionStateV1::MaterializingTranscript)
+            && id16(
+                row.try_get("pending_transcript_reference_id")
+                    .map_err(row_error)?,
+            )? == input.transcript_reference_id
+            && id32(
+                row.try_get("pending_transcript_sha256")
+                    .map_err(row_error)?,
+            )? == input.transcript_receipt_sha256
+            && id32(row.try_get("result_receipt_sha256").map_err(row_error)?)?
+                == input.stt_result_receipt_sha256
+            && id32(
+                row.try_get("stt_result_receipt_sha256")
+                    .map_err(row_error)?,
+            )? == input.stt_result_receipt_sha256;
+        if !exact {
+            return Err(CallTranscriptionPersistenceErrorV1::RevisionConflict);
+        }
+        let changed = sqlx::query(
+            "UPDATE hermes_data.call_transcription_jobs SET runtime_generation=$1,
+             grant_epoch=$2,updated_at_unix_millis=$3
+             WHERE logical_owner_id=$4 AND job_id=$5 AND state=3",
+        )
+        .bind(signed(input.runtime_generation)?)
+        .bind(signed(input.grant_epoch)?)
+        .bind(input.rebound_at_unix_millis)
+        .bind(logical_owner_id)
+        .bind(input.job_id.as_slice())
+        .execute(&mut *transaction)
+        .await
+        .map_err(storage_error)?
+        .rows_affected();
+        exact_update(changed)?;
         transaction.commit().await.map_err(storage_error)
     }
 

@@ -60,6 +60,7 @@ pub fn encode_module_saved_search_request_v1(
         request_payload: payload.to_vec(),
         logical_owner_id: String::new(),
         authenticated_device_id: String::new(),
+        authenticated_client_session_id: String::new(),
     }
     .encode_to_vec())
 }

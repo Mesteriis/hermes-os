@@ -479,6 +479,7 @@ fn assert_revoked_start_route_is_rejected(
         .encode_to_vec(),
         logical_owner_id: MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec();
     let route = ManagedCapabilityRouteRequest::new(
@@ -961,6 +962,7 @@ fn try_route_sync_request(
         request_payload,
         logical_owner_id: MAIL_CONTACTS_SYNC_LOGICAL_OWNER_ID_V1.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec();
     let route = ManagedCapabilityRouteRequest::new(

@@ -217,6 +217,7 @@ fn managed_route_fixture(
         request_payload: vec![1],
         logical_owner_id: "owner-local".to_owned(),
         authenticated_device_id: "device-local".to_owned(),
+        authenticated_client_session_id: "session-local".to_owned(),
     }
     .encode_to_vec();
     (

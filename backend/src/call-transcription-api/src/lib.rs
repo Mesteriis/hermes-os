@@ -10,6 +10,7 @@ pub const CAPABILITY_ID_V1: &str = "call_transcription.v1";
 pub const START_CONTRACT_NAME_V1: &str = "call_transcription.start";
 pub const GET_CONTRACT_NAME_V1: &str = "call_transcription.get";
 pub const TICKET_CONTRACT_NAME_V1: &str = "call_transcription.transcript_ticket";
+pub const READ_CONTRACT_NAME_V1: &str = "call_transcription.read_transcript";
 pub const REALTIME_CONTRACT_NAME_V1: &str = "call_transcription.status_changed";
 pub const REALTIME_EVENT_KIND_V1: &str = "call_transcription.status_changed";
 pub const START_CONNECT_PATH_V1: &str =
@@ -66,6 +67,7 @@ mod tests {
             "recording_evidence_id",
             "consent_receipt_id",
             "IssueCallTranscriptReadRequestV1",
+            "ReadCallTranscriptRequestV1",
             "transcript_sha256",
             "segment_count",
         ] {

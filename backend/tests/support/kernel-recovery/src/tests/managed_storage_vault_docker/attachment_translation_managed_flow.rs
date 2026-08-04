@@ -600,6 +600,7 @@ fn route_attachment_translation_as_v1(
         request_payload: request.encode_to_vec(),
         logical_owner_id: logical_owner_id.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec();
     let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
@@ -641,6 +642,7 @@ fn assert_attachment_translation_runtime_fences_v1(
         request_payload: request.encode_to_vec(),
         logical_owner_id: ATTACHMENT_TRANSLATION_LOGICAL_OWNER_ID_V1.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec();
     for (runtime_generation, grant_epoch, label) in [

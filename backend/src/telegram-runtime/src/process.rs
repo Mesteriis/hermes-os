@@ -1241,6 +1241,7 @@ mod control_dispatch_tests {
                                     request_payload: vec![1],
                                     logical_owner_id: String::new(),
                                     authenticated_device_id: String::new(),
+                                    authenticated_client_session_id: String::new(),
                                 }),
                             },
                         )),

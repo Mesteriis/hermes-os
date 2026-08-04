@@ -21,6 +21,9 @@ message ModuleClientRequestV1 {
   // The client payload cannot set or override this value. Empty only when
   // logical_owner_id is empty for non-client test/internal callers.
   string authenticated_device_id = 8;
+  // Exact browser/client session authenticated by Core Gateway. The client
+  // payload cannot set or override this value. It is atomic with owner/device.
+  string authenticated_client_session_id = 9;
 }
 
 message ModuleClientResponseV1 {

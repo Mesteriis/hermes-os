@@ -754,6 +754,7 @@ fn encode_communication_summary_module_request_as(
         request_payload: request.encode_to_vec(),
         logical_owner_id: logical_owner_id.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec()
 }

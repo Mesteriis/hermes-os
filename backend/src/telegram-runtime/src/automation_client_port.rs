@@ -537,6 +537,7 @@ mod tests {
             request_payload: payload,
             logical_owner_id: String::new(),
             authenticated_device_id: String::new(),
+            authenticated_client_session_id: String::new(),
         }
     }
 

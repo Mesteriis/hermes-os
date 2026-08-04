@@ -98,7 +98,7 @@ pub struct ClientRpcRouter<A> {
     handler: ClientRpcRouteHandler,
 }
 pub type ClientRpcRouteHandler = Arc<
-    dyn Fn(&ClientRpcRouteV1, &str, &str, &[u8]) -> Result<Vec<u8>, ClientRpcRouteErrorV1>
+    dyn Fn(&ClientRpcRouteV1, &str, &str, &str, &[u8]) -> Result<Vec<u8>, ClientRpcRouteErrorV1>
         + Send
         + Sync,
 >;
@@ -166,11 +166,14 @@ where
         };
         let owner_id = session.owner_id().to_owned();
         let device_id = session.device_id().to_owned();
+        let session_id = session.session_id().to_owned();
         let route = self.route.clone();
         let handler = Arc::clone(&self.handler);
         let response_payload = match timeout_at(
             deadline,
-            task::spawn_blocking(move || handler(&route, &owner_id, &device_id, &body)),
+            task::spawn_blocking(move || {
+                handler(&route, &owner_id, &device_id, &session_id, &body)
+            }),
         )
         .await
         {
@@ -337,12 +340,14 @@ mod tests {
             [7; 32],
             "/owner.catalog.v1.CatalogService/List",
         );
-        let handler: ClientRpcRouteHandler = Arc::new(|_, owner_id, device_id, payload| {
-            assert_eq!(owner_id, "owner");
-            assert_eq!(device_id, "device");
-            assert!(payload.is_empty());
-            Ok(vec![1])
-        });
+        let handler: ClientRpcRouteHandler =
+            Arc::new(|_, owner_id, device_id, session_id, payload| {
+                assert_eq!(owner_id, "owner");
+                assert_eq!(device_id, "device");
+                assert!(!session_id.is_empty());
+                assert!(payload.is_empty());
+                Ok(vec![1])
+            });
         let router = ClientRpcRouter::new(service, route, handler);
         let request = Request::post("/owner.catalog.v1.CatalogService/List")
             .header(CONTENT_TYPE, "application/proto")

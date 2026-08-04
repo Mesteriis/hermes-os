@@ -122,7 +122,7 @@ pub struct ClientBlobRouter<A> {
 }
 
 pub type ClientBlobRouteHandler = Arc<
-    dyn Fn(&ClientBlobRouteV1, &str, &str, &[u8]) -> Result<Vec<u8>, ClientBlobRouteErrorV1>
+    dyn Fn(&ClientBlobRouteV1, &str, &str, &str, &[u8]) -> Result<Vec<u8>, ClientBlobRouteErrorV1>
         + Send
         + Sync,
 >;
@@ -191,11 +191,14 @@ where
         }
         let owner_id = session.owner_id().to_owned();
         let device_id = session.device_id().to_owned();
+        let session_id = session.session_id().to_owned();
         let route = self.route.clone();
         let handler = Arc::clone(&self.handler);
         let content = match timeout_at(
             deadline,
-            task::spawn_blocking(move || handler(&route, &owner_id, &device_id, &body)),
+            task::spawn_blocking(move || {
+                handler(&route, &owner_id, &device_id, &session_id, &body)
+            }),
         )
         .await
         {

@@ -124,6 +124,7 @@ pub fn encode_module_request(
         request_payload: encode_request_payload(request)?,
         logical_owner_id: String::new(),
         authenticated_device_id: String::new(),
+        authenticated_client_session_id: String::new(),
     }
     .encode_to_vec())
 }

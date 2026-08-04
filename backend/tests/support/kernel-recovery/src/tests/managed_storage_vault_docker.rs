@@ -702,6 +702,7 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             request_payload,
             logical_owner_id: logical_owner_id.to_owned(),
             authenticated_device_id: "desktop-1".to_owned(),
+            authenticated_client_session_id: "session-1".to_owned(),
         }
         .encode_to_vec();
         let launch = store

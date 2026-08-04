@@ -1185,6 +1185,7 @@ fn assert_stale_delayed_route_is_rejected(
         .encode_to_vec(),
         logical_owner_id: DELAYED_DELIVERY_LOGICAL_OWNER_ID.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec();
     let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(
@@ -1263,6 +1264,7 @@ fn revoke_delayed_delivery_runtime(
         .encode_to_vec(),
         logical_owner_id: DELAYED_DELIVERY_LOGICAL_OWNER_ID.to_owned(),
         authenticated_device_id: "desktop-1".to_owned(),
+        authenticated_client_session_id: "session-1".to_owned(),
     }
     .encode_to_vec();
     let route = crate::modules::capability::router::ManagedCapabilityRouteRequest::new(

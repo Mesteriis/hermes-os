@@ -51,6 +51,11 @@ message IssueCallTranscriptReadResponseV1 {
   CallTranscriptionErrorCodeV1 error = 15;
 }
 
+message ReadCallTranscriptRequestV1 {
+  uint32 protocol_major = 1;
+  bytes opaque_read_ticket = 2;
+}
+
 message CallTranscriptionArtifactV1 {
   bytes transcript_sha256 = 1;
   uint64 transcript_size_bytes = 2;

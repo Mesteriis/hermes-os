@@ -1350,6 +1350,11 @@ const CALL_TRANSCRIPTION_PERSISTENCE_PRODUCTION_PACKAGES = [
   { name: 'hermes-call-transcription-persistence', role: 'workflow', owner: 'call_transcription', surface: 'persistence' },
 ];
 
+const CALL_TRANSCRIPTION_RUNTIME_PRODUCTION_PACKAGES = [
+  ...CALL_TRANSCRIPTION_PERSISTENCE_PRODUCTION_PACKAGES,
+  { name: 'hermes-call-transcription-runtime', role: 'workflow', owner: 'call_transcription', surface: 'runtime' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -4000,6 +4005,23 @@ const CALL_TRANSCRIPTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const CALL_TRANSCRIPTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...CALL_TRANSCRIPTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-call-transcription-runtime': [
+    { name: 'hermes-blob-client', kind: 'normal' },
+    { name: 'hermes-call-transcription-api', kind: 'normal' },
+    { name: 'hermes-call-transcription-core', kind: 'normal' },
+    { name: 'hermes-call-transcription-ingress', kind: 'normal' },
+    { name: 'hermes-call-transcription-persistence', kind: 'normal' },
+    { name: 'hermes-events-jetstream', kind: 'normal' },
+    { name: 'hermes-events-protocol', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-speech-to-text-api', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+    { name: 'hermes-storage-vault', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5482,6 +5504,18 @@ const CALL_TRANSCRIPTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const CALL_TRANSCRIPTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...CALL_TRANSCRIPTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-call-transcription-runtime': [
+    { name: 'getrandom', kind: 'normal', source: 'crates_io', version: '=0.4.3', defaultFeatures: true, features: [] },
+    { name: 'libc', kind: 'normal', source: 'crates_io', version: '=0.2.186', defaultFeatures: true, features: [] },
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
+    { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
+    { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
 const FORBIDDEN_DEPENDENCIES = [
   'async-nats',
   'nats',
@@ -6343,6 +6377,17 @@ const CALL_TRANSCRIPTION_PERSISTENCE_INVENTORY = {
   businessCapabilities: [
     ...CALL_TRANSCRIPTION_CONTRACT_CORE_INVENTORY.businessCapabilities,
     'call_transcription.storage.v1',
+  ].sort(),
+};
+
+const CALL_TRANSCRIPTION_RUNTIME_INVENTORY = {
+  ...CALL_TRANSCRIPTION_PERSISTENCE_INVENTORY,
+  businessCapabilities: [
+    ...CALL_TRANSCRIPTION_PERSISTENCE_INVENTORY.businessCapabilities,
+    'call_transcription.blob.v1',
+    'call_transcription.recording_ready.v1',
+    'call_transcription.recording_rejected.v1',
+    'call_transcription.stt.v1',
   ].sort(),
 };
 
@@ -8402,6 +8447,17 @@ function expectedSlice(currentSlice) {
       packages: CALL_TRANSCRIPTION_PERSISTENCE_PRODUCTION_PACKAGES,
       workspaceDependencies: CALL_TRANSCRIPTION_PERSISTENCE_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: CALL_TRANSCRIPTION_PERSISTENCE_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'call_transcription_runtime_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: CALL_TRANSCRIPTION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: CALL_TRANSCRIPTION_RUNTIME_PRODUCTION_PACKAGES,
+      workspaceDependencies: CALL_TRANSCRIPTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CALL_TRANSCRIPTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }

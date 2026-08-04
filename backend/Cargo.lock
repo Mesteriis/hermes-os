@@ -2562,6 +2562,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-call-transcription-runtime"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "hermes-blob-client",
+ "hermes-call-transcription-api",
+ "hermes-call-transcription-core",
+ "hermes-call-transcription-ingress",
+ "hermes-call-transcription-persistence",
+ "hermes-events-jetstream",
+ "hermes-events-protocol",
+ "hermes-runtime-protocol",
+ "hermes-speech-to-text-api",
+ "hermes-storage-protocol",
+ "hermes-storage-vault",
+ "libc",
+ "prost 0.14.4",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "hermes-clock-protocol"
 version = "0.1.0"
 

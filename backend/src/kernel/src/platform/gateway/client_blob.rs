@@ -46,8 +46,18 @@ pub(crate) fn compose_client_blob_routers(
         request_id_sequence,
     ));
     let handler: ClientBlobRouteHandler = Arc::new(
-        move |route, logical_owner_id, authenticated_device_id, payload| {
-            adapter.authorize_and_read(route, logical_owner_id, authenticated_device_id, payload)
+        move |route,
+              logical_owner_id,
+              authenticated_device_id,
+              authenticated_client_session_id,
+              payload| {
+            adapter.authorize_and_read(
+                route,
+                logical_owner_id,
+                authenticated_device_id,
+                authenticated_client_session_id,
+                payload,
+            )
         },
     );
 
@@ -107,12 +117,14 @@ impl KernelClientBlobAdapterV1 {
         route: &ClientBlobRouteV1,
         logical_owner_id: &str,
         authenticated_device_id: &str,
+        authenticated_client_session_id: &str,
         request_payload: &[u8],
     ) -> Result<Vec<u8>, ClientBlobRouteErrorV1> {
         let (runtime, authorization) = self.authorize_module_read(
             route,
             logical_owner_id,
             authenticated_device_id,
+            authenticated_client_session_id,
             request_payload,
         )?;
         let content = self.read_blob(route, &runtime, authorization)?;
@@ -127,6 +139,7 @@ impl KernelClientBlobAdapterV1 {
         route: &ClientBlobRouteV1,
         logical_owner_id: &str,
         authenticated_device_id: &str,
+        authenticated_client_session_id: &str,
         request_payload: &[u8],
     ) -> Result<(AuthorizedRuntimeReadV1, ModuleClientBlobAuthorizationV1), ClientBlobRouteErrorV1>
     {
@@ -176,6 +189,7 @@ impl KernelClientBlobAdapterV1 {
             route,
             logical_owner_id,
             authenticated_device_id,
+            authenticated_client_session_id,
             request_id,
             request_payload,
         )
@@ -272,12 +286,14 @@ fn encode_module_request(
     route: &ClientBlobRouteV1,
     logical_owner_id: &str,
     authenticated_device_id: &str,
+    authenticated_client_session_id: &str,
     request_id: u64,
     request_payload: &[u8],
 ) -> Result<Vec<u8>, ()> {
     if module_id.is_empty()
         || logical_owner_id.is_empty()
         || authenticated_device_id.is_empty()
+        || authenticated_client_session_id.is_empty()
         || request_id == 0
         || request_payload.is_empty()
     {
@@ -298,6 +314,7 @@ fn encode_module_request(
         request_payload: request_payload.to_vec(),
         logical_owner_id: logical_owner_id.to_owned(),
         authenticated_device_id: authenticated_device_id.to_owned(),
+        authenticated_client_session_id: authenticated_client_session_id.to_owned(),
     }
     .encode_to_vec())
 }

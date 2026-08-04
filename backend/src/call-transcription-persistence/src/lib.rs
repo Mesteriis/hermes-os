@@ -18,8 +18,8 @@ pub use model::{
     CreateCallTranscriptionRunOutcomeV1, CreateCallTranscriptionRunV1, DurableOutboxRecordV1,
     IssueCallTranscriptTicketV1, IssuedCallTranscriptTicketV1, MaterializeTranscriptV1,
     PersistRecordingIngressV1, PersistSttResultV1, PersistedCallTranscriptionRunV1,
-    PersistedRecordingSourceV1, PersistedTranscriptBlobV1, RecordingIngressOutcomeV1,
-    RedeemedCallTranscriptTicketV1, UnpublishedCallTranscriptionEventV1,
+    PersistedRecordingSourceV1, PersistedTranscriptBlobV1, RebindTranscriptMaterializationV1,
+    RecordingIngressOutcomeV1, RedeemedCallTranscriptTicketV1, UnpublishedCallTranscriptionEventV1,
     call_transcription_job_id_v1,
 };
 pub use repository::CallTranscriptionPersistenceV1;

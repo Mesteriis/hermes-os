@@ -489,7 +489,7 @@ const SELECT_RUN_FOR_UPDATE: &str = concat!(
 const SELECT_RECOVERABLE: &str = concat!(
     "SELECT ",
     "logical_owner_id,run_id,operation_id,request_fingerprint,call_evidence_id,call_evidence_revision,recording_evidence_id,recording_revision,consent_receipt_id,consent_policy_revision,requested_language,state,state_revision,source_reference_id,source_sha256,source_declared_bytes,source_duration_millis,source_receipt_sha256,source_cleanup_completed_at_unix_millis,stt_request_id,stt_request_digest,stt_result_receipt_sha256,pending_transcript_reference_id,pending_transcript_sha256,pending_transcript_size_bytes,pending_detected_language,pending_duration_millis,pending_segment_count,pending_completeness,pending_confidence_basis_points,artifact_id,artifact_reference_id,artifact_receipt_sha256,artifact_transcript_sha256,artifact_transcript_size_bytes,artifact_detected_language,artifact_duration_millis,artifact_segment_count,artifact_completeness,artifact_confidence_basis_points,artifact_runtime_generation,artifact_grant_epoch,rejection_code ",
-    "FROM hermes_data.call_transcription_runs WHERE logical_owner_id=$1 AND state IN (2,3,4) ORDER BY state_revision,run_id LIMIT $2"
+    "FROM hermes_data.call_transcription_runs WHERE logical_owner_id=$1 AND (state IN (2,3,4) OR (state IN (5,6) AND source_reference_id IS NOT NULL AND source_cleanup_completed_at_unix_millis IS NULL)) ORDER BY state_revision,run_id LIMIT $2"
 );
 
 fn persisted_from_row(

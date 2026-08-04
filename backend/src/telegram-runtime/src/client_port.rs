@@ -257,6 +257,7 @@ pub fn encode_module_request(
         request_payload,
         logical_owner_id: String::new(),
         authenticated_device_id: String::new(),
+        authenticated_client_session_id: String::new(),
     };
     Ok(envelope.encode_to_vec())
 }

@@ -25,7 +25,7 @@ test('call transcription persistence is owner-local, restart-safe, and content-p
     policy.implementation.productionPackages.map((descriptor) => [descriptor.name, descriptor]),
   );
 
-  assert.equal(policy.implementation.currentSlice, 'call_transcription_persistence_v1');
+  assert.equal(policy.implementation.currentSlice, 'call_transcription_runtime_v1');
   assert.deepEqual(packages.get('hermes-call-transcription-persistence'), {
     name: 'hermes-call-transcription-persistence',
     role: 'workflow',
