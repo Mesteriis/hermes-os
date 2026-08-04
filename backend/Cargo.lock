@@ -2530,6 +2530,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermes-call-transcription-assembly"
+version = "0.1.0"
+dependencies = [
+ "hermes-call-transcription-persistence",
+ "hermes-call-transcription-runtime",
+ "hermes-runtime-protocol",
+ "hermes-storage-protocol",
+ "prost 0.14.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "hermes-call-transcription-core"
 version = "0.1.0"
 dependencies = [

@@ -25,7 +25,7 @@ test('call transcription runtime is an event-only workflow with SSE metadata and
     policy.implementation.productionPackages.map((descriptor) => [descriptor.name, descriptor]),
   );
 
-  assert.equal(policy.implementation.currentSlice, 'call_transcription_runtime_v1');
+  assert.equal(policy.implementation.currentSlice, 'call_transcription_release_assembly_v1');
   assert.deepEqual(packages.get('hermes-call-transcription-runtime'), {
     name: 'hermes-call-transcription-runtime',
     role: 'workflow',

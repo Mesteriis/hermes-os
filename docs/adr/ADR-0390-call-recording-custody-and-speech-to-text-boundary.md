@@ -9,8 +9,9 @@
 ingress, generated client API, pure lifecycle core, owner-local persistence и
 managed runtime с atomic inbox/outbox, fenced jobs/recovery, exact recording
 event subscriptions, public STT request RPC, metadata-only replayable SSE и
-actor/session-bound one-use Blob tickets. Release assembly, Gateway/browser
-client Blob wiring и live conformance из раздела «Проверка» ещё не завершены.
+actor/session-bound one-use Blob tickets и отдельную unsigned release assembly.
+Gateway/browser client composition и live conformance из раздела «Проверка»
+ещё не завершены.
 Компилируемый workflow, который передаёт текст Communications в LLM или
 возвращает summary вместо transcript, не является реализацией этого ADR.
 

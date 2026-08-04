@@ -7,7 +7,7 @@
 Состояние реализации: transport field, atomic validation, Gateway propagation
 и actor/session-bound ticket redemption реализованы в слайсе
 `call_transcription_runtime_v1`; inventory gate `call_transcription_v1`
-остаётся `planned` до release assembly и browser conformance.
+остаётся `planned` до browser composition и conformance.
 
 Уточняет:
 

@@ -58,7 +58,7 @@
     ]
   },
   "implementation": {
-    "currentSlice": "call_transcription_runtime_v1",
+    "currentSlice": "call_transcription_release_assembly_v1",
     "productionPackageMode": "exact_allowlist",
     "productionPackages": [
       {
@@ -1638,6 +1638,12 @@
         "role": "workflow",
         "owner": "call_transcription",
         "surface": "runtime"
+      },
+      {
+        "name": "hermes-call-transcription-assembly",
+        "role": "workflow",
+        "owner": "call_transcription",
+        "surface": "assembly"
       }
     ],
     "workspaceDependencyAllowlist": {
@@ -5444,6 +5450,24 @@
         },
         {
           "name": "hermes-storage-vault",
+          "kind": "normal"
+        }
+      ],
+      "hermes-call-transcription-assembly": [
+        {
+          "name": "hermes-call-transcription-persistence",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-call-transcription-runtime",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-runtime-protocol",
+          "kind": "normal"
+        },
+        {
+          "name": "hermes-storage-protocol",
           "kind": "normal"
         }
       ]
@@ -13484,6 +13508,35 @@
           "defaultFeatures": true,
           "features": []
         }
+      ],
+      "hermes-call-transcription-assembly": [
+        {
+          "name": "prost",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=0.14.4",
+          "defaultFeatures": true,
+          "features": []
+        },
+        {
+          "name": "serde",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.228",
+          "defaultFeatures": false,
+          "features": [
+            "derive",
+            "std"
+          ]
+        },
+        {
+          "name": "serde_json",
+          "kind": "normal",
+          "source": "crates_io",
+          "version": "=1.0.150",
+          "defaultFeatures": true,
+          "features": []
+        }
       ]
     },
     "forbiddenDependencies": [
@@ -14627,6 +14680,10 @@
         "customBuildAllowed": false
       },
       "hermes-call-transcription-runtime": {
+        "primaryKind": "bin",
+        "customBuildAllowed": false
+      },
+      "hermes-call-transcription-assembly": {
         "primaryKind": "bin",
         "customBuildAllowed": false
       }

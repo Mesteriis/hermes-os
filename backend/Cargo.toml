@@ -125,6 +125,7 @@ members = [
   "src/call-transcription-core",
   "src/call-transcription-persistence",
   "src/call-transcription-runtime",
+  "src/call-transcription-assembly",
   "src/speech-to-text-core",
   "src/speech-to-text-persistence",
   "src/speech-to-text-runtime",

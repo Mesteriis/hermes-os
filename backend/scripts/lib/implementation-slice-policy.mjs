@@ -1355,6 +1355,11 @@ const CALL_TRANSCRIPTION_RUNTIME_PRODUCTION_PACKAGES = [
   { name: 'hermes-call-transcription-runtime', role: 'workflow', owner: 'call_transcription', surface: 'runtime' },
 ];
 
+const CALL_TRANSCRIPTION_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES = [
+  ...CALL_TRANSCRIPTION_RUNTIME_PRODUCTION_PACKAGES,
+  { name: 'hermes-call-transcription-assembly', role: 'workflow', owner: 'call_transcription', surface: 'assembly' },
+];
+
 const BLOB_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ...NATS_FOUNDATION_WORKSPACE_DEPENDENCY_ALLOWLIST,
   'hermes-blob-protocol': [],
@@ -4022,6 +4027,16 @@ const CALL_TRANSCRIPTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST = {
   ],
 };
 
+const CALL_TRANSCRIPTION_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST = {
+  ...CALL_TRANSCRIPTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
+  'hermes-call-transcription-assembly': [
+    { name: 'hermes-call-transcription-persistence', kind: 'normal' },
+    { name: 'hermes-call-transcription-runtime', kind: 'normal' },
+    { name: 'hermes-runtime-protocol', kind: 'normal' },
+    { name: 'hermes-storage-protocol', kind: 'normal' },
+  ],
+};
+
 const COMMUNICATIONS_EXPORT_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
   ...COMMUNICATIONS_SENDER_INSIGHTS_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
   'hermes-communications-evidence-export-source-api': [
@@ -5513,6 +5528,15 @@ const CALL_TRANSCRIPTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
     { name: 'sha2', kind: 'normal', source: 'crates_io', version: '=0.11.0', defaultFeatures: false, features: [] },
     { name: 'tokio', kind: 'normal', source: 'crates_io', version: '=1.52.4', defaultFeatures: false, features: ['rt-multi-thread', 'time'] },
     { name: 'zeroize', kind: 'normal', source: 'crates_io', version: '=1.9.0', defaultFeatures: true, features: [] },
+  ],
+};
+
+const CALL_TRANSCRIPTION_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST = {
+  ...CALL_TRANSCRIPTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+  'hermes-call-transcription-assembly': [
+    { name: 'prost', kind: 'normal', source: 'crates_io', version: '=0.14.4', defaultFeatures: true, features: [] },
+    { name: 'serde', kind: 'normal', source: 'crates_io', version: '=1.0.228', defaultFeatures: false, features: ['derive', 'std'] },
+    { name: 'serde_json', kind: 'normal', source: 'crates_io', version: '=1.0.150', defaultFeatures: true, features: [] },
   ],
 };
 
@@ -8458,6 +8482,17 @@ function expectedSlice(currentSlice) {
       packages: CALL_TRANSCRIPTION_RUNTIME_PRODUCTION_PACKAGES,
       workspaceDependencies: CALL_TRANSCRIPTION_RUNTIME_WORKSPACE_DEPENDENCY_ALLOWLIST,
       thirdPartyDependencies: CALL_TRANSCRIPTION_RUNTIME_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
+      forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
+    };
+  }
+  if (currentSlice === 'call_transcription_release_assembly_v1') {
+    return {
+      profile: FIRST_OWNER_PROFILE,
+      ownerInventory: CALL_TRANSCRIPTION_RUNTIME_INVENTORY,
+      cargoFeatures: MAIL_ADDRESS_BOOK_RUNTIME_EXECUTION_CARGO_FEATURE_ALLOWLIST,
+      packages: CALL_TRANSCRIPTION_RELEASE_ASSEMBLY_PRODUCTION_PACKAGES,
+      workspaceDependencies: CALL_TRANSCRIPTION_RELEASE_ASSEMBLY_WORKSPACE_DEPENDENCY_ALLOWLIST,
+      thirdPartyDependencies: CALL_TRANSCRIPTION_RELEASE_ASSEMBLY_THIRD_PARTY_DEPENDENCY_ALLOWLIST,
       forbiddenDependencyPrefixes: STORAGE_FOUNDATION_FORBIDDEN_DEPENDENCY_PREFIXES,
     };
   }
