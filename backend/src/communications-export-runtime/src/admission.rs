@@ -11,8 +11,8 @@ use hermes_communications_export_api::{
     COMMUNICATIONS_EXPORT_MODULE_ID_V1, COMMUNICATIONS_EXPORT_OWNER_V1,
     COMMUNICATIONS_EXPORT_QUERY_CONNECT_PATH_V1, COMMUNICATIONS_EXPORT_QUERY_CONTRACT_NAME_V1,
     COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, COMMUNICATIONS_EXPORT_READ_CONTRACT_NAME_V1,
-    COMMUNICATIONS_EXPORT_SCHEMA_SHA256, COMMUNICATIONS_EXPORT_TICKET_CONNECT_PATH_V1,
-    COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
+    COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1, COMMUNICATIONS_EXPORT_SCHEMA_SHA256,
+    COMMUNICATIONS_EXPORT_TICKET_CONNECT_PATH_V1, COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
 };
 use hermes_runtime_protocol::v1::{
     BlobQuotaOperationV1, BlobQuotaRequestV1, CapabilityCriticalityV1, CapabilityDescriptorV1,
@@ -99,6 +99,12 @@ pub fn communications_export_client_capability_v1() -> CapabilityDescriptorV1 {
                     max_response_bytes: COMMUNICATIONS_EXPORT_MAX_ARTIFACT_BYTES_V1,
                 }),
             },
+            ProvidedSurfaceV1 {
+                kind: ProvidedSurfaceKindV1::ClientRealtime as i32,
+                contract: Some(communications_export_realtime_contract_reference_v1()),
+                client_rpc_route: None,
+                client_blob_route: None,
+            },
         ],
         ..Default::default()
     }
@@ -160,6 +166,11 @@ pub fn communications_export_ticket_contract_reference_v1() -> ContractReference
 #[must_use]
 pub fn communications_export_read_contract_reference_v1() -> ContractReferenceV1 {
     client_contract(COMMUNICATIONS_EXPORT_READ_CONTRACT_NAME_V1)
+}
+
+#[must_use]
+pub fn communications_export_realtime_contract_reference_v1() -> ContractReferenceV1 {
+    client_contract(COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1)
 }
 
 #[must_use]

@@ -33,6 +33,14 @@ const paths = {
     'src/communications-export-runtime/src/runtime.rs',
     BACKEND_ROOT,
   ),
+  workflowRealtime: new URL(
+    'src/communications-export-runtime/src/client_realtime.rs',
+    BACKEND_ROOT,
+  ),
+  workflowPersistenceRealtime: new URL(
+    'src/communications-export-persistence/src/realtime.rs',
+    BACKEND_ROOT,
+  ),
   workflowAssembly: new URL(
     'src/communications-export-assembly/Cargo.toml',
     BACKEND_ROOT,
@@ -69,6 +77,10 @@ const paths = {
     'frontend/src/workflows/communications-export/api/communicationsEvidenceExport.ts',
     PROJECT_ROOT,
   ),
+  frontendController: new URL(
+    'frontend/src/workflows/communications-export/queries/useCommunicationsEvidenceExport.ts',
+    PROJECT_ROOT,
+  ),
   frontendViteConfig: new URL('frontend/vite.config.ts', PROJECT_ROOT),
   managedExportTest: new URL(
     'tests/support/kernel-recovery/src/tests/managed_storage_vault_docker.rs',
@@ -84,6 +96,10 @@ const paths = {
   ),
   adr: new URL(
     'docs/adr/ADR-0318-communications-evidence-export-workflow.md',
+    PROJECT_ROOT,
+  ),
+  realtimeAdr: new URL(
+    'docs/adr/ADR-0393-communications-export-status-over-shared-client-realtime.md',
     PROJECT_ROOT,
   ),
 };
@@ -234,10 +250,11 @@ test('export artifact stays within one exact platform client Blob ceiling', asyn
 });
 
 test('Frontend composition passes canonical IDs into a generated workflow without domain imports', async () => {
-  const [route, app, workflow, viteConfig] = await Promise.all([
+  const [route, app, workflow, controller, viteConfig] = await Promise.all([
     readFile(paths.frontendRoute, 'utf8'),
     readFile(paths.frontendApp, 'utf8'),
     readFile(paths.frontendWorkflow, 'utf8'),
+    readFile(paths.frontendController, 'utf8'),
     readFile(paths.frontendViteConfig, 'utf8'),
   ]);
   assert.match(route, /canonicalMessageSelected/);
@@ -248,8 +265,32 @@ test('Frontend composition passes canonical IDs into a generated workflow withou
   assert.match(workflow, /getCommunicationsExportQueryClient/);
   assert.match(workflow, /getCommunicationsExportTicketClient/);
   assert.match(workflow, /BrowserGatewayFetch/);
+  assert.match(workflow, /getBrowserGatewayRealtimeHub/);
+  assert.match(controller, /openCommunicationsEvidenceExportRealtime/);
+  assert.doesNotMatch(controller, /setInterval|setTimeout|poll/i);
   assert.match(viteConfig, /'\/api\/blobs\/': developmentGatewayProxy\(developmentGateway\)/);
   assert.doesNotMatch(workflow, /integrations\/(?:mail|telegram|whatsapp|zulip)|provider/);
+});
+
+test('export status is owner-local replay and publishes only through shared client realtime', async () => {
+  const [admission, runtime, realtime, persistence, proto, adr] = await Promise.all([
+    readFile(paths.workflowAdmission, 'utf8'),
+    readFile(paths.workflowManagedRuntime, 'utf8'),
+    readFile(paths.workflowRealtime, 'utf8'),
+    readFile(paths.workflowPersistenceRealtime, 'utf8'),
+    readFile(new URL('src/communications-export-api/proto/hermes/communications_export/v1/export.proto', BACKEND_ROOT), 'utf8'),
+    readFile(paths.realtimeAdr, 'utf8'),
+  ]);
+  assert.match(admission, /ProvidedSurfaceKindV1::ClientRealtime/);
+  assert.match(admission, /communications_export_realtime_contract_reference_v1/);
+  assert.match(runtime, /pump_client_realtime_once/);
+  assert.match(realtime, /ManagedRuntimeClientRealtimePublishRequestV1/);
+  assert.match(realtime, /communications-export\/\{\}/);
+  assert.match(persistence, /client_realtime_window/);
+  assert.match(persistence, /logical_owner_id/);
+  assert.match(proto, /message EvidenceExportStatusChangedV1/);
+  assert.doesNotMatch(proto, /artifact_sha256|blob|provider|content/);
+  assert.match(adr, /periodic polling/);
 });
 
 test('managed gate deterministically rejects a canonical revision race', async () => {

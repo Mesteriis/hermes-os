@@ -4,8 +4,10 @@ import { EvidenceExportStatusV1 } from '../../../gen/hermes/communications_expor
 import { downloadBytesFile } from '../../../shared/file/downloadBytes'
 import {
 	getCommunicationsEvidenceExportStatus,
+	openCommunicationsEvidenceExportRealtime,
 	readCommunicationsEvidenceExport,
 	startCommunicationsEvidenceExport,
+	type CommunicationsEvidenceExportRealtimeBindingV1,
 } from '../api/communicationsEvidenceExport'
 import type {
 	CommunicationsEvidenceExportPanelModel,
@@ -14,8 +16,6 @@ import type {
 
 const CANONICAL_ID_BYTES = 16
 const MAX_MESSAGES = 64
-const POLL_ATTEMPTS = 80
-const POLL_INTERVAL_MS = 750
 
 export function useCommunicationsEvidenceExport(
 	canExport: () => boolean,
@@ -34,6 +34,7 @@ export function useCommunicationsEvidenceExport(
 	const completedItems = ref(0)
 	const requestedItems = ref(0)
 	let generation = 0
+	let realtimeBinding: CommunicationsEvidenceExportRealtimeBindingV1 | undefined
 
 	const model = computed<CommunicationsEvidenceExportPanelModel>(() => ({
 		available: canExport(),
@@ -64,6 +65,7 @@ export function useCommunicationsEvidenceExport(
 	)
 	onUnmounted(() => {
 		generation += 1
+		realtimeBinding?.close()
 	})
 
 	function addMessage(messageId: Uint8Array): void {
@@ -93,13 +95,28 @@ export function useCommunicationsEvidenceExport(
 		statusMessage.value = 'Submitting an owner-local evidence export…'
 		completedItems.value = 0
 		requestedItems.value = selected.value.length
+		realtimeBinding?.close()
+		realtimeBinding = openCommunicationsEvidenceExportRealtime({
+			onStatus: response => {
+				if (currentGeneration !== generation) return
+				applyStatusResponse(response)
+			},
+			onUnavailable: () => {
+				if (currentGeneration !== generation || isTerminal(status.value)) return
+				statusMessage.value = 'Live export status is unavailable. Refresh its owner-local snapshot.'
+			},
+		})
 		try {
+			await realtimeBinding.ready
+			if (currentGeneration !== generation) return
 			exportId.value = await startCommunicationsEvidenceExport(selected.value, operationId)
+			realtimeBinding.attachExport(exportId.value)
 			status.value = 'pending'
 			statusMessage.value = 'Communications is preparing the canonical evidence snapshot.'
-			await pollUntilTerminal(currentGeneration)
 		} catch {
 			if (currentGeneration !== generation) return
+			realtimeBinding?.close()
+			realtimeBinding = undefined
 			status.value = 'error'
 			statusMessage.value = 'Evidence export could not be started.'
 		}
@@ -136,23 +153,19 @@ export function useCommunicationsEvidenceExport(
 		}
 	}
 
-	async function pollUntilTerminal(currentGeneration: number): Promise<void> {
-		for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
-			if (currentGeneration !== generation) return
-			const terminal = await applyStatus(currentGeneration)
-			if (terminal) return
-			await delay(POLL_INTERVAL_MS)
-		}
-		if (currentGeneration === generation) {
-			statusMessage.value = 'Export is still running. Refresh its owner-local status.'
-		}
-	}
-
 	async function applyStatus(currentGeneration: number): Promise<boolean> {
 		const currentExportId = exportId.value
 		if (!currentExportId) return true
 		const response = await getCommunicationsEvidenceExportStatus(currentExportId)
 		if (currentGeneration !== generation) return true
+		return applyStatusResponse(response)
+	}
+
+	function applyStatusResponse(response: {
+		status: EvidenceExportStatusV1
+		completedItems: number
+		requestedItems: number
+	}): boolean {
 		completedItems.value = response.completedItems
 		requestedItems.value = response.requestedItems
 		switch (response.status) {
@@ -179,6 +192,8 @@ export function useCommunicationsEvidenceExport(
 
 	function resetJob(): void {
 		generation += 1
+		realtimeBinding?.close()
+		realtimeBinding = undefined
 		exportId.value = undefined
 		status.value = 'idle'
 		completedItems.value = 0
@@ -196,6 +211,6 @@ function bytesKey(value: Uint8Array): string {
 	return Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function delay(milliseconds: number): Promise<void> {
-	return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+function isTerminal(status: CommunicationsEvidenceExportPanelStatus): boolean {
+	return ['ready', 'rejected', 'error', 'idle', 'unavailable'].includes(status)
 }

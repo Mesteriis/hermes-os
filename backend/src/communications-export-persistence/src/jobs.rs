@@ -5,8 +5,8 @@ use hermes_events_protocol::delivery::OutboxRecordV1;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::{
-    CommunicationsExportPersistenceErrorV1, CommunicationsExportPersistenceV1, valid_id16,
-    valid_sha256, valid_timestamp,
+    CommunicationsExportPersistenceErrorV1, CommunicationsExportPersistenceV1,
+    realtime::insert_realtime_transition, valid_id16, valid_sha256, valid_timestamp,
 };
 
 const STATE_PENDING_SOURCE: i16 = 1;
@@ -172,6 +172,13 @@ impl CommunicationsExportPersistenceV1 {
             return Ok(());
         }
         insert_exact_outbox(&mut transaction, outbox, created_at_unix_seconds).await?;
+        insert_realtime_transition(
+            &mut transaction,
+            logical_owner_id,
+            &export_id,
+            created_at_unix_seconds,
+        )
+        .await?;
         transaction
             .commit()
             .await
@@ -333,6 +340,13 @@ impl CommunicationsExportPersistenceV1 {
         if updated.rows_affected() != 1 {
             return Err(CommunicationsExportPersistenceErrorV1::Conflict);
         }
+        insert_realtime_transition(
+            &mut transaction,
+            logical_owner_id,
+            &export_id,
+            consumed_at_unix_seconds,
+        )
+        .await?;
         transaction
             .commit()
             .await
@@ -418,6 +432,13 @@ impl CommunicationsExportPersistenceV1 {
         if updated.rows_affected() != 1 {
             return Err(CommunicationsExportPersistenceErrorV1::Conflict);
         }
+        insert_realtime_transition(
+            &mut transaction,
+            logical_owner_id,
+            &export_id,
+            consumed_at_unix_seconds,
+        )
+        .await?;
         transaction
             .commit()
             .await
@@ -547,6 +568,11 @@ impl CommunicationsExportPersistenceV1 {
         {
             return Err(CommunicationsExportPersistenceErrorV1::InvalidInput);
         }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         let updated = sqlx::query(
             "UPDATE hermes_data.communications_export_jobs
              SET state = $2,
@@ -572,14 +598,23 @@ impl CommunicationsExportPersistenceV1 {
         .bind(STATE_MATERIALIZING)
         .bind(&claim.worker_id)
         .bind(&claim.logical_owner_id)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
-        if updated.rows_affected() == 1 {
-            Ok(())
-        } else {
-            Err(CommunicationsExportPersistenceErrorV1::ClaimLost)
+        if updated.rows_affected() != 1 {
+            return Err(CommunicationsExportPersistenceErrorV1::ClaimLost);
         }
+        insert_realtime_transition(
+            &mut transaction,
+            &claim.logical_owner_id,
+            &claim.export_id,
+            completed_at_unix_seconds,
+        )
+        .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)
     }
 
     pub async fn release_materialization_claim(
@@ -621,6 +656,11 @@ impl CommunicationsExportPersistenceV1 {
         {
             return Err(CommunicationsExportPersistenceErrorV1::InvalidInput);
         }
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
         let updated = sqlx::query(
             "UPDATE hermes_data.communications_export_jobs
              SET state = $2,
@@ -641,14 +681,23 @@ impl CommunicationsExportPersistenceV1 {
         .bind(STATE_MATERIALIZING)
         .bind(&claim.worker_id)
         .bind(&claim.logical_owner_id)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await
         .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)?;
-        if updated.rows_affected() == 1 {
-            Ok(())
-        } else {
-            Err(CommunicationsExportPersistenceErrorV1::ClaimLost)
+        if updated.rows_affected() != 1 {
+            return Err(CommunicationsExportPersistenceErrorV1::ClaimLost);
         }
+        insert_realtime_transition(
+            &mut transaction,
+            &claim.logical_owner_id,
+            &claim.export_id,
+            completed_at_unix_seconds,
+        )
+        .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| CommunicationsExportPersistenceErrorV1::StorageUnavailable)
     }
 
     pub async fn job_status(

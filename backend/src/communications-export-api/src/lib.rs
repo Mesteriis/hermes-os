@@ -8,6 +8,10 @@ pub const COMMUNICATIONS_EXPORT_COMMAND_CONTRACT_NAME_V1: &str = "communications
 pub const COMMUNICATIONS_EXPORT_QUERY_CONTRACT_NAME_V1: &str = "communications.export.query";
 pub const COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1: &str = "communications.export.ticket";
 pub const COMMUNICATIONS_EXPORT_READ_CONTRACT_NAME_V1: &str = "communications.export.read";
+pub const COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1: &str =
+    "communications.export.status_changed";
+pub const COMMUNICATIONS_EXPORT_REALTIME_EVENT_KIND_V1: &str =
+    "communications.export.status_changed";
 pub const COMMUNICATIONS_EXPORT_CONTRACT_MAJOR_V1: u32 = 1;
 pub const COMMUNICATIONS_EXPORT_CONTRACT_REVISION_V1: u32 = 1;
 pub const COMMUNICATIONS_EXPORT_COMMAND_CONNECT_PATH_V1: &str =

@@ -1,20 +1,49 @@
-import { create, toBinary } from '@bufbuild/protobuf'
+import { create, fromBinary, toBinary } from '@bufbuild/protobuf'
 
 import {
 	CommunicationsExportErrorCodeV1,
 	EvidenceExportArtifactReadRequestV1Schema,
+	EvidenceExportStatusV1,
+	EvidenceExportStatusChangedV1Schema,
+	type EvidenceExportStatusChangedV1,
 	type GetEvidenceExportStatusResponseV1,
 } from '../../../gen/hermes/communications_export/v1/export_pb'
+import {
+	ClientRealtimeStreamStateKindV1,
+	type ClientRealtimeEventV1,
+} from '../../../gen/hermes/gateway/v1/client_realtime_pb'
 import { getCommunicationsExportCommandClient } from '../../../platform/connect/communicationsExportCommandClient'
 import { getCommunicationsExportQueryClient } from '../../../platform/connect/communicationsExportQueryClient'
 import { getCommunicationsExportTicketClient } from '../../../platform/connect/communicationsExportTicketClient'
 import { BrowserGatewayFetch } from '../../../platform/gateway/browserGatewayFetch'
+import { getBrowserGatewayRealtimeHub } from '../../../platform/gateway/browserGatewayRealtimeHub'
+import type {
+	BrowserGatewayRealtimeObserver,
+	BrowserGatewayRealtimeSubscription,
+} from '../../../platform/gateway/browserGatewayRealtime'
 
 const ARTIFACT_READ_PATH = '/api/blobs/communications-export/v1/artifact'
 const CANONICAL_ID_BYTES = 16
 const READ_TICKET_BYTES = 32
 const MAX_MESSAGES = 64
 const MAX_ARTIFACT_BYTES = 24 * 1024 * 1024
+const REALTIME_CONTRACT = 'communications.export.status_changed'
+const REALTIME_EVENT_KIND = 'communications.export.status_changed'
+const MAX_BUFFERED_STATUSES = 64
+
+export type CommunicationsEvidenceExportRealtimeObserverV1 = {
+	onStatus(status: EvidenceExportStatusChangedV1): void
+	onUnavailable(): void
+}
+
+export type CommunicationsEvidenceExportRealtimeBindingV1 = BrowserGatewayRealtimeSubscription & {
+	ready: Promise<void>
+	attachExport(exportId: Uint8Array): void
+}
+
+type CommunicationsEvidenceExportRealtimePort = {
+	subscribe(observer: BrowserGatewayRealtimeObserver): BrowserGatewayRealtimeSubscription
+}
 
 type CommunicationsEvidenceExportPorts = {
 	start(
@@ -63,8 +92,11 @@ export async function getCommunicationsEvidenceExportStatus(
 ): Promise<GetEvidenceExportStatusResponseV1> {
 	validateId(exportId, 'Evidence export')
 	const response = await ports.status(copyBytes(exportId), signal)
+	const expectedError = response.status === EvidenceExportStatusV1.EVIDENCE_EXPORT_STATUS_REJECTED
+		? CommunicationsExportErrorCodeV1.COMMUNICATIONS_EXPORT_ERROR_CODE_POLICY_REJECTED
+		: CommunicationsExportErrorCodeV1.COMMUNICATIONS_EXPORT_ERROR_CODE_UNSPECIFIED
 	if (
-		response.error !== CommunicationsExportErrorCodeV1.COMMUNICATIONS_EXPORT_ERROR_CODE_UNSPECIFIED
+		response.error !== expectedError
 		|| !equalBytes(response.exportId, exportId)
 		|| response.requestedItems < 1
 		|| response.requestedItems > MAX_MESSAGES
@@ -74,6 +106,69 @@ export async function getCommunicationsEvidenceExportStatus(
 		throw new Error('Communications evidence export status is unavailable')
 	}
 	return response
+}
+
+export function openCommunicationsEvidenceExportRealtime(
+	observer: CommunicationsEvidenceExportRealtimeObserverV1,
+	hub: CommunicationsEvidenceExportRealtimePort = getBrowserGatewayRealtimeHub(),
+): CommunicationsEvidenceExportRealtimeBindingV1 {
+	let selectedExportId: Uint8Array | undefined
+	const buffered: EvidenceExportStatusChangedV1[] = []
+	let resolveReady: (() => void) | undefined
+	let rejectReady: ((reason: Error) => void) | undefined
+	let settled = false
+	const ready = new Promise<void>((resolve, reject) => {
+		resolveReady = resolve
+		rejectReady = reject
+	})
+	const unavailable = (): void => {
+		if (!settled) {
+			settled = true
+			rejectReady?.(new Error('Communications evidence export realtime is unavailable'))
+		}
+		observer.onUnavailable()
+	}
+	const subscription = hub.subscribe({
+		onEvent: event => {
+			try {
+				const status = decodeRealtimeStatus(event)
+				if (!status) return
+				if (!selectedExportId) {
+					if (buffered.length === MAX_BUFFERED_STATUSES) buffered.shift()
+					buffered.push(status)
+					return
+				}
+				if (equalBytes(status.exportId, selectedExportId)) observer.onStatus(status)
+			} catch {
+				unavailable()
+			}
+		},
+		onStreamState: state => {
+			if (state.state === ClientRealtimeStreamStateKindV1.CLIENT_REALTIME_STREAM_STATE_KIND_OPEN) {
+				if (!settled) {
+					settled = true
+					resolveReady?.()
+				}
+			} else if (state.state
+				=== ClientRealtimeStreamStateKindV1.CLIENT_REALTIME_STREAM_STATE_KIND_CLOSED) {
+				unavailable()
+			}
+		},
+		onReplayGap: unavailable,
+		onProtocolError: unavailable,
+	})
+	return {
+		ready,
+		attachExport: exportId => {
+			validateId(exportId, 'Evidence export')
+			selectedExportId = copyBytes(exportId)
+			for (const status of buffered) {
+				if (equalBytes(status.exportId, selectedExportId)) observer.onStatus(status)
+			}
+			buffered.length = 0
+		},
+		close: () => subscription.close(),
+	}
 }
 
 export async function readCommunicationsEvidenceExport(
@@ -142,6 +237,31 @@ function defaultPorts(): CommunicationsEvidenceExportPorts {
 		),
 		readBlob: browserGateway.fetch.bind(browserGateway),
 	}
+}
+
+function decodeRealtimeStatus(event: ClientRealtimeEventV1): EvidenceExportStatusChangedV1 | undefined {
+	if (
+		event.contractName !== REALTIME_CONTRACT
+		|| event.contractVersion !== 1
+		|| event.eventKind !== REALTIME_EVENT_KIND
+	) return undefined
+	const status = fromBinary(EvidenceExportStatusChangedV1Schema, event.payload)
+	if (!validRealtimeStatus(status)) throw new Error('invalid status')
+	return status
+}
+
+function validRealtimeStatus(status: EvidenceExportStatusChangedV1): boolean {
+	const expectedError = status.status === EvidenceExportStatusV1.EVIDENCE_EXPORT_STATUS_REJECTED
+		? CommunicationsExportErrorCodeV1.COMMUNICATIONS_EXPORT_ERROR_CODE_POLICY_REJECTED
+		: CommunicationsExportErrorCodeV1.COMMUNICATIONS_EXPORT_ERROR_CODE_UNSPECIFIED
+	return status.error === expectedError
+		&& status.exportId.byteLength === CANONICAL_ID_BYTES
+		&& status.exportId.some(byte => byte !== 0)
+		&& status.requestedItems >= 1
+		&& status.requestedItems <= MAX_MESSAGES
+		&& status.completedItems <= status.requestedItems
+		&& status.artifactBytes <= BigInt(MAX_ARTIFACT_BYTES)
+		&& status.occurredAtUnixMillis > 0n
 }
 
 function validateMessageIds(messageIds: Uint8Array[]): void {

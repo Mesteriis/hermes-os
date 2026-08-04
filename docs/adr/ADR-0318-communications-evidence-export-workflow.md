@@ -159,6 +159,11 @@ GetEvidenceExportStatus(export_id) -> pending | ready | rejected
 IssueEvidenceExportRead(export_id) -> one-use opaque capability
 ```
 
+Терминальные и промежуточные status transitions доставляются через один общий
+owner-scoped replayable Gateway SSE по ADR-0393. `GetEvidenceExportStatus`
+остаётся разовым initial/manual recovery snapshot; timer-based polling не
+является transport contract.
+
 Artifact bytes возвращаются только через descriptor-declared authenticated
 `client_blob` route. Read capability:
 

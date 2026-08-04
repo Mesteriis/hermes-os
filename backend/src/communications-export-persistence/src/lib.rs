@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod jobs;
+mod realtime;
 pub mod schema;
 
 use hermes_storage_protocol::StorageBindingV1;
@@ -9,6 +10,7 @@ pub use jobs::{
     CommunicationsExportJobStatusV1, CommunicationsExportPreparedItemV1,
     CommunicationsExportSourceReceiptV1,
 };
+pub use realtime::CommunicationsExportRealtimeTransitionV1;
 use sqlx::{
     PgPool,
     postgres::{PgConnectOptions, PgPoolOptions},

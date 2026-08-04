@@ -61,11 +61,11 @@ use hermes_communications_export_api::{
     COMMUNICATIONS_EXPORT_MODULE_ID_V1, COMMUNICATIONS_EXPORT_OWNER_V1,
     COMMUNICATIONS_EXPORT_QUERY_CONNECT_PATH_V1, COMMUNICATIONS_EXPORT_QUERY_CONTRACT_NAME_V1,
     COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, COMMUNICATIONS_EXPORT_READ_CONTRACT_NAME_V1,
-    COMMUNICATIONS_EXPORT_SCHEMA_SHA256, COMMUNICATIONS_EXPORT_TICKET_CONNECT_PATH_V1,
-    COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
+    COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1, COMMUNICATIONS_EXPORT_SCHEMA_SHA256,
+    COMMUNICATIONS_EXPORT_TICKET_CONNECT_PATH_V1, COMMUNICATIONS_EXPORT_TICKET_CONTRACT_NAME_V1,
 };
 use hermes_communications_export_persistence::schema::{
-    COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2, communications_export_storage_bundle_v1,
+    COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V3, communications_export_storage_bundle_v1,
 };
 use hermes_communications_export_runtime::admission::{
     COMMUNICATIONS_EXPORT_BLOB_CAPABILITY_ID_V1, COMMUNICATIONS_EXPORT_BLOB_CUSTODY_SCOPE_ID_V1,
@@ -191,7 +191,7 @@ pub(super) fn issue_initial_communications_export_storage_binding(store: &Sqlite
     let bundle = store
         .platform_storage_bundle(
             COMMUNICATIONS_EXPORT_OWNER_V1,
-            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2),
+            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V3),
         )
         .expect("read Communications Export Storage bundle")
         .expect("Communications Export Storage bundle is present");
@@ -204,7 +204,7 @@ pub(super) fn issue_initial_communications_export_storage_binding(store: &Sqlite
         StorageBindingIssueV1::new(
             1,
             1,
-            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2),
+            u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V3),
             *bundle.digest(),
         )
         .expect("initial Communications Export Storage issue"),
@@ -448,7 +448,7 @@ fn start_reserved_communications_export_workflow(
         reservation,
         hermes_runtime_protocol::v1::ManagedWorkflowRuntimeConfigurationV1 {
             major: 1,
-            logical_owner_id: COMMUNICATIONS_EXPORT_OWNER_V1.to_owned(),
+            logical_owner_id: "owner-1".to_owned(),
             registration_id: COMMUNICATIONS_EXPORT_REGISTRATION.to_owned(),
             runtime_instance_id,
             runtime_generation,
@@ -3500,6 +3500,7 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
     ];
     let client_rpc_routes = communications_export_client_rpc_routes();
     let client_blob_route = communications_export_client_blob_route();
+    let client_realtime_route = communications_export_client_realtime_route();
     store
         .create_pending_registration_with_all_descriptor_requests(
             &registration,
@@ -3512,7 +3513,7 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
                 vault_purposes: &[],
                 client_rpc_routes: &client_rpc_routes,
                 client_blob_routes: std::slice::from_ref(&client_blob_route),
-                client_realtime_routes: &[],
+                client_realtime_routes: std::slice::from_ref(&client_realtime_route),
                 query_rpc_routes: &[],
                 request_rpc_routes: &[],
                 contract_dependencies: &[],
@@ -3528,7 +3529,7 @@ fn record_communications_export_runtime_fixture(store: &SqliteControlStore) {
         .record_platform_storage_bundle(
             &PlatformStorageBundleV1::new(
                 COMMUNICATIONS_EXPORT_OWNER_V1,
-                u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V2),
+                u64::from(COMMUNICATIONS_EXPORT_STORAGE_BUNDLE_REVISION_V3),
                 Sha256::digest(&bundle).into(),
                 bundle,
             )
@@ -3644,6 +3645,20 @@ fn communications_export_client_blob_route() -> ModuleClientBlobRouteV1 {
             path: COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1.to_owned(),
             max_response_bytes: COMMUNICATIONS_EXPORT_MAX_ARTIFACT_BYTES_V1,
         },
+    )
+}
+
+fn communications_export_client_realtime_route() -> ModuleClientRealtimeRouteV1 {
+    ModuleClientRealtimeRouteV1::new(
+        COMMUNICATIONS_EXPORT_REGISTRATION,
+        COMMUNICATIONS_EXPORT_CAPABILITY_ID_V1,
+        COMMUNICATIONS_EXPORT_OWNER_V1,
+        COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1,
+        ModuleClientRealtimeContractVersionV1 {
+            major: COMMUNICATIONS_EXPORT_CONTRACT_MAJOR_V1,
+            revision: COMMUNICATIONS_EXPORT_CONTRACT_REVISION_V1,
+        },
+        COMMUNICATIONS_EXPORT_SCHEMA_SHA256,
     )
 }
 

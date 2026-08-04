@@ -156,6 +156,13 @@ where
         {
             eprintln!("developer_communications_export_outbox_retry=true");
         }
+        if executor
+            .block_on(runtime.pump_client_realtime_once())
+            .is_err()
+            && std::env::var_os("HERMES_DEVELOPER_VERBOSE").is_some()
+        {
+            eprintln!("developer_communications_export_client_realtime_retry=true");
+        }
     }
 }
 

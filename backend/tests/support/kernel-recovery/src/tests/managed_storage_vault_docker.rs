@@ -570,6 +570,8 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     let _ = FileDeviceSigner::open_or_create_for_instance(&data).expect("Kernel signer");
     let shutdown = Arc::new(AtomicBool::new(false));
     let supervisor = ManagedRuntimeSupervisor::new(Arc::clone(&shutdown));
+    let export_realtime = hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(64)
+        .expect("Communications Export realtime source");
     let revision_race = Arc::new(CommunicationsExportRevisionRaceV1::new());
     let race_blob_session_handler = Arc::new(CommunicationsExportRaceBlobSessionHandlerV1::new(
         Arc::clone(&store),
@@ -578,6 +580,14 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         Arc::clone(&revision_race),
     ));
     configure_route_handlers(&supervisor, &store, &data, race_blob_session_handler);
+    supervisor
+        .configure_client_realtime_handler(Arc::new(
+            crate::platform::client_realtime::ClientRealtimePublishHandlerV1::new(
+                Arc::clone(&store),
+                export_realtime.clone(),
+            ),
+        ))
+        .expect("configure Communications Export client realtime");
     supervisor
         .configure_event_credential_handler(Arc::new(UnauthenticatedNatsCredentialHandler::new(
             Arc::clone(&store),
@@ -636,6 +646,38 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
             .is_active(COMMUNICATIONS_EXPORT_REGISTRATION)
             .expect("read Communications Export process state")
     );
+    let gateway_configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
+        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
+        "https://hub.local".to_owned(),
+        "hub.local".to_owned(),
+        root.join("export-sse-gateway-cert.der"),
+        root.join("export-sse-gateway-key.der"),
+    )
+    .expect("Communications Export Gateway configuration");
+    let gateway = crate::platform::gateway::gateway_service(
+        Arc::clone(&store),
+        &data,
+        supervisor.clone(),
+        export_realtime,
+        &gateway_configuration,
+        None,
+    )
+    .expect("compose Communications Export Gateway SSE route");
+    let gateway_runtime = tokio::runtime::Runtime::new().expect("Gateway SSE runtime");
+    let gateway_cookie =
+        super::browser_gateway_session::authenticate_gateway_router(&gateway, &gateway_runtime);
+    let realtime_response = gateway_runtime.block_on(
+        gateway.route(
+            hyper::Request::builder()
+                .method("GET")
+                .uri("/api/realtime/v1/events")
+                .header("cookie", &gateway_cookie)
+                .body(http_body_util::Full::new(hyper::body::Bytes::new()))
+                .expect("pre-open Communications Export SSE request"),
+        ),
+    );
+    assert_eq!(realtime_response.status(), hyper::StatusCode::OK);
+    let mut realtime_body = realtime_response.into_body();
     let route_as = |request_id: u64,
                     logical_owner_id: &str,
                     contract: hermes_runtime_protocol::v1::ContractReferenceV1,
@@ -700,36 +742,38 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     )
     .expect("decode accepted Communications Export command");
     assert_eq!(start.export_id, export_id);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                2,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
+    let terminal_event = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &export_id,
+    );
+    assert_eq!(
+        terminal_event.status,
+        EvidenceExportStatusV1::EvidenceExportStatusReady as i32
+    );
+    assert_eq!(terminal_event.requested_items, 1);
+    assert_eq!(terminal_event.completed_items, 1);
+    assert!(terminal_event.artifact_bytes > 0);
+    let status = GetEvidenceExportStatusResponseV1::decode(
+        route(
+            2,
+            communications_export_query_contract_reference_v1(),
+            GetEvidenceExportStatusRequestV1 {
+                protocol_major: 1,
+                export_id: export_id.to_vec(),
+            }
+            .encode_to_vec(),
         )
-        .expect("decode Communications Export status");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusReady as i32 {
-            assert_eq!(status.requested_items, 1);
-            assert_eq!(status.completed_items, 1);
-            assert!(status.artifact_bytes > 0);
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "durable Communications Export command did not reach a ready artifact; status={status:?}; runtime_failure={:?}",
-            supervisor
-                .last_failure(COMMUNICATIONS_EXPORT_REGISTRATION)
-                .expect("read Communications Export runtime failure"),
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+        .as_slice(),
+    )
+    .expect("decode terminal Communications Export status snapshot");
+    assert_eq!(
+        status.status,
+        EvidenceExportStatusV1::EvidenceExportStatusReady as i32
+    );
+    assert_eq!(status.requested_items, 1);
+    assert_eq!(status.completed_items, 1);
+    assert!(status.artifact_bytes > 0);
     let wrong_owner_status = GetEvidenceExportStatusResponseV1::decode(
         route_as(
             20,
@@ -797,34 +841,18 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     )
     .expect("decode accepted edited-message export command");
     assert_eq!(edited_start.export_id, edited_export_id);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                13,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: edited_export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
-        )
-        .expect("decode edited-message Communications Export status");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusReady as i32 {
-            assert_eq!(status.requested_items, 1);
-            assert_eq!(status.completed_items, 1);
-            assert!(status.artifact_bytes > 0);
-            break;
-        }
-        assert!(
-            status.status != EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
-                && std::time::Instant::now() < deadline,
-            "edited canonical snapshot must reach ready export status; status={status:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let edited_terminal = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &edited_export_id,
+    );
+    assert_eq!(
+        edited_terminal.status,
+        EvidenceExportStatusV1::EvidenceExportStatusReady as i32
+    );
+    assert_eq!(edited_terminal.requested_items, 1);
+    assert_eq!(edited_terminal.completed_items, 1);
+    assert!(edited_terminal.artifact_bytes > 0);
     let stale_runtime_ticket = IssueEvidenceExportReadResponseV1::decode(
         route(
             15,
@@ -908,34 +936,18 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         export_runtime_active_during_outage,
         "NATS outage is retryable and does not stop Communications Export"
     );
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                19,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: outage_export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
-        )
-        .expect("decode Communications Export status after NATS recovery");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusReady as i32 {
-            assert_eq!(status.requested_items, 1);
-            assert_eq!(status.completed_items, 1);
-            assert!(status.artifact_bytes > 0);
-            break;
-        }
-        assert!(
-            status.status != EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
-                && std::time::Instant::now() < deadline,
-            "persisted export request must resume after NATS recovery; status={status:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let outage_terminal = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &outage_export_id,
+    );
+    assert_eq!(
+        outage_terminal.status,
+        EvidenceExportStatusV1::EvidenceExportStatusReady as i32
+    );
+    assert_eq!(outage_terminal.requested_items, 1);
+    assert_eq!(outage_terminal.completed_items, 1);
+    assert!(outage_terminal.artifact_bytes > 0);
     let stale_revision_export_id = [18; 16];
     let communications_database_id = crate::platform::storage::topology::current(&store)
         .expect("read Communications Storage topology")
@@ -957,36 +969,21 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     )
     .expect("decode accepted stale-revision export command");
     assert_eq!(stale_revision_start.export_id, stale_revision_export_id);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                25,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: stale_revision_export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
-        )
-        .expect("decode stale-revision Communications Export status");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
-            assert_eq!(status.completed_items, 0);
-            assert_eq!(status.artifact_bytes, 0);
-            assert_eq!(
-                status.error,
-                CommunicationsExportErrorCodeV1::CommunicationsExportErrorCodePolicyRejected as i32,
-            );
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "canonical revision race must reach terminal rejected export status; status={status:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let stale_revision_terminal = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &stale_revision_export_id,
+    );
+    assert_eq!(
+        stale_revision_terminal.status,
+        EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
+    );
+    assert_eq!(stale_revision_terminal.completed_items, 0);
+    assert_eq!(stale_revision_terminal.artifact_bytes, 0);
+    assert_eq!(
+        stale_revision_terminal.error,
+        CommunicationsExportErrorCodeV1::CommunicationsExportErrorCodePolicyRejected as i32,
+    );
     assert!(
         revision_race.fired_revision() > 1,
         "managed source preparation must cross the injected canonical revision fence"
@@ -1028,32 +1025,17 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     )
     .expect("decode accepted invalid-UTF8 export command");
     assert_eq!(invalid_utf8_start.export_id, invalid_utf8_export_id);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                23,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: invalid_utf8_export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
-        )
-        .expect("decode invalid-UTF8 Communications Export status");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
-            assert_eq!(status.completed_items, 0);
-            assert_eq!(status.artifact_bytes, 0);
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "invalid UTF-8 canonical body must reach terminal rejected export status; status={status:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let invalid_utf8_terminal = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &invalid_utf8_export_id,
+    );
+    assert_eq!(
+        invalid_utf8_terminal.status,
+        EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
+    );
+    assert_eq!(invalid_utf8_terminal.completed_items, 0);
+    assert_eq!(invalid_utf8_terminal.artifact_bytes, 0);
     publish_and_wait_for_communications_message_deletion(store.as_ref(), &supervisor, &message_id);
     let deleted_export_id = [13; 16];
     let deleted_start = StartEvidenceExportResponseV1::decode(
@@ -1071,32 +1053,17 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     )
     .expect("decode accepted deleted-message export command");
     assert_eq!(deleted_start.export_id, deleted_export_id);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                9,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: deleted_export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
-        )
-        .expect("decode deleted-message Communications Export status");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
-            assert_eq!(status.completed_items, 0);
-            assert_eq!(status.artifact_bytes, 0);
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "deleted canonical message must reach terminal rejected export status; status={status:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let deleted_terminal = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &deleted_export_id,
+    );
+    assert_eq!(
+        deleted_terminal.status,
+        EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
+    );
+    assert_eq!(deleted_terminal.completed_items, 0);
+    assert_eq!(deleted_terminal.artifact_bytes, 0);
     let rejected_export_id = [12; 16];
     let rejected_start = StartEvidenceExportResponseV1::decode(
         route(
@@ -1113,32 +1080,17 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     )
     .expect("decode accepted unknown-message export command");
     assert_eq!(rejected_start.export_id, rejected_export_id);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    loop {
-        let status = GetEvidenceExportStatusResponseV1::decode(
-            route(
-                5,
-                communications_export_query_contract_reference_v1(),
-                GetEvidenceExportStatusRequestV1 {
-                    protocol_major: 1,
-                    export_id: rejected_export_id.to_vec(),
-                }
-                .encode_to_vec(),
-            )
-            .as_slice(),
-        )
-        .expect("decode rejected Communications Export status");
-        if status.status == EvidenceExportStatusV1::EvidenceExportStatusRejected as i32 {
-            assert_eq!(status.completed_items, 0);
-            assert_eq!(status.artifact_bytes, 0);
-            break;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "unknown or deleted canonical message must reach terminal rejected export status; status={status:?}"
-        );
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
+    let rejected_terminal = await_terminal_communications_export_event(
+        &gateway_runtime,
+        &mut realtime_body,
+        &rejected_export_id,
+    );
+    assert_eq!(
+        rejected_terminal.status,
+        EvidenceExportStatusV1::EvidenceExportStatusRejected as i32
+    );
+    assert_eq!(rejected_terminal.completed_items, 0);
+    assert_eq!(rejected_terminal.artifact_bytes, 0);
     let ticket = IssueEvidenceExportReadResponseV1::decode(
         route(
             3,
@@ -1182,12 +1134,18 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         .as_slice(),
     )
     .expect("issue read ticket before Blob outage");
-    let browser_cookie = assert_communications_export_gateway_delivery(
-        &store,
-        &supervisor,
-        &root,
-        &data,
-        release.kernel(),
+    let export_gateway_fixture = CommunicationsExportGatewayFixtureV1 {
+        router: &gateway,
+        runtime: &gateway_runtime,
+        cookie: &gateway_cookie,
+        store: &store,
+        supervisor: &supervisor,
+        root: &root,
+        kernel_data: &data,
+        kernel_executable: release.kernel(),
+    };
+    assert_communications_export_gateway_delivery(
+        &export_gateway_fixture,
         CommunicationsExportGatewayDeliveryInputsV1 {
             opaque_read_capability: ticket.opaque_read_capability,
             declared_bytes: ticket.declared_bytes,
@@ -1218,12 +1176,8 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
         )
         .expect("revoke Communications Export workflow registration");
     assert_communications_export_gateway_rejects_revoked_ticket(
-        &store,
-        &supervisor,
-        &root,
-        &data,
+        &export_gateway_fixture,
         revoked_ticket.opaque_read_capability,
-        &browser_cookie,
     );
     supervisor.shutdown().expect("stop managed processes");
     unsafe {
@@ -1231,6 +1185,86 @@ fn managed_communications_export_workflow_starts_with_owner_local_storage_and_ev
     }
     std::fs::remove_dir_all(root).expect("remove fixture");
     std::fs::remove_dir_all(data).expect("remove short kernel data fixture");
+}
+
+fn await_terminal_communications_export_event<B>(
+    runtime: &tokio::runtime::Runtime,
+    body: &mut B,
+    export_id: &[u8],
+) -> hermes_communications_export_api::wire::EvidenceExportStatusChangedV1
+where
+    B: hyper::body::Body<Data = hyper::body::Bytes> + Unpin,
+    B::Error: std::fmt::Debug,
+{
+    runtime.block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            find_terminal_communications_export_event(body, export_id),
+        )
+        .await
+        .expect("Communications Export SSE terminal timeout")
+    })
+}
+
+async fn find_terminal_communications_export_event<B>(
+    body: &mut B,
+    export_id: &[u8],
+) -> hermes_communications_export_api::wire::EvidenceExportStatusChangedV1
+where
+    B: hyper::body::Body<Data = hyper::body::Bytes> + Unpin,
+    B::Error: std::fmt::Debug,
+{
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use hermes_communications_export_api::{
+        COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1,
+        COMMUNICATIONS_EXPORT_REALTIME_EVENT_KIND_V1,
+        wire::{EvidenceExportStatusChangedV1, EvidenceExportStatusV1},
+    };
+    use hermes_gateway_protocol::v1::{
+        ClientRealtimeFrameV1, client_realtime_frame_v1::Frame as RealtimeFrame,
+    };
+    use http_body_util::BodyExt as _;
+
+    let mut pending = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.expect("Communications Export SSE frame");
+        let Ok(data) = frame.into_data() else {
+            continue;
+        };
+        pending.extend_from_slice(&data);
+        while let Some(boundary) = pending.windows(2).position(|window| window == b"\n\n") {
+            let block = pending.drain(..boundary + 2).collect::<Vec<_>>();
+            let text = std::str::from_utf8(&block).expect("Communications Export SSE UTF-8");
+            let Some(encoded) = text.lines().find_map(|line| line.strip_prefix("data: ")) else {
+                continue;
+            };
+            let bytes = URL_SAFE_NO_PAD
+                .decode(encoded)
+                .expect("decode Communications Export realtime frame");
+            let frame = ClientRealtimeFrameV1::decode(bytes.as_slice())
+                .expect("Communications Export realtime frame");
+            let Some(RealtimeFrame::Event(event)) = frame.frame else {
+                continue;
+            };
+            if event.contract_name != COMMUNICATIONS_EXPORT_REALTIME_CONTRACT_NAME_V1
+                || event.event_kind != COMMUNICATIONS_EXPORT_REALTIME_EVENT_KIND_V1
+            {
+                continue;
+            }
+            let payload = EvidenceExportStatusChangedV1::decode(event.payload.as_slice())
+                .expect("Communications Export realtime payload");
+            if payload.export_id == export_id
+                && matches!(
+                    EvidenceExportStatusV1::try_from(payload.status),
+                    Ok(EvidenceExportStatusV1::EvidenceExportStatusReady)
+                        | Ok(EvidenceExportStatusV1::EvidenceExportStatusRejected)
+                )
+            {
+                return payload;
+            }
+        }
+    }
+    panic!("Gateway SSE closed before terminal Communications Export event");
 }
 
 struct CommunicationsExportGatewayDeliveryInputsV1<'a> {
@@ -1243,39 +1277,34 @@ struct CommunicationsExportGatewayDeliveryInputsV1<'a> {
     blob_outage_read_capability: Vec<u8>,
 }
 
+struct CommunicationsExportGatewayFixtureV1<'a> {
+    router: &'a crate::platform::gateway::BrowserGatewayRouter,
+    runtime: &'a tokio::runtime::Runtime,
+    cookie: &'a str,
+    store: &'a Arc<SqliteControlStore>,
+    supervisor: &'a ManagedRuntimeSupervisor,
+    root: &'a std::path::Path,
+    kernel_data: &'a std::path::Path,
+    kernel_executable: &'a std::path::Path,
+}
+
 fn assert_communications_export_gateway_delivery(
-    store: &Arc<SqliteControlStore>,
-    supervisor: &ManagedRuntimeSupervisor,
-    root: &std::path::Path,
-    kernel_data: &std::path::Path,
-    kernel_executable: &std::path::Path,
+    fixture: &CommunicationsExportGatewayFixtureV1<'_>,
     inputs: CommunicationsExportGatewayDeliveryInputsV1<'_>,
-) -> String {
+) {
     use hermes_communications_export_api::{
         COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
     };
     use http_body_util::BodyExt as _;
+    let router = fixture.router;
+    let runtime = fixture.runtime;
+    let cookie = fixture.cookie;
+    let store = fixture.store;
+    let supervisor = fixture.supervisor;
+    let root = fixture.root;
+    let kernel_data = fixture.kernel_data;
+    let kernel_executable = fixture.kernel_executable;
 
-    let configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
-        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
-        "https://hub.local".to_owned(),
-        "hub.local".to_owned(),
-        root.join("gateway-cert.der"),
-        root.join("gateway-key.der"),
-    )
-    .expect("Gateway configuration");
-    let router = crate::platform::gateway::gateway_service(
-        Arc::clone(store),
-        kernel_data,
-        supervisor.clone(),
-        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
-            .expect("test realtime source"),
-        &configuration,
-        None,
-    )
-    .expect("compose owner Gateway routes");
-    let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
-    let cookie = super::browser_gateway_session::authenticate_gateway_router(&router, &runtime);
     let stale_runtime_read_request = EvidenceExportArtifactReadRequestV1 {
         opaque_read_capability: inputs.stale_runtime_read_capability,
     }
@@ -1286,7 +1315,7 @@ fn assert_communications_export_gateway_delivery(
                 .method("POST")
                 .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
                 .header("content-type", "application/proto")
-                .header("cookie", &cookie)
+                .header("cookie", cookie)
                 .body(http_body_util::Full::new(hyper::body::Bytes::from(
                     stale_runtime_read_request,
                 )))
@@ -1309,7 +1338,7 @@ fn assert_communications_export_gateway_delivery(
                     .method("POST")
                     .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
                     .header("content-type", "application/proto")
-                    .header("cookie", &cookie)
+                    .header("cookie", cookie)
                     .body(http_body_util::Full::new(hyper::body::Bytes::from(
                         read_request.clone(),
                     )))
@@ -1368,7 +1397,7 @@ fn assert_communications_export_gateway_delivery(
                     .method("POST")
                     .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
                     .header("content-type", "application/proto")
-                    .header("cookie", &cookie)
+                    .header("cookie", cookie)
                     .body(http_body_util::Full::new(hyper::body::Bytes::from(
                         edited_read_request.clone(),
                     )))
@@ -1404,7 +1433,7 @@ fn assert_communications_export_gateway_delivery(
                     .method("POST")
                     .uri(COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1)
                     .header("content-type", "application/proto")
-                    .header("cookie", &cookie)
+                    .header("cookie", cookie)
                     .body(http_body_util::Full::new(hyper::body::Bytes::from(
                         blob_outage_read_request.clone(),
                     )))
@@ -1437,40 +1466,19 @@ fn assert_communications_export_gateway_delivery(
         hyper::StatusCode::NOT_FOUND,
         "artifact ticket is consumed atomically before the failed Blob read and cannot be replayed"
     );
-    cookie
 }
 
 fn assert_communications_export_gateway_rejects_revoked_ticket(
-    store: &Arc<SqliteControlStore>,
-    supervisor: &ManagedRuntimeSupervisor,
-    root: &std::path::Path,
-    kernel_data: &std::path::Path,
+    fixture: &CommunicationsExportGatewayFixtureV1<'_>,
     opaque_read_capability: Vec<u8>,
-    cookie: &str,
 ) {
     use hermes_communications_export_api::{
         COMMUNICATIONS_EXPORT_READ_BLOB_PATH_V1, wire::EvidenceExportArtifactReadRequestV1,
     };
+    let router = fixture.router;
+    let runtime = fixture.runtime;
+    let cookie = fixture.cookie;
 
-    let configuration = crate::platform::gateway::BrowserGatewayConfigurationV1::new(
-        "127.0.0.1:9443".parse().expect("loopback Gateway address"),
-        "https://hub.local".to_owned(),
-        "hub.local".to_owned(),
-        root.join("gateway-cert.der"),
-        root.join("gateway-key.der"),
-    )
-    .expect("Gateway configuration");
-    let router = crate::platform::gateway::gateway_service(
-        Arc::clone(store),
-        kernel_data,
-        supervisor.clone(),
-        hermes_gateway_runtime::InMemoryBrowserRealtimeSource::new(1_024)
-            .expect("test realtime source"),
-        &configuration,
-        None,
-    )
-    .expect("compose Gateway after export workflow revoke");
-    let runtime = tokio::runtime::Runtime::new().expect("Gateway test runtime");
     let response = runtime.block_on(
         router.route(
             hyper::Request::builder()

@@ -1,15 +1,23 @@
-import { create } from '@bufbuild/protobuf'
+import { create, toBinary } from '@bufbuild/protobuf'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
 	CommunicationsExportErrorCodeV1,
 	EvidenceExportStatusV1,
+	EvidenceExportStatusChangedV1Schema,
 	GetEvidenceExportStatusResponseV1Schema,
 	IssueEvidenceExportReadResponseV1Schema,
 	StartEvidenceExportResponseV1Schema,
 } from '../../../gen/hermes/communications_export/v1/export_pb'
 import {
+	ClientRealtimeEventV1Schema,
+	ClientRealtimeStreamStateKindV1,
+	ClientRealtimeStreamStateV1Schema,
+} from '../../../gen/hermes/gateway/v1/client_realtime_pb'
+import type { BrowserGatewayRealtimeObserver } from '../../../platform/gateway/browserGatewayRealtime'
+import {
 	getCommunicationsEvidenceExportStatus,
+	openCommunicationsEvidenceExportRealtime,
 	readCommunicationsEvidenceExport,
 	startCommunicationsEvidenceExport,
 } from './communicationsEvidenceExport'
@@ -47,6 +55,44 @@ function ports() {
 }
 
 describe('Communications evidence export client', () => {
+	it('opens shared realtime before Start and replays a buffered exact-export status', async () => {
+		let sourceObserver: BrowserGatewayRealtimeObserver | undefined
+		const close = vi.fn()
+		const hub = {
+			subscribe: vi.fn((observer: BrowserGatewayRealtimeObserver) => {
+				sourceObserver = observer
+				return { close }
+			}),
+		}
+		const observer = { onStatus: vi.fn(), onUnavailable: vi.fn() }
+		const binding = openCommunicationsEvidenceExportRealtime(observer, hub)
+		sourceObserver?.onStreamState(create(ClientRealtimeStreamStateV1Schema, {
+			state: ClientRealtimeStreamStateKindV1.CLIENT_REALTIME_STREAM_STATE_KIND_OPEN,
+		}))
+		await expect(binding.ready).resolves.toBeUndefined()
+
+		const exportId = id(7)
+		const status = create(EvidenceExportStatusChangedV1Schema, {
+			exportId,
+			status: EvidenceExportStatusV1.EVIDENCE_EXPORT_STATUS_READY,
+			requestedItems: 2,
+			completedItems: 2,
+			artifactBytes: 3n,
+			occurredAtUnixMillis: 1n,
+		})
+		sourceObserver?.onEvent(create(ClientRealtimeEventV1Schema, {
+			contractName: 'communications.export.status_changed',
+			contractVersion: 1,
+			eventKind: 'communications.export.status_changed',
+			payload: toBinary(EvidenceExportStatusChangedV1Schema, status),
+		}))
+		expect(observer.onStatus).not.toHaveBeenCalled()
+		binding.attachExport(exportId)
+		expect(observer.onStatus).toHaveBeenCalledWith(status)
+		binding.close()
+		expect(close).toHaveBeenCalledTimes(1)
+	})
+
 	it('uses an exact stable operation ID and bounded canonical message set', async () => {
 		const adapter = ports()
 		const exportId = await startCommunicationsEvidenceExport([id(1), id(2)], id(7), undefined, adapter)

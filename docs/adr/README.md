@@ -786,3 +786,8 @@ target reference выводится из подписанных content/evidence
 semantics, но не из volatile proof time/signature/runtime-fence bytes. Live
 authority продолжает проверяться на каждом transfer, а direct cross-owner read
 и persistence custody proofs остаются запрещены.
+
+ADR-0393 переводит terminal/progress status Communications evidence export с
+frontend polling на существующий owner-authenticated shared Gateway SSE:
+workflow сохраняет owner-local replay transitions, frontend использует один
+общий hub, а query остаётся только initial/manual recovery snapshot.

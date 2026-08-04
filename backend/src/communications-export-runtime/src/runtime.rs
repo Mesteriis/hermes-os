@@ -39,6 +39,9 @@ use hermes_storage_vault::{
 
 use crate::{
     client_port::dispatch_communications_export_client_request_v1,
+    client_realtime::{
+        CommunicationsExportClientRealtimeErrorV1, CommunicationsExportClientRealtimePublisherV1,
+    },
     event_consumer::{
         CommunicationsExportEventConsumerErrorV1, consume_next_prepared_result_v1,
         consume_next_rejected_result_v1,
@@ -77,6 +80,8 @@ pub struct CommunicationsExportRuntimeV1 {
     runtime_instance_id: String,
     runtime_generation: u64,
     grant_epoch: u64,
+    logical_owner_id: String,
+    client_realtime: CommunicationsExportClientRealtimePublisherV1,
 }
 
 struct CommunicationsExportSubscribePermitsV1 {
@@ -284,6 +289,30 @@ impl CommunicationsExportRuntimeV1 {
             .await
             .map_err(|_| unavailable_at("storage_readiness"))?;
         let mut control_channel = leases.into_route_port().into_channel();
+        let tickets = Arc::new(
+            CommunicationsExportTicketStoreV1::new(
+                admission.runtime_generation,
+                admission.grant_epoch,
+            )
+            .map_err(|_| CommunicationsExportRuntimeErrorV1::Admission)?,
+        );
+        let mut client_realtime = CommunicationsExportClientRealtimePublisherV1::default();
+        let mut dispatcher = CommunicationsExportNestedDispatcherV1 {
+            persistence: &persistence,
+            tickets: &tickets,
+            runtime_instance_id: &admission.runtime_instance_id,
+            runtime_generation: admission.runtime_generation,
+            grant_epoch: admission.grant_epoch,
+        };
+        client_realtime
+            .publish_pending(
+                &persistence,
+                &mut control_channel,
+                &mut dispatcher,
+                &admission.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error)?;
         signal_managed_runtime_ready(&mut control_channel, admission)?;
         control_channel
             .inner_mut()
@@ -296,16 +325,12 @@ impl CommunicationsExportRuntimeV1 {
             next_consumer: CommunicationsExportConsumerV1::Prepared,
             publish_permit,
             persistence,
-            tickets: Arc::new(
-                CommunicationsExportTicketStoreV1::new(
-                    admission.runtime_generation,
-                    admission.grant_epoch,
-                )
-                .map_err(|_| CommunicationsExportRuntimeErrorV1::Admission)?,
-            ),
+            tickets,
             runtime_instance_id: admission.runtime_instance_id.clone(),
             runtime_generation: admission.runtime_generation,
             grant_epoch: admission.grant_epoch,
+            logical_owner_id: admission.logical_owner_id.clone(),
+            client_realtime,
         })
     }
 
@@ -429,6 +454,37 @@ impl CommunicationsExportRuntimeV1 {
         .await
         .map_err(outbox_error)
     }
+
+    pub async fn pump_client_realtime_once(
+        &mut self,
+    ) -> Result<bool, CommunicationsExportRuntimeErrorV1> {
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(false)
+            .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+        let mut dispatcher = CommunicationsExportNestedDispatcherV1 {
+            persistence: &self.persistence,
+            tickets: &self.tickets,
+            runtime_instance_id: &self.runtime_instance_id,
+            runtime_generation: self.runtime_generation,
+            grant_epoch: self.grant_epoch,
+        };
+        let result = self
+            .client_realtime
+            .publish_pending(
+                &self.persistence,
+                &mut self.control_channel,
+                &mut dispatcher,
+                &self.logical_owner_id,
+            )
+            .await
+            .map_err(client_realtime_error);
+        self.control_channel
+            .inner_mut()
+            .set_nonblocking(true)
+            .map_err(|_| CommunicationsExportRuntimeErrorV1::Unavailable)?;
+        result
+    }
 }
 
 fn unavailable_at(stage: &'static str) -> CommunicationsExportRuntimeErrorV1 {
@@ -490,6 +546,12 @@ fn event_consumer_error(
 }
 
 fn outbox_error(_: CommunicationsExportOutboxErrorV1) -> CommunicationsExportRuntimeErrorV1 {
+    CommunicationsExportRuntimeErrorV1::Unavailable
+}
+
+fn client_realtime_error(
+    _: CommunicationsExportClientRealtimeErrorV1,
+) -> CommunicationsExportRuntimeErrorV1 {
     CommunicationsExportRuntimeErrorV1::Unavailable
 }
 

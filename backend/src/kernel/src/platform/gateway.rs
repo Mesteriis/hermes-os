@@ -325,7 +325,7 @@ async fn serve_async(
     result
 }
 
-type BrowserGatewayRouter =
+pub(crate) type BrowserGatewayRouter =
     GatewayApplicationRouter<ControlStoreBrowserAuthority, InMemoryBrowserRealtimeSource>;
 
 pub(crate) fn gateway_service(

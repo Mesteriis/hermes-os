@@ -28,6 +28,16 @@ message GetEvidenceExportStatusResponseV1 {
   CommunicationsExportErrorCodeV1 error = 15;
 }
 
+message EvidenceExportStatusChangedV1 {
+  bytes export_id = 1;
+  EvidenceExportStatusV1 status = 2;
+  uint32 requested_items = 3;
+  uint32 completed_items = 4;
+  uint64 artifact_bytes = 5;
+  uint64 occurred_at_unix_millis = 6;
+  CommunicationsExportErrorCodeV1 error = 15;
+}
+
 message IssueEvidenceExportReadRequestV1 {
   uint32 protocol_major = 1;
   bytes export_id = 2;
